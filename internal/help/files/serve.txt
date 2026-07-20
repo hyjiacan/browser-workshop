@@ -28,6 +28,7 @@
   [serve]
   host = 0.0.0.0              # 监听地址
   port = 8080                 # 监听端口
+  base-dir =                  # 数据存储目录（留空=程序所在目录，支持子目录）
   sync = false                # 是否启用自动同步
   sync-interval = 24h         # 同步间隔（如 24h、30d）
   sync-browsers =             # 同步浏览器（逗号分隔，留空=全部）

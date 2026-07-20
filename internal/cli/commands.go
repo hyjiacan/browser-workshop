@@ -2184,11 +2184,12 @@ func runServe(ctx *Context, args []string) error {
 
 	if isNew {
 		ctx.Printf("配置文件已创建: %s\n", configPath)
-		ctx.Printf("请编辑配置文件，然后重新运行 bws serve\n")
+		ctx.Printf("请编辑配置文件，然后重新运行 bws serve\n\n")
 		ctx.Printf("配置项说明:\n")
-		ctx.Printf("  host        = 监听地址，默认 0.0.0.0\n")
-		ctx.Printf("  port        = 监听端口，默认 8080\n")
-		ctx.Printf("  sync        = 是否启用自动同步 (true/false)\n")
+		ctx.Printf("  host          = 监听地址，默认 0.0.0.0\n")
+		ctx.Printf("  port          = 监听端口，默认 8080\n")
+		ctx.Printf("  base-dir      = 数据存储目录，留空=程序所在目录，支持子目录路径\n")
+		ctx.Printf("  sync          = 是否启用自动同步 (true/false)\n")
 		ctx.Printf("  sync-interval = 同步间隔，如 24h、30d\n")
 		ctx.Printf("  sync-browsers = 同步浏览器，逗号分隔，留空表示全部\n")
 		ctx.Printf("  sync-channels = 同步渠道，逗号分隔，默认 stable\n")
