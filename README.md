@@ -84,16 +84,12 @@ go install gitee.com/hyjiacan/bws@latest
 ## Serve 服务
 
 ```bash
-# 配置服务
-bws serve set host 0.0.0.0
-bws serve set port 8080
-
-# 启用自动同步（每天从在线源拉取新版本）
-bws serve set sync true
-bws serve set schedule 30d
+# 首次运行（自动创建配置文件）
+bws serve
+# 编辑 bws-serve.ini 配置文件
 
 # 启动服务
-bws serve run
+bws serve
 ```
 
 详见 [Serve 服务文档](https://hyjiacan.github.io/bws/guide/serve)。

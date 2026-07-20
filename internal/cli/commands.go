@@ -2149,42 +2149,20 @@ func (b *bufioReader) ReadString(delim byte) (string, error) {
 func NewServeCommand() *Command {
 	return &Command{
 		Name:        "serve",
-		Description: "启动 HTTP 服务器以提供浏览器版本下载",
-		Usage:       "bws serve <子命令> [选项]",
+		Description: "启动 HTTP 服务以提供浏览器版本下载",
+		Usage:       "bws serve [选项]",
 		Examples: []string{
-			"serve set host 0.0.0.0",
-			"serve set port 8080",
-			"serve set schedule 30d",
-			"serve run",
-			"serve show",
-		},
-		SubCommands: []*Command{
-			NewServeRunCommand(),
-			NewServeSetCommand(),
-			NewServeGetCommand(),
-			NewServeShowCommand(),
-		},
-	}
-}
-
-// --- serve run ---
-
-func NewServeRunCommand() *Command {
-	return &Command{
-		Name:        "run",
-		Description: "前台启动 serve 服务（读取 bws-serve.ini 配置）",
-		Usage:       "bws serve run [选项]",
-		Examples: []string{
-			"serve run",
+			"serve",
+			"serve -d /path/to/data",
 		},
 		Flags: []*Flag{
 			{Name: "dir", Short: "d", Usage: "基础目录（包含 packages/ 和 bin/ 子目录，默认: 程序所在目录）", HasValue: true, Default: ""},
 		},
-		Run: runServeRun,
+		Run: runServe,
 	}
 }
 
-func runServeRun(ctx *Context, args []string) error {
+func runServe(ctx *Context, args []string) error {
 	flags, _, err := ParseFlags(args, []*Flag{
 		{Name: "dir", Short: "d", Usage: "基础目录", HasValue: true, Default: ""},
 	})
@@ -2194,7 +2172,30 @@ func runServeRun(ctx *Context, args []string) error {
 
 	baseDir := flags["dir"]
 
-	// Check disk space
+	if ctx.Serve == nil {
+		return fmt.Errorf("当前构建不支持 serve 功能")
+	}
+
+	// 确保配置文件存在
+	configPath, isNew, err := ctx.Serve.EnsureDefaultConfig(baseDir)
+	if err != nil {
+		return fmt.Errorf("创建配置文件失败: %w", err)
+	}
+
+	if isNew {
+		ctx.Printf("配置文件已创建: %s\n", configPath)
+		ctx.Printf("请编辑配置文件，然后重新运行 bws serve\n")
+		ctx.Printf("配置项说明:\n")
+		ctx.Printf("  host        = 监听地址，默认 0.0.0.0\n")
+		ctx.Printf("  port        = 监听端口，默认 8080\n")
+		ctx.Printf("  sync        = 是否启用自动同步 (true/false)\n")
+		ctx.Printf("  sync-interval = 同步间隔，如 24h、30d\n")
+		ctx.Printf("  sync-browsers = 同步浏览器，逗号分隔，留空表示全部\n")
+		ctx.Printf("  sync-channels = 同步渠道，逗号分隔，默认 stable\n")
+		return nil
+	}
+
+	// 检查磁盘空间
 	checkPath := baseDir
 	if checkPath == "" {
 		checkPath = "."
@@ -2203,124 +2204,7 @@ func runServeRun(ctx *Context, args []string) error {
 		return err
 	}
 
-	// 获取服务
-	if ctx.Serve == nil {
-		return fmt.Errorf("当前构建不支持 serve 功能")
-	}
-
 	return ctx.Serve.StartFromConfig(baseDir)
-}
-
-// --- serve set ---
-
-func NewServeSetCommand() *Command {
-	return &Command{
-		Name:        "set",
-		Description: "设置 serve 配置项（写入 bws-serve.ini）",
-		Usage:       "bws serve set <配置项> <值>",
-		Examples: []string{
-			"serve set host 0.0.0.0",
-			"serve set port 8080",
-			"serve set schedule 30d",
-			"serve set sync true",
-			"serve set sync-browsers chrome,firefox",
-			"serve set sync-channels stable,beta",
-		},
-		Run: runServeSet,
-	}
-}
-
-func runServeSet(ctx *Context, args []string) error {
-	if len(args) < 2 {
-		return fmt.Errorf("用法: bws serve set <配置项> <值>。使用 'bws serve show' 查看可用配置项。")
-	}
-
-	key := args[0]
-	value := args[1]
-
-	if ctx.Serve == nil {
-		return fmt.Errorf("当前构建不支持 serve 功能")
-	}
-
-	if err := ctx.Serve.SetConfig(key, value); err != nil {
-		return err
-	}
-
-	ctx.Printf("✓ 已设置 %s = %s\n", key, value)
-	ctx.Printf("配置文件: %s\n", ctx.Serve.ConfigPath())
-	return nil
-}
-
-// --- serve get ---
-
-func NewServeGetCommand() *Command {
-	return &Command{
-		Name:        "get",
-		Description: "获取 serve 配置项的值",
-		Usage:       "bws serve get <配置项>",
-		Examples: []string{
-			"serve get host",
-			"serve get port",
-			"serve get schedule",
-		},
-		Run: runServeGet,
-	}
-}
-
-func runServeGet(ctx *Context, args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("请指定配置项。使用 'bws serve show' 查看所有配置项。")
-	}
-
-	if ctx.Serve == nil {
-		return fmt.Errorf("当前构建不支持 serve 功能")
-	}
-
-	value, err := ctx.Serve.GetConfig(args[0])
-	if err != nil {
-		return err
-	}
-
-	ctx.Println(value)
-	return nil
-}
-
-// --- serve show ---
-
-func NewServeShowCommand() *Command {
-	return &Command{
-		Name:        "show",
-		Aliases:     []string{"list", "ls"},
-		Description: "显示所有 serve 配置",
-		Usage:       "bws serve show",
-		Run:         runServeShow,
-	}
-}
-
-func runServeShow(ctx *Context, args []string) error {
-	if ctx.Serve == nil {
-		return fmt.Errorf("当前构建不支持 serve 功能")
-	}
-
-	cfg := ctx.Serve.GetFullConfig()
-
-	ctx.Printf("serve 配置信息：\n\n")
-	ctx.Printf("  配置文件:       %s\n", ctx.Serve.ConfigPath())
-	ctx.Printf("  监听地址:       %s\n", cfg.Host)
-	ctx.Printf("  监听端口:       %s\n", cfg.Port)
-	ctx.Printf("  自动同步:       %s\n", boolStr(cfg.SyncEnabled))
-	ctx.Printf("  同步间隔:       %s\n", cfg.SyncInterval)
-	if cfg.SyncBrowsers != "" {
-		ctx.Printf("  同步浏览器:     %s\n", cfg.SyncBrowsers)
-	} else {
-		ctx.Printf("  同步浏览器:     全部\n")
-	}
-	ctx.Printf("  同步渠道:       %s\n", cfg.SyncChannels)
-	if cfg.BaseDir != "" {
-		ctx.Printf("  基础目录:       %s\n", cfg.BaseDir)
-	}
-
-	return nil
 }
 
 // --- helpers ---

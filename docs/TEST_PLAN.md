@@ -132,10 +132,10 @@
 
 | ID | 场景 | 输入 | 预期 | 优先级 |
 |----|------|------|------|--------|
-| SRV-01 | 正常 — 查看配置 | `bws serve show` | 显示所有 serve 配置项 | P0 |
-| SRV-02 | 正常 — 设置配置 | `bws serve set port 19000` | 保存配置到 bws-serve.ini | P0 |
-| SRV-03 | 正常 — 启动服务 | `bws serve run` | 启动 HTTP 服务，监听配置端口 | P0 |
-| SRV-04 | 异常 — 端口占用 | `bws serve run` (端口占用) | 报错 "端口已被占用" | P1 |
+| SRV-01 | 首次运行 — 创建配置 | `bws serve`（无 bws-serve.ini） | 创建默认配置文件，提示编辑后重新运行 | P0 |
+| SRV-02 | 正常 — 启动服务 | `bws serve`（已有 bws-serve.ini） | 启动 HTTP 服务，监听配置端口 | P0 |
+| SRV-03 | 异常 — 端口占用 | `bws serve`（端口占用） | 报错 "端口已被占用" | P1 |
+| SRV-04 | 正常 — 指定目录 | `bws serve -d D:\bws-data` | 从指定目录读取配置并启动服务 | P1 |
 
 ---
 
@@ -312,8 +312,7 @@ bws ls -R ff@101
 # bws install ff@101.0.1
 
 # 6. serve 配置
-bws serve show
-bws serve set port 18081
+bws serve
 
 echo "=== 完整测试通过 ==="
 ```

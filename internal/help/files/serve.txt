@@ -7,41 +7,47 @@
   在局域网环境中，团队成员可以通过该服务快速下载浏览器版本，无需
   重复从公网获取，显著提升团队分发效率。
 
+  serve 的配置通过 bws-serve.ini 文件管理，首次运行 bws serve 时会
+  自动创建默认配置文件，请编辑后重新运行。
+
 【命令格式】
-  bws serve [选项]
+  bws serve [-d <目录>]
 
 【选项参数】
   ┌───────────────────┬──────────┬────────────────────────────────────────┐
   │ 选项              │ 默认值   │ 说明                                   │
   ├───────────────────┼──────────┼────────────────────────────────────────┤
-  │ --port, -p        │ 8080     │ 服务监听端口                           │
-  │ --host            │ 0.0.0.0  │ 监听地址，默认监听所有网络接口         │
-  │ --dir, -d         │ 默认     │ 提供下载文件的根目录                   │
-  │ --cache           │ 启用     │ 启用缓存支持                           │
-  │ --no-cache        │ false    │ 禁用缓存                               │
-  │ --log, -l         │ info     │ 日志级别：debug, info, warn, error    │
-  │ --help, -h        │ -        │ 显示帮助信息                           │
+  │ -d, --dir         │ 程序目录 │ 基础目录（包含 packages/ 和 bin/）     │
   └───────────────────┴──────────┴────────────────────────────────────────┘
+
+【配置文件】
+  配置文件路径：程序所在目录/bws-serve.ini
+
+  首次运行 bws serve 时会自动创建默认配置文件，其中包含以下配置项：
+
+  [serve]
+  host = 0.0.0.0              # 监听地址
+  port = 8080                 # 监听端口
+  sync = false                # 是否启用自动同步
+  sync-interval = 24h         # 同步间隔（如 24h、30d）
+  sync-browsers =             # 同步浏览器（逗号分隔，留空=全部）
+  sync-channels = stable      # 同步渠道（逗号分隔）
+
+  编辑配置文件后，再次运行 bws serve 即可启动服务。
 
 【使用示例】
 
-  1. 启动默认服务：
+  1. 首次运行（自动创建配置文件）：
      bws serve
+     → 输出: 配置文件已创建: D:\bws\bws-serve.ini
+     → 编辑配置文件，然后重新运行
 
-  2. 指定端口启动：
-     bws serve --port 9090
+  2. 编辑配置后启动服务：
+     bws serve
+     → 读取 bws-serve.ini，启动 HTTP 服务
 
-  3. 仅绑定本地地址：
-     bws serve --host 127.0.0.1
-
-  4. 指定下载目录：
-     bws serve --dir D:\browser-cache
-
-  5. 禁用缓存并启用调试日志：
-     bws serve --no-cache --log debug
-
-  6. 组合使用：
-     bws serve --port 8080 --host 0.0.0.0 --dir D:\browsers --log info
+  3. 指定基础目录：
+     bws serve -d D:\bws-data
 
 【客户端配置】
   在需要下载浏览器的客户端上，配置离线下载源地址：
@@ -49,13 +55,6 @@
 
   例如：
   bws config set source-url http://192.168.1.100:8080
-
-【服务状态说明】
-  服务启动后，终端会显示以下信息：
-  * 监听地址和端口
-  * 提供下载的目录路径
-  * 当前缓存状态
-  * 请求日志（实时输出）
 
 【后台运行】
 
@@ -70,7 +69,7 @@
 
        [Service]
        Type=simple
-       ExecStart=/usr/local/bin/bws serve run
+       ExecStart=/usr/local/bin/bws serve
        WorkingDirectory=/usr/local/bin
        Restart=on-failure
 
@@ -83,7 +82,7 @@
     1. 下载 nssm (https://nssm.cc/)
     2. nssm install bws-serve
     3. Path: D:\bws\bws.exe
-    4. Arguments: serve run
+    4. Arguments: serve
     5. Startup directory: D:\bws
     6. nssm start bws-serve
 

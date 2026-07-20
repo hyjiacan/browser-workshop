@@ -60,32 +60,14 @@ func (ctx *Context) Confirm(prompt string) bool {
 // ServeProvider provides the HTTP serve functionality.
 type ServeProvider interface {
 	// StartFromConfig starts the HTTP server using configuration from bws-serve.ini.
-	// baseDir is the base directory containing packages/ and bin/ subdirectories.
-	// If empty, the executable directory is used.
 	StartFromConfig(baseDir string) error
-
-	// SetConfig sets a single serve configuration key.
-	SetConfig(key string, value string) error
-
-	// GetConfig gets the value of a single serve configuration key.
-	GetConfig(key string) (string, error)
-
-	// GetFullConfig returns the full serve configuration.
-	GetFullConfig() ServeConfigInfo
 
 	// ConfigPath returns the path to the serve config file.
 	ConfigPath() string
-}
 
-// ServeConfigInfo is a simplified view of serve configuration for CLI display.
-type ServeConfigInfo struct {
-	Host         string
-	Port         string
-	BaseDir      string
-	SyncEnabled  bool
-	SyncInterval string
-	SyncBrowsers string
-	SyncChannels string
+	// EnsureDefaultConfig creates a default bws-serve.ini if it doesn't exist.
+	// Returns the config path and whether it was newly created.
+	EnsureDefaultConfig(baseDir string) (string, bool, error)
 }
 
 // Logger is a minimal logging interface for CLI commands.

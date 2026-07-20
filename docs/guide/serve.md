@@ -22,30 +22,38 @@ bws serve 是一个轻量级的 HTTP 服务，主要功能包括：
 
 ## 快速开始
 
-serve 采用**配置 + 启动**分离的工作流：先通过 `bws serve set` 配置参数，再通过 `bws serve run` 启动服务。配置保存在 `bws-serve.ini` 文件中，重启后依然生效。
+serve 的配置通过 `bws-serve.ini` 文件管理。首次运行 `bws serve` 时会自动创建默认配置文件，编辑后重新运行即可启动服务。
 
 ### 基本用法
 
 ```bash
-# 1. 配置监听地址和端口
-bws serve set host 0.0.0.0
-bws serve set port 8080
+# 1. 首次运行（自动创建配置文件）
+bws serve
+# 输出: 配置文件已创建: D:\bws\bws-serve.ini
+# 编辑配置文件后重新运行
 
-# 2. 启动服务
-bws serve run
+# 2. 编辑 bws-serve.ini 后启动服务
+bws serve
 ```
 
 启动后，可以在浏览器中访问 `http://localhost:8080` 查看 Web 界面。
 
-### 查看配置
+### 配置文件示例
+
+```ini
+# bws serve 配置文件
+[serve]
+host = 0.0.0.0
+port = 8080
+sync = false
+sync-interval = 24h
+sync-browsers =
+sync-channels = stable
+```
 
 ```bash
-# 查看所有配置
-bws serve show
-
-# 查看单个配置项
-bws serve get host
-bws serve get port
+# 编辑配置文件后启动服务
+bws serve
 ```
 
 ### 配置项说明
@@ -75,22 +83,17 @@ sync-channels = stable
 
 ### 启用自动同步
 
-```bash
-# 启用同步
-bws serve set sync true
+编辑 `bws-serve.ini` 配置文件，设置以下选项：
 
-# 设置同步间隔为 30 天
-bws serve set schedule 30d
-
-# 指定同步的浏览器
-bws serve set sync-browsers chrome,firefox
-
-# 指定同步的渠道
-bws serve set sync-channels stable,beta
-
-# 启动服务
-bws serve run
+```ini
+[serve]
+sync = true
+sync-interval = 30d
+sync-browsers = chrome,firefox
+sync-channels = stable,beta
 ```
+
+然后重新运行 `bws serve` 即可。
 
 自动同步的详细说明请参考 [Serve 自动同步](./serve-sync.md) 章节。
 
@@ -206,7 +209,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/bws serve run
+ExecStart=/usr/local/bin/bws serve
 WorkingDirectory=/usr/local/bin
 Restart=on-failure
 RestartSec=5
@@ -235,7 +238,7 @@ nssm install bws-serve
 
 # 在弹出的窗口中配置：
 #   Path:        D:\bws\bws.exe
-#   Arguments:   serve run
+#   Arguments:   serve
 #   Startup dir: D:\bws
 
 # 3. 启动服务

@@ -26,17 +26,18 @@ bws serve 支持自动从在线源同步浏览器安装包到本地 `packages/` 
 
 ## 启用同步
 
-通过配置文件启用自动同步功能。
+编辑 `bws-serve.ini` 配置文件，启用自动同步功能。
 
-### 基本启用
+### 基本配置
 
-```bash
-# 启用同步
-bws serve set sync true
-
-# 启动服务
-bws serve run
+```ini
+[serve]
+sync = true
+sync-interval = 24h
+sync-channels = stable
 ```
+
+然后运行 `bws serve` 启动服务。
 
 默认配置：
 - 同步间隔：24 小时（每天一次）
@@ -49,7 +50,7 @@ bws serve run
 
 ## 同步间隔配置
 
-使用 `schedule` 或 `sync-interval` 配置项自定义同步间隔。
+使用 `sync-interval` 配置项自定义同步间隔。
 
 ### 时间格式
 
@@ -66,21 +67,18 @@ bws serve run
 
 ### 常用配置
 
-```bash
+```ini
 # 每 30 天同步一次
-bws serve set schedule 30d
+sync-interval = 30d
 
 # 每 6 小时同步一次
-bws serve set schedule 6h
+sync-interval = 6h
 
 # 每 12 小时同步一次
-bws serve set schedule 12h
+sync-interval = 12h
 
 # 每天同步一次（默认）
-bws serve set schedule 24h
-
-# 每 30 分钟同步一次（不推荐，过于频繁）
-bws serve set schedule 30m
+sync-interval = 24h
 ```
 
 ### 间隔选择建议
@@ -99,15 +97,15 @@ bws serve set schedule 30m
 
 使用 `sync-browsers` 配置项指定要同步的浏览器列表，多个浏览器用逗号分隔：
 
-```bash
+```ini
 # 只同步 Chrome
-bws serve set sync-browsers chrome
+sync-browsers = chrome
 
 # 同步 Chrome 和 Firefox
-bws serve set sync-browsers chrome,firefox
+sync-browsers = chrome,firefox
 
 # 同步 Chrome、Firefox、Chromium
-bws serve set sync-browsers chrome,firefox,chromium
+sync-browsers = chrome,firefox,chromium
 ```
 
 支持的浏览器名称：
@@ -125,15 +123,15 @@ bws serve set sync-browsers chrome,firefox,chromium
 
 使用 `sync-channels` 配置项指定要同步的渠道列表，多个渠道用逗号分隔：
 
-```bash
+```ini
 # 只同步 stable 渠道（默认）
-bws serve set sync-channels stable
+sync-channels = stable
 
 # 同步 stable 和 beta 渠道
-bws serve set sync-channels stable,beta
+sync-channels = stable,beta
 
 # 同步所有渠道
-bws serve set sync-channels stable,beta,dev,canary
+sync-channels = stable,beta,dev,canary
 ```
 
 支持的渠道：
@@ -145,20 +143,24 @@ bws serve set sync-channels stable,beta,dev,canary
 
 ### 组合配置示例
 
-```bash
+```ini
 # 同步 Chrome 的 stable 和 beta 渠道，每 12 小时一次
-bws serve set sync true
-bws serve set schedule 12h
-bws serve set sync-browsers chrome
-bws serve set sync-channels stable,beta
-bws serve run
-
-# 同步 Chrome 和 Firefox 的 stable 渠道，每天一次
-bws serve set sync true
-bws serve set sync-browsers chrome,firefox
-bws serve set sync-channels stable
-bws serve run
+[serve]
+sync = true
+sync-interval = 12h
+sync-browsers = chrome
+sync-channels = stable,beta
 ```
+
+```ini
+# 同步 Chrome 和 Firefox 的 stable 渠道，每天一次
+[serve]
+sync = true
+sync-browsers = chrome,firefox
+sync-channels = stable
+```
+
+配置完成后，运行 `bws serve` 启动服务。
 
 ## Web 页面手动触发
 

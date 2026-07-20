@@ -41,8 +41,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// If config file doesn't exist yet, run first-time setup
-	if isNewConfig {
+	// If config file doesn't exist yet, run first-time setup (skip for serve command)
+	if isNewConfig && !(len(os.Args) > 1 && os.Args[1] == "serve") {
 		cfg = firstTimeSetup(configPath, cfg)
 	}
 
@@ -909,30 +909,12 @@ func (a *serveAdapter) StartFromConfig(baseDir string) error {
 	return srv.Start()
 }
 
-func (a *serveAdapter) SetConfig(key string, value string) error {
-	_, err := bmserve.SetConfigKey("", key, value)
-	return err
-}
-
-func (a *serveAdapter) GetConfig(key string) (string, error) {
-	return bmserve.GetConfigKey("", key)
-}
-
-func (a *serveAdapter) GetFullConfig() cli.ServeConfigInfo {
-	cfg, _ := bmserve.LoadServeConfig("")
-	return cli.ServeConfigInfo{
-		Host:         cfg.Host,
-		Port:         cfg.Port,
-		BaseDir:      cfg.BaseDir,
-		SyncEnabled:  cfg.SyncEnabled,
-		SyncInterval: cfg.SyncInterval,
-		SyncBrowsers: cfg.SyncBrowsers,
-		SyncChannels: cfg.SyncChannels,
-	}
-}
-
 func (a *serveAdapter) ConfigPath() string {
 	return bmserve.ConfigPath("")
+}
+
+func (a *serveAdapter) EnsureDefaultConfig(baseDir string) (string, bool, error) {
+	return bmserve.EnsureDefaultConfig(baseDir)
 }
 
 // serveSyncSource adapts source.Source to serve.SyncSource.

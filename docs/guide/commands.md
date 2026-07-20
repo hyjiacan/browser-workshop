@@ -490,53 +490,52 @@ bws alias remove mychrome
 
 ## bws serve
 
-启动 HTTP 分发服务。采用配置与启动分离的模式，先配置再启动。
+启动 HTTP 分发服务。配置通过 `bws-serve.ini` 文件管理，首次运行时会自动创建默认配置文件。
 
 ### 用法
 
 ```bash
-bws serve <子命令> [选项]
+bws serve [-d <目录>]
 ```
 
-### 子命令
+### 选项
 
-| 子命令 | 说明 |
-|--------|------|
-| `run` | 前台启动 serve 服务（读取 bws-serve.ini 配置） |
-| `set <key> <value>` | 设置 serve 配置项（写入 bws-serve.ini） |
-| `get <key>` | 获取 serve 配置项的值 |
-| `show` | 显示所有 serve 配置 |
+| 选项 | 说明 |
+|------|------|
+| `-d, --dir` | 基础目录（包含 packages/ 和 bin/），默认程序所在目录 |
 
-### 配置项
+### 配置文件 (bws-serve.ini)
+
+首次运行 `bws serve` 会自动创建配置文件，编辑后重新运行即可启动服务。
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | `host` | `0.0.0.0` | 监听主机地址 |
 | `port` | `8080` | 监听端口 |
 | `sync` | `false` | 是否启用自动同步 |
-| `schedule` / `sync-interval` | `24h` | 同步间隔（支持 30d、24h、30m 格式） |
+| `sync-interval` | `24h` | 同步间隔（支持 30d、24h、30m 格式） |
 | `sync-browsers` | 全部 | 同步的浏览器列表，逗号分隔 |
 | `sync-channels` | `stable` | 同步的渠道列表，逗号分隔 |
-| `base-dir` / `dir` | 程序目录 | 基础目录 |
+| `base-dir` | 程序目录 | 基础目录 |
 
 ### 示例
 
 ```bash
-# 配置监听地址和端口
-bws serve set host 0.0.0.0
-bws serve set port 8080
+# 首次运行（自动创建配置文件）
+bws serve
+# 输出: 配置文件已创建: D:\bws\bws-serve.ini
+# 编辑配置文件后重新运行
 
-# 查看配置
-bws serve show
-bws serve get port
+# 编辑配置后启动服务
+bws serve
 
-# 启用自动同步，间隔 30 天
-bws serve set sync true
-bws serve set schedule 30d
-
-# 启动服务
-bws serve run
+# 指定基础目录
+bws serve -d D:\bws-data
 ```
+
+### 后台运行
+
+参见 [Serve 服务文档](/guide/serve#后台运行)，了解如何使用 systemd 或 nssm 配置为系统服务。
 
 ---
 

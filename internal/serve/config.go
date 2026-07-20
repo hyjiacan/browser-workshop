@@ -170,6 +170,20 @@ func SaveServeConfig(baseDir string, cfg ServeConfig) error {
 	return os.WriteFile(configPath, []byte(sb.String()), 0o644)
 }
 
+// EnsureDefaultConfig creates a default bws-serve.ini if it doesn't exist.
+// Returns the config path, whether it was newly created, and any error.
+func EnsureDefaultConfig(baseDir string) (string, bool, error) {
+	configPath := ConfigPath(baseDir)
+	if _, err := os.Stat(configPath); err == nil {
+		return configPath, false, nil
+	}
+	cfg := DefaultServeConfig()
+	if err := SaveServeConfig(baseDir, cfg); err != nil {
+		return configPath, false, err
+	}
+	return configPath, true, nil
+}
+
 // SetConfigKey sets a single configuration key and saves the config file.
 // Returns the updated config.
 func SetConfigKey(baseDir string, key string, value string) (ServeConfig, error) {
