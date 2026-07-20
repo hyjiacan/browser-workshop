@@ -20,8 +20,11 @@ type ServeConfig struct {
 	// Port is the listen port.
 	Port string
 
-	// BaseDir is the base directory containing packages/ and bin/.
-	BaseDir string
+	// PackagesDir is the directory containing browser packages.
+	PackagesDir string
+
+	// BinDir is the directory containing client binary files.
+	BinDir string
 
 	// SyncEnabled controls whether auto-sync is enabled.
 	SyncEnabled bool
@@ -41,7 +44,8 @@ func DefaultServeConfig() ServeConfig {
 	return ServeConfig{
 		Host:         "0.0.0.0",
 		Port:         "8080",
-		BaseDir:      "",
+		PackagesDir:  "",
+		BinDir:       "",
 		SyncEnabled:  false,
 		SyncInterval: "24h",
 		SyncBrowsers: "",
@@ -119,8 +123,10 @@ func LoadServeConfig(baseDir string) (ServeConfig, error) {
 			cfg.Host = value
 		case "port":
 			cfg.Port = value
-		case "base-dir", "basedir", "dir":
-			cfg.BaseDir = value
+		case "packages-dir", "packagesdir":
+			cfg.PackagesDir = value
+		case "bin-dir", "bindir":
+			cfg.BinDir = value
 		case "sync", "sync-enabled", "syncenabled":
 			cfg.SyncEnabled = parseBool(value)
 		case "sync-interval", "syncinterval", "schedule":
@@ -169,12 +175,19 @@ func SaveServeConfig(baseDir string, cfg ServeConfig) error {
 	sb.WriteString("# 监听端口\n")
 	sb.WriteString(fmt.Sprintf("port = %s\n", cfg.Port))
 	sb.WriteString("\n")
-	sb.WriteString("# 数据存储目录\n")
-	sb.WriteString("# serve 会在此目录下自动创建 packages/ 和 bin/ 子目录\n")
-	sb.WriteString("# 留空 = 使用程序所在目录\n")
-	sb.WriteString("# 支持相对路径和绝对路径，支持多级子目录\n")
-	sb.WriteString("# 示例: D:\\bws-data  或  ..\\data\\browsers\n")
-	sb.WriteString(fmt.Sprintf("base-dir = %s\n", cfg.BaseDir))
+	sb.WriteString("# 浏览器安装包存放目录\n")
+	sb.WriteString("# serve 将从此目录提供浏览器安装包的下载\n")
+	sb.WriteString("# 留空 = 使用程序所在目录下的 packages 子目录\n")
+	sb.WriteString("# 支持绝对路径和相对路径\n")
+	sb.WriteString("# 示例: D:\\bws-packages  或  ..\\shared\\packages\n")
+	sb.WriteString(fmt.Sprintf("packages-dir = %s\n", cfg.PackagesDir))
+	sb.WriteString("\n")
+	sb.WriteString("# 客户端二进制文件存放目录\n")
+	sb.WriteString("# serve 将从此目录提供 bws 客户端二进制的下载\n")
+	sb.WriteString("# 留空 = 使用程序所在目录下的 bin 子目录\n")
+	sb.WriteString("# 支持绝对路径和相对路径\n")
+	sb.WriteString("# 示例: D:\\bws-bin  或  ..\\shared\\bin\n")
+	sb.WriteString(fmt.Sprintf("bin-dir = %s\n", cfg.BinDir))
 	sb.WriteString("\n")
 	sb.WriteString("# 自动同步开关\n")
 	sb.WriteString("# true  = 启用定时同步，从在线源下载最新版本\n")
@@ -231,13 +244,10 @@ func SetConfigKey(baseDir string, key string, value string) (ServeConfig, error)
 			return cfg, fmt.Errorf("无效的端口号: %s", value)
 		}
 		cfg.Port = value
-	case "base-dir", "basedir", "dir":
-		absPath, err := filepath.Abs(value)
-		if err == nil {
-			cfg.BaseDir = absPath
-		} else {
-			cfg.BaseDir = value
-		}
+	case "packages-dir", "packagesdir":
+		cfg.PackagesDir = value
+	case "bin-dir", "bindir":
+		cfg.BinDir = value
 	case "sync", "sync-enabled", "syncenabled":
 		cfg.SyncEnabled = parseBool(value)
 	case "sync-interval", "syncinterval", "schedule":
@@ -275,8 +285,10 @@ func GetConfigKey(baseDir string, key string) (string, error) {
 		return cfg.Host, nil
 	case "port":
 		return cfg.Port, nil
-	case "base-dir", "basedir", "dir":
-		return cfg.BaseDir, nil
+	case "packages-dir", "packagesdir":
+		return cfg.PackagesDir, nil
+	case "bin-dir", "bindir":
+		return cfg.BinDir, nil
 	case "sync", "sync-enabled", "syncenabled":
 		return boolStr(cfg.SyncEnabled), nil
 	case "sync-interval", "syncinterval", "schedule":

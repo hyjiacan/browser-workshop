@@ -512,11 +512,12 @@ bws serve [-d <目录>]
 |--------|--------|------|
 | `host` | `0.0.0.0` | 监听主机地址 |
 | `port` | `8080` | 监听端口 |
+| `packages-dir` | 程序目录/packages | 浏览器安装包存放目录 |
+| `bin-dir` | 程序目录/bin | 客户端二进制存放目录 |
 | `sync` | `false` | 是否启用自动同步 |
 | `sync-interval` | `24h` | 同步间隔（支持 30d、24h、30m 格式） |
 | `sync-browsers` | 全部 | 同步的浏览器列表，逗号分隔 |
 | `sync-channels` | `stable` | 同步的渠道列表，逗号分隔 |
-| `base-dir` | 程序目录 | 基础目录 |
 
 ### 示例
 

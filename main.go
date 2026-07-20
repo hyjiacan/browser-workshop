@@ -867,9 +867,21 @@ func (a *serveAdapter) StartFromConfig(baseDir string) error {
 	}
 
 	addr := cfg.Addr()
-	effectiveBaseDir := cfg.BaseDir
-	if effectiveBaseDir == "" {
-		effectiveBaseDir = baseDir
+
+	// Resolve effective directories: config value > CLI -d default
+	exeDir, _ := paths.ExeDir()
+	if exeDir == "" {
+		exeDir, _ = os.Getwd()
+	}
+
+	packagesDir := cfg.PackagesDir
+	if packagesDir == "" {
+		packagesDir = filepath.Join(exeDir, "packages")
+	}
+
+	binDir := cfg.BinDir
+	if binDir == "" {
+		binDir = filepath.Join(exeDir, "bin")
 	}
 
 	var syncSource bmserve.SyncSource
@@ -887,9 +899,10 @@ func (a *serveAdapter) StartFromConfig(baseDir string) error {
 		}
 
 		srv := bmserve.NewServerWithOptions(bmserve.ServerOptions{
-			Addr:       addr,
-			Version:    a.version,
-			BaseDir:    effectiveBaseDir,
+			Addr:         addr,
+			Version:      a.version,
+			PackagesDir:  packagesDir,
+			BinDir:       binDir,
 			SyncSource: syncSource,
 			SyncConfig: bmserve.SyncConfig{
 				Enabled:  true,
@@ -902,9 +915,10 @@ func (a *serveAdapter) StartFromConfig(baseDir string) error {
 	}
 
 	srv := bmserve.NewServerWithOptions(bmserve.ServerOptions{
-		Addr:    addr,
-		Version: a.version,
-		BaseDir: effectiveBaseDir,
+		Addr:        addr,
+		Version:     a.version,
+		PackagesDir: packagesDir,
+		BinDir:      binDir,
 	})
 	return srv.Start()
 }

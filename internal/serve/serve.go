@@ -313,9 +313,13 @@ type ServerOptions struct {
 	// Version is the server/program version string.
 	Version string
 
-	// BaseDir is the base directory containing packages/ and bin/.
-	// If empty, the executable directory is used.
-	BaseDir string
+	// PackagesDir is the directory containing browser packages.
+	// If empty, the executable directory + "packages" is used.
+	PackagesDir string
+
+	// BinDir is the directory containing client binary files.
+	// If empty, the executable directory + "bin" is used.
+	BinDir string
 
 	// SyncSource is the source for auto-syncing packages from online sources.
 	// If nil, auto-sync is disabled.
@@ -340,23 +344,30 @@ func NewServer(addr string, version string) *Server {
 
 // NewServerWithOptions creates a new serve server with full options.
 func NewServerWithOptions(opts ServerOptions) *Server {
-	baseDir := opts.BaseDir
-	if baseDir == "" {
-		dir, err := paths.ExeDir()
-		if err == nil {
-			baseDir = dir
-		} else {
-			wd, _ := os.Getwd()
-			baseDir = wd
-		}
+	exeDir, err := paths.ExeDir()
+	if err != nil {
+		wd, _ := os.Getwd()
+		exeDir = wd
 	}
+
+	packagesDir := opts.PackagesDir
+	if packagesDir == "" {
+		packagesDir = filepath.Join(exeDir, "packages")
+	}
+
+	binDir := opts.BinDir
+	if binDir == "" {
+		binDir = filepath.Join(exeDir, "bin")
+	}
+
+	baseDir := exeDir // baseDir kept for cache path
 
 	srv := &Server{
 		addr:        opts.Addr,
 		version:     opts.Version,
 		baseDir:     baseDir,
-		packagesDir: filepath.Join(baseDir, "packages"),
-		binDir:      filepath.Join(baseDir, "bin"),
+		packagesDir: packagesDir,
+		binDir:      binDir,
 		cachePath:   filepath.Join(baseDir, ".serve-cache.json"),
 	}
 
