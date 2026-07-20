@@ -935,14 +935,6 @@ func (a *serveAdapter) ConfigPath() string {
 	return bmserve.ConfigPath("")
 }
 
-func (a *serveAdapter) InstallService() error {
-	return fmt.Errorf("系统服务安装功能尚未实现，请使用 'bws serve run' 前台运行")
-}
-
-func (a *serveAdapter) UninstallService() error {
-	return fmt.Errorf("系统服务卸载功能尚未实现")
-}
-
 // serveSyncSource adapts source.Source to serve.SyncSource.
 type serveSyncSource struct {
 	src source.Source

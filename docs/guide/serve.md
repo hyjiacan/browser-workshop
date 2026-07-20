@@ -190,6 +190,80 @@ bws install chrome@120
 
 详细的源优先级说明请参考 [配置管理](./config.md#数据源与优先级) 章节。
 
+## 后台运行
+
+serve 命令默认在前台运行，适合调试和临时使用。生产环境建议配置为系统服务，实现开机自启和自动重启。
+
+### Linux (systemd)
+
+创建 systemd 服务文件：
+
+```bash
+sudo tee /etc/systemd/system/bws-serve.service << 'EOF'
+[Unit]
+Description=BWS Browser Version Serve
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/bws serve run
+WorkingDirectory=/usr/local/bin
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+启用并启动服务：
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now bws-serve
+sudo systemctl status bws-serve
+```
+
+### Windows (nssm)
+
+推荐使用 [nssm](https://nssm.cc/)（Non-Sucking Service Manager）将 serve 注册为 Windows 服务。
+
+```powershell
+# 1. 下载 nssm 并解压到 PATH 目录
+# 2. 安装服务
+nssm install bws-serve
+
+# 在弹出的窗口中配置：
+#   Path:        D:\bws\bws.exe
+#   Arguments:   serve run
+#   Startup dir: D:\bws
+
+# 3. 启动服务
+nssm start bws-serve
+
+# 4. 查看状态
+nssm status bws-serve
+```
+
+常用 nssm 命令：
+
+| 命令 | 说明 |
+|------|------|
+| `nssm start bws-serve` | 启动服务 |
+| `nssm stop bws-serve` | 停止服务 |
+| `nssm restart bws-serve` | 重启服务 |
+| `nssm remove bws-serve` | 卸载服务 |
+| `nssm edit bws-serve` | 编辑服务配置 |
+
+### 为什么不内置服务安装
+
+bws 选择不内置系统服务安装功能，原因如下：
+
+- **跨平台复杂度**：Windows 服务、Linux systemd、macOS launchd 差异巨大，维护成本高
+- **权限问题**：安装系统服务通常需要管理员/root 权限，容易引起安全顾虑
+- **灵活性**：使用 systemd/nssm 等成熟工具，用户可以更灵活地配置日志、资源限制、依赖关系等
+- **专注核心**：bws 专注于浏览器版本管理，服务管理交给专业工具
+
 ## Web 界面
 
 启动 serve 服务后，在浏览器中访问服务地址即可看到 Web 界面。

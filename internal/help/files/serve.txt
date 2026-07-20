@@ -57,11 +57,41 @@
   * 当前缓存状态
   * 请求日志（实时输出）
 
+【后台运行】
+
+  serve 不提供自动安装系统服务的功能，请根据操作系统手动配置：
+
+  --- Linux (systemd) ---
+    1. 创建服务文件 /etc/systemd/system/bws-serve.service
+    2. 内容示例：
+       [Unit]
+       Description=BWS Serve
+       After=network.target
+
+       [Service]
+       Type=simple
+       ExecStart=/usr/local/bin/bws serve run
+       WorkingDirectory=/usr/local/bin
+       Restart=on-failure
+
+       [Install]
+       WantedBy=multi-user.target
+    3. systemctl daemon-reload
+    4. systemctl enable --now bws-serve
+
+  --- Windows (nssm) ---
+    1. 下载 nssm (https://nssm.cc/)
+    2. nssm install bws-serve
+    3. Path: D:\bws\bws.exe
+    4. Arguments: serve run
+    5. Startup directory: D:\bws
+    6. nssm start bws-serve
+
 【注意事项】
   * 确保防火墙允许指定端口的入站连接。
   * 生产环境建议使用反向代理（如 Nginx）进行安全加固。
   * 服务端需要提前下载好所需的浏览器版本，客户端才能通过服务获取。
   * 默认监听 0.0.0.0 表示所有网络接口均可访问，请根据实际需求调整。
-  * 按 Ctrl+C 可以停止服务。
+  * 按 Ctrl+C 可以停止前台服务。
 
 ================================================================================

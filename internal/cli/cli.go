@@ -75,12 +75,6 @@ type ServeProvider interface {
 
 	// ConfigPath returns the path to the serve config file.
 	ConfigPath() string
-
-	// InstallService installs serve as a system service.
-	InstallService() error
-
-	// UninstallService uninstalls the serve system service.
-	UninstallService() error
 }
 
 // ServeConfigInfo is a simplified view of serve configuration for CLI display.

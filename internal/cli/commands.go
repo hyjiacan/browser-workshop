@@ -2163,8 +2163,6 @@ func NewServeCommand() *Command {
 			NewServeSetCommand(),
 			NewServeGetCommand(),
 			NewServeShowCommand(),
-			NewServeInstallCommand(),
-			NewServeUninstallCommand(),
 		},
 	}
 }
@@ -2323,44 +2321,6 @@ func runServeShow(ctx *Context, args []string) error {
 	}
 
 	return nil
-}
-
-// --- serve install ---
-
-func NewServeInstallCommand() *Command {
-	return &Command{
-		Name:        "service-install",
-		Aliases:     []string{"svc-install"},
-		Description: "将 serve 安装为系统服务（从配置读取 host/port）",
-		Usage:       "bws serve service-install",
-		Run:         runServeInstall,
-	}
-}
-
-func runServeInstall(ctx *Context, args []string) error {
-	if ctx.Serve == nil {
-		return fmt.Errorf("当前构建不支持 serve 功能")
-	}
-	return ctx.Serve.InstallService()
-}
-
-// --- serve uninstall ---
-
-func NewServeUninstallCommand() *Command {
-	return &Command{
-		Name:        "service-uninstall",
-		Aliases:     []string{"svc-uninstall"},
-		Description: "卸载 serve 系统服务",
-		Usage:       "bws serve service-uninstall",
-		Run:         runServeUninstall,
-	}
-}
-
-func runServeUninstall(ctx *Context, args []string) error {
-	if ctx.Serve == nil {
-		return fmt.Errorf("当前构建不支持 serve 功能")
-	}
-	return ctx.Serve.UninstallService()
 }
 
 // --- helpers ---

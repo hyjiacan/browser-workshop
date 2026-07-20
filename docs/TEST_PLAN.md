@@ -135,10 +135,7 @@
 | SRV-01 | 正常 — 查看配置 | `bws serve show` | 显示所有 serve 配置项 | P0 |
 | SRV-02 | 正常 — 设置配置 | `bws serve set port 19000` | 保存配置到 bws-serve.ini | P0 |
 | SRV-03 | 正常 — 启动服务 | `bws serve run` | 启动 HTTP 服务，监听配置端口 | P0 |
-| SRV-04 | 正常 — 安装系统服务 | `bws serve service-install` | 注册为 Windows 服务 | P1 |
-| SRV-05 | 正常 — 卸载系统服务 | `bws serve service-uninstall` | 卸载 Windows 服务 | P1 |
-| SRV-06 | 异常 — 端口占用 | `bws serve run` (端口占用) | 报错 "端口已被占用" | P1 |
-| SRV-07 | 异常 — 无权限 | `bws serve service-install` (无管理员) | 提示需要管理员权限 | P1 |
+| SRV-04 | 异常 — 端口占用 | `bws serve run` (端口占用) | 报错 "端口已被占用" | P1 |
 
 ---
 
