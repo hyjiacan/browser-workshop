@@ -1,6 +1,12 @@
 # bws - Browser Workshop
 
-多版本浏览器管理工具，支持本地导入、远程下载、版本切换、隔离运行。
+<p align="center">
+  <img src="logo.png" alt="bws logo" width="128" />
+</p>
+
+<p align="center">
+  多版本浏览器管理工具，支持本地导入、远程下载、版本切换、隔离运行。
+</p>
 
 ## 功能特性
 
