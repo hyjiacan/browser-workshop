@@ -40,14 +40,14 @@ func RegisterCommands(app *App) {
 
 func NewLsCommand() *Command {
 	return &Command{
-		Name:        "ls",
-		Aliases:     []string{"list"},
+		Name:        "list",
+		Aliases:     []string{"ls"},
 		Description: "列出已安装或远程可用的浏览器版本",
-		Usage:       "bws ls [浏览器[@版本前缀]] [选项]",
+		Usage:       "bws list [浏览器[@版本前缀]] [选项]",
 		Examples: []string{
-			"ls",
-			"ls chrome",
-			"ls chrome@79",
+			"list",
+			"list chrome",
+			"list chrome@79",
 			"ls chrome@79.0",
 			"ls --all",
 			"ls --no-system",
