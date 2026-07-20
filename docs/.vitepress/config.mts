@@ -1,11 +1,12 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title: 'bws - Browser Workshop',
+  title: 'browser-workshop',
   description: '多版本浏览器管理工具，支持本地导入、远程下载、版本切换、隔离运行。',
   lang: 'zh-CN',
   lastUpdated: true,
   cleanUrls: true,
+  base: '/browser-workshop/',
 
   head: [
     ['link', { rel: 'icon', type: 'image/png', href: '/logo.png' }],
