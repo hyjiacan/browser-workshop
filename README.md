@@ -1,0 +1,103 @@
+# bws - Browser Workshop
+
+多版本浏览器管理工具，支持本地导入、远程下载、版本切换、隔离运行。
+
+## 功能特性
+
+- **多版本管理**：同时安装和管理多个浏览器版本，支持版本前缀快速筛选
+- **本地导入**：从目录或压缩包自动识别并导入，支持 25+ 种格式
+- **远程下载**：从官方源（Chrome Omaha 协议）下载指定版本
+- **离线分发**：内置 `serve` 命令，支持自动同步，搭建局域网分发服务
+- **隔离运行**：每个版本独立 Profile，支持命名 Profile
+- **便携模式**：数据存储在 `bws-data/` 子目录，U 盘随身携带
+- **浏览器短别名**：`gc` (chrome)、`ff` (firefox)、`cm` (chromium)
+- **HTTPS 兼容**：默认跳过证书验证，适配内网/自签名证书环境
+
+## 快速开始
+
+```bash
+# 查看已安装版本
+bws ls
+bws ls gc@79           # 使用短别名 + 版本前缀筛选
+
+# 从本地目录批量导入
+bws import /path/to/browsers
+
+# 远程下载安装
+bws install chrome@120
+
+# 运行浏览器
+bws run chrome@120
+bws run gc@120 -i      # 隐身模式
+```
+
+## 文档
+
+完整文档请访问：**[bws 文档站](https://hyjiacan.github.io/bws)**
+
+- [快速上手](https://hyjiacan.github.io/bws/guide/getting-started)
+- [命令参考](https://hyjiacan.github.io/bws/guide/commands)
+- [Serve 服务](https://hyjiacan.github.io/bws/guide/serve)
+- [浏览器短别名](https://hyjiacan.github.io/bws/guide/short-aliases)
+
+国内用户也可访问 Gitee 文档镜像：[https://hyjiacan.gitee.io/bws](https://hyjiacan.gitee.io/bws)
+
+## 安装
+
+```bash
+go install github.com/hyjiacan/bws@latest
+```
+
+或从 [Releases](https://github.com/hyjiacan/bws/releases) 下载预编译二进制。
+
+国内用户也可以通过 Gitee 安装：
+
+```bash
+go install gitee.com/hyjiacan/bws@latest
+```
+
+## 命令一览
+
+| 命令 | 说明 |
+|------|------|
+| `bws ls` / `bws list` | 列出已安装的浏览器版本 |
+| `bws ls -R` | 列出远程可用版本 |
+| `bws run <browser@version>` | 运行指定版本 |
+| `bws install <browser@version>` | 安装浏览器版本 |
+| `bws import <dir>` | 从目录批量导入 |
+| `bws serve` | 启动 HTTP 分发服务 |
+| `bws config` | 管理配置 |
+| `bws profile` | 管理 Profile |
+
+完整命令说明请查看 [命令参考](https://hyjiacan.github.io/bws/guide/commands)。
+
+## 浏览器短别名
+
+| 短别名 | 完整名称 |
+|--------|----------|
+| `gc` | chrome / googlechrome |
+| `ff` | firefox |
+| `cm` | chromium |
+
+所有命令都支持短别名。详见 [浏览器短别名](https://hyjiacan.github.io/bws/guide/short-aliases)。
+
+## Serve 服务
+
+```bash
+# 配置服务
+bws serve set host 0.0.0.0
+bws serve set port 8080
+
+# 启用自动同步（每天从在线源拉取新版本）
+bws serve set sync true
+bws serve set schedule 30d
+
+# 启动服务
+bws serve run
+```
+
+详见 [Serve 服务文档](https://hyjiacan.github.io/bws/guide/serve)。
+
+## 许可证
+
+MIT

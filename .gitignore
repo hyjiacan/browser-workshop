@@ -1,0 +1,45 @@
+# 数据目录
+bws-data/
+.bws-data/
+.bws/
+
+# Serve 缓存
+.serve-cache.json
+*.serve-cache.json
+packages
+
+# Serve 配置
+bws-serve.ini
+
+# 构建产物
+*.exe
+*.dll
+*.so
+*.dylib
+bws
+bws.exe
+bws.exe~
+
+# Go 相关
+vendor/
+*.out
+*.test
+*.prof
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 系统文件
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 文档（VitePress）
+docs/node_modules/
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+*.log

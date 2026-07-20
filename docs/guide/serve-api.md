@@ -1,0 +1,428 @@
+# Serve API 参考
+
+bws serve 提供了完整的 REST API 接口，用于查询文件清单、下载文件、管理同步等。本文档详细说明所有 API 端点的用法。
+
+## API 端点总览
+
+| 路径 | 方法 | 说明 |
+|------|------|------|
+| `/` | GET | HTML 帮助页 / Web 界面 |
+| `/api/v1/manifest` | GET | 文件清单（含 XXH3 校验和） |
+| `/api/v1/download/{filename}` | GET | 文件下载（支持断点续传） |
+| `/api/v1/status` | GET | 服务状态 |
+| `/api/v1/sync/status` | GET | 同步状态 |
+| `/api/v1/sync/trigger` | POST | 手动触发同步 |
+| `/bin/{filename}` | GET | 客户端二进制下载 |
+
+## 基础信息
+
+### 基础 URL
+
+所有 API 的基础 URL 为 serve 服务的地址，例如：
+
+```
+http://localhost:8080
+http://192.168.1.100:8080
+```
+
+### 数据格式
+
+- 响应格式：JSON（除非另有说明）
+- 字符编码：UTF-8
+- 时间格式：ISO 8601（如 `2024-01-15T10:30:00Z`）
+
+### 错误处理
+
+API 出错时返回标准 HTTP 状态码，并在响应体中包含错误信息。
+
+错误响应格式：
+
+```json
+{
+  "ok": false,
+  "error": "错误描述信息"
+}
+```
+
+常见 HTTP 状态码：
+
+| 状态码 | 说明 |
+|--------|------|
+| 200 OK | 请求成功 |
+| 400 Bad Request | 请求参数错误 |
+| 404 Not Found | 资源不存在 |
+| 405 Method Not Allowed | 方法不允许 |
+| 409 Conflict | 冲突（如同步正在进行） |
+| 500 Internal Server Error | 服务器内部错误 |
+
+---
+
+## GET /
+
+HTML 帮助页，即 Web 管理界面。
+
+### 请求
+
+```
+GET /
+```
+
+### 响应
+
+返回 HTML 页面，包含：
+
+- 可用浏览器版本列表
+- 文件下载链接
+- 服务状态信息
+- 同步控制（如果启用了同步）
+- 客户端二进制下载（如果 bin 目录存在）
+
+---
+
+## GET /api/v1/manifest
+
+获取文件清单，包含所有可识别的浏览器安装包信息及其 XXH3 校验和。
+
+### 请求
+
+```
+GET /api/v1/manifest
+```
+
+### 查询参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| browser | string | 否 | 按浏览器筛选（如 chrome, firefox） |
+| channel | string | 否 | 按渠道筛选（如 stable, beta） |
+| platform | string | 否 | 按平台筛选（如 windows, linux, macos） |
+| arch | string | 否 | 按架构筛选（如 x64, x86, arm64） |
+
+### 响应示例
+
+```json
+{
+  "ok": true,
+  "files": [
+    {
+      "filename": "Chrome_120.0.6099.109_Windows_x64.exe",
+      "browser": "chrome",
+      "version": "120.0.6099.109",
+      "channel": "stable",
+      "platform": "windows",
+      "arch": "x64",
+      "size": 104857600,
+      "checksum": "xxh3:abcdef1234567890",
+      "url": "/api/v1/download/Chrome_120.0.6099.109_Windows_x64.exe"
+    },
+    {
+      "filename": "Firefox_121.0_Windows_x64.exe",
+      "browser": "firefox",
+      "version": "121.0",
+      "channel": "stable",
+      "platform": "windows",
+      "arch": "x64",
+      "size": 67108864,
+      "checksum": "xxh3:0987654321fedcba",
+      "url": "/api/v1/download/Firefox_121.0_Windows_x64.exe"
+    }
+  ],
+  "total": 2
+}
+```
+
+### 响应字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `ok` | boolean | 是否成功 |
+| `files` | array | 文件列表 |
+| `files[].filename` | string | 文件名 |
+| `files[].browser` | string | 浏览器名称 |
+| `files[].version` | string | 版本号 |
+| `files[].channel` | string | 发布渠道 |
+| `files[].platform` | string | 平台 |
+| `files[].arch` | string | 架构 |
+| `files[].size` | number | 文件大小（字节） |
+| `files[].checksum` | string | XXH3 校验和 |
+| `files[].url` | string | 下载路径 |
+| `total` | number | 文件总数 |
+
+### 使用示例
+
+```bash
+# 获取完整清单
+curl http://localhost:8080/api/v1/manifest
+
+# 只获取 Chrome 的清单
+curl "http://localhost:8080/api/v1/manifest?browser=chrome"
+
+# 获取 Windows x64 的所有浏览器
+curl "http://localhost:8080/api/v1/manifest?platform=windows&arch=x64"
+```
+
+---
+
+## GET /api/v1/download/{filename}
+
+下载指定文件，支持断点续传。
+
+### 请求
+
+```
+GET /api/v1/download/{filename}
+```
+
+### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| filename | string | 要下载的文件名 |
+
+### 响应头
+
+| 响应头 | 说明 |
+|--------|------|
+| Content-Type | application/octet-stream |
+| Content-Length | 文件大小（字节） |
+| Content-Disposition | 附件形式下载 |
+| Accept-Ranges | bytes（支持断点续传） |
+| ETag | 文件校验和 |
+
+### 断点续传
+
+支持 HTTP Range 请求，可从指定位置继续下载：
+
+```bash
+# 从第 1000000 字节开始下载
+curl -H "Range: bytes=1000000-" http://localhost:8080/api/v1/download/file.exe
+```
+
+### 错误响应
+
+| 状态码 | 说明 |
+|--------|------|
+| 404 | 文件不存在 |
+
+### 使用示例
+
+```bash
+# 下载文件
+curl -O http://localhost:8080/api/v1/download/Chrome_120.0.6099.109_Windows_x64.exe
+
+# 使用 wget 下载（支持断点续传）
+wget -c http://localhost:8080/api/v1/download/Chrome_120.0.6099.109_Windows_x64.exe
+```
+
+---
+
+## GET /api/v1/status
+
+获取服务状态信息。
+
+### 请求
+
+```
+GET /api/v1/status
+```
+
+### 响应示例
+
+```json
+{
+  "ok": true,
+  "version": "1.0.0",
+  "uptime": "24h30m15s",
+  "files": 15,
+  "browsers": ["chrome", "firefox"],
+  "syncEnabled": true,
+  "baseDir": "/data/bws-packages"
+}
+```
+
+### 响应字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `ok` | boolean | 是否成功 |
+| `version` | string | bws 版本号 |
+| `uptime` | string | 服务运行时长 |
+| `files` | number | 文件总数 |
+| `browsers` | array | 可用的浏览器列表 |
+| `syncEnabled` | boolean | 是否启用了自动同步 |
+| `baseDir` | string | 基础目录路径 |
+
+### 使用示例
+
+```bash
+curl http://localhost:8080/api/v1/status
+```
+
+---
+
+## GET /api/v1/sync/status
+
+获取同步状态（仅在启用同步时可用）。
+
+### 请求
+
+```
+GET /api/v1/sync/status
+```
+
+### 响应示例
+
+```json
+{
+  "ok": true,
+  "running": false,
+  "lastSync": "2024-01-15T10:30:00Z",
+  "nextSync": "2024-01-16T10:30:00Z",
+  "lastResult": {
+    "success": 5,
+    "failed": 0,
+    "skipped": 10,
+    "total": 15
+  },
+  "config": {
+    "interval": "24h",
+    "browsers": ["chrome", "firefox"],
+    "channels": ["stable"]
+  }
+}
+```
+
+### 响应字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `ok` | boolean | 是否成功 |
+| `running` | boolean | 当前是否正在同步 |
+| `lastSync` | string | 上次同步时间 |
+| `nextSync` | string | 下次计划同步时间 |
+| `lastResult.success` | number | 上次成功下载的文件数 |
+| `lastResult.failed` | number | 上次失败的文件数 |
+| `lastResult.skipped` | number | 上次跳过的文件数（已存在） |
+| `lastResult.total` | number | 上次处理的总文件数 |
+| `config.interval` | string | 同步间隔 |
+| `config.browsers` | array | 同步的浏览器列表 |
+| `config.channels` | array | 同步的渠道列表 |
+
+### 错误响应
+
+| 状态码 | 说明 |
+|--------|------|
+| 404 | 同步功能未启用 |
+
+---
+
+## POST /api/v1/sync/trigger
+
+手动触发同步（仅在启用同步时可用）。
+
+### 请求
+
+```
+POST /api/v1/sync/trigger
+```
+
+### 成功响应
+
+```json
+{
+  "ok": true,
+  "message": "同步已触发"
+}
+```
+
+### 错误响应
+
+同步正在进行时返回 409 状态码：
+
+```json
+{
+  "ok": false,
+  "error": "同步正在进行中，请稍候再试"
+}
+```
+
+同步功能未启用时返回 404 状态码：
+
+```json
+{
+  "ok": false,
+  "error": "同步功能未启用"
+}
+```
+
+### 使用示例
+
+```bash
+curl -X POST http://localhost:8080/api/v1/sync/trigger
+```
+
+---
+
+## GET /bin/{filename}
+
+下载客户端二进制文件（仅在 bin 目录存在时可用）。
+
+### 请求
+
+```
+GET /bin/{filename}
+```
+
+### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| filename | string | 二进制文件名 |
+
+### 响应
+
+返回文件内容，支持断点续传，与下载接口行为一致。
+
+### 使用示例
+
+```bash
+# 下载 Windows 版本的 bws
+curl -O http://localhost:8080/bin/bws-windows-amd64.exe
+```
+
+---
+
+## 错误处理示例
+
+### 文件不存在
+
+```json
+{
+  "ok": false,
+  "error": "文件不存在"
+}
+```
+
+HTTP 状态码：`404 Not Found`
+
+### 同步正在进行
+
+```json
+{
+  "ok": false,
+  "error": "同步正在进行中，请稍候再试"
+}
+```
+
+HTTP 状态码：`409 Conflict`
+
+### 方法不允许
+
+```json
+{
+  "ok": false,
+  "error": "方法不允许"
+}
+```
+
+HTTP 状态码：`405 Method Not Allowed`
