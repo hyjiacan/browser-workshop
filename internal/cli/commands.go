@@ -418,6 +418,7 @@ func runRemoteQuery(ctx *Context, args []string) error {
 func NewRunCommand() *Command {
 	return &Command{
 		Name:        "run",
+		Aliases:     []string{"r", "open"},
 		Description: "运行指定版本的浏览器",
 		Usage:       "bws run <浏览器@版本> [选项] [-- <浏览器参数>]",
 		Examples: []string{
@@ -871,6 +872,7 @@ func runUninstall(ctx *Context, args []string) error {
 func NewUseCommand() *Command {
 	return &Command{
 		Name:        "use",
+		Aliases:     []string{"u"},
 		Description: "设置默认浏览器版本",
 		Usage:       "bws use <浏览器@版本>",
 		Examples: []string{
@@ -1154,6 +1156,7 @@ func runRepoImport(ctx *Context, args []string) error {
 func NewInfoCommand() *Command {
 	return &Command{
 		Name:        "info",
+		Aliases:     []string{"show"},
 		Description: "显示浏览器版本的详细信息",
 		Usage:       "bws info <浏览器@版本>",
 		Examples: []string{
@@ -1335,6 +1338,7 @@ func min(a, b int) int {
 func NewDownloadCommand() *Command {
 	return &Command{
 		Name:        "download",
+		Aliases:     []string{"dl"},
 		Description: "下载浏览器版本但不安装",
 		Usage:       "bws download <浏览器@版本> [选项]",
 		Examples: []string{
@@ -1453,6 +1457,7 @@ func runDownload(ctx *Context, args []string) error {
 func NewConfigCommand() *Command {
 	return &Command{
 		Name:        "config",
+		Aliases:     []string{"cfg"},
 		Description: "管理 bws 配置",
 		Usage:       "bws config <命令> [选项]",
 		SubCommands: []*Command{
@@ -1705,6 +1710,7 @@ func NewConfigPathCommand() *Command {
 func NewDoctorCommand() *Command {
 	return &Command{
 		Name:        "doctor",
+		Aliases:     []string{"dt"},
 		Description: "检查系统健康状态并诊断问题",
 		Usage:       "bws doctor",
 		Run:         runDoctor,
@@ -1790,6 +1796,7 @@ func runDoctor(ctx *Context, args []string) error {
 func NewCacheCommand() *Command {
 	return &Command{
 		Name:        "cache",
+		Aliases:     []string{"cc"},
 		Description: "管理下载缓存",
 		Usage:       "bws cache <命令>",
 		SubCommands: []*Command{
@@ -1835,6 +1842,7 @@ func runCacheInfo(ctx *Context, args []string) error {
 func NewProfileCommand() *Command {
 	return &Command{
 		Name:        "profile",
+		Aliases:     []string{"pf"},
 		Description: "管理浏览器 profile（数据目录）",
 		Usage:       "bws profile <command> [options]",
 		SubCommands: []*Command{
@@ -2156,6 +2164,7 @@ func (b *bufioReader) ReadString(delim byte) (string, error) {
 func NewServeCommand() *Command {
 	return &Command{
 		Name:        "serve",
+		Aliases:     []string{"sv", "server"},
 		Description: "启动 HTTP 服务以提供浏览器版本下载",
 		Usage:       "bws serve [选项]",
 		Examples: []string{
