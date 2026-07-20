@@ -1,7 +1,7 @@
 # bws - Browser Workshop
 
 <p align="center">
-  <img src="logo.png" alt="bws logo" width="128" />
+  <img src="https://gitee.com/hyjiacan/browser-workshop/raw/master/logo.png" alt="bws logo" width="128" />
 </p>
 
 <p align="center">
