@@ -89,9 +89,9 @@ func (m *Manager) Launch(opts Options) (*Process, error) {
 
 	// Print matching versions to stdout (user-visible output)
 	if len(matches) == 1 {
-		fmt.Fprintf(os.Stdout, "Using %s@%s\n", opts.Browser, matches[0].Version)
+		fmt.Fprintf(os.Stdout, "使用 %s@%s\n", opts.Browser, matches[0].Version)
 	} else {
-		fmt.Fprintf(os.Stdout, "Matching versions for %s@%s:\n", opts.Browser, opts.Version)
+		fmt.Fprintf(os.Stdout, "%s@%s 的匹配版本:\n", opts.Browser, opts.Version)
 		for i, v := range matches {
 			prefix := "  "
 			if i == 0 {
@@ -104,13 +104,13 @@ func (m *Manager) Launch(opts Options) (*Process, error) {
 	// The first element is the selected (resolved) version
 	resolvedVersion := matches[0].Version
 	if resolvedVersion != opts.Version {
-		log.Debug("Resolved version %s@%s -> %s", opts.Browser, opts.Version, resolvedVersion)
+		log.Debug("解析版本 %s@%s -> %s", opts.Browser, opts.Version, resolvedVersion)
 	}
 
 	// Check if installed (locally or system)
 	isSystem := m.installer.IsSystemVersion(opts.Browser, resolvedVersion)
 	if !m.installer.IsInstalled(opts.Browser, resolvedVersion) && !isSystem {
-		return nil, fmt.Errorf("%s@%s is not installed. Install it first with 'bws install %s@%s'", opts.Browser, resolvedVersion, opts.Browser, opts.Version)
+		return nil, fmt.Errorf("%s@%s 未安装。请先执行 'bws install %s@%s'", opts.Browser, resolvedVersion, opts.Browser, opts.Version)
 	}
 
 	// Get browser descriptor

@@ -458,9 +458,9 @@ func (p *ProgressLogger) Update(current int64) {
 func (p *ProgressLogger) Done() {
 	p.current = p.total
 	if p.total > 0 {
-		p.logger.Info("%s: 100%% complete (%s)", p.prefix, formatSize(p.total))
+		p.logger.Info("%s: 100%% 完成 (%s)", p.prefix, formatSize(p.total))
 	} else {
-		p.logger.Info("%s: done", p.prefix)
+		p.logger.Info("%s: 完成", p.prefix)
 	}
 }
 

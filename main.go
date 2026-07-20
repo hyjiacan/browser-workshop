@@ -37,7 +37,7 @@ func main() {
 	// Load config
 	cfg, err := config.Load(configPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		fmt.Fprintf(os.Stderr, "加载配置失败: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -55,7 +55,7 @@ func main() {
 	// Initialize paths
 	p := paths.New(dataDir)
 	if err := p.EnsureAll(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error initializing directories: %v\n", err)
+		fmt.Fprintf(os.Stderr, "初始化目录失败: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -63,7 +63,7 @@ func main() {
 	consoleLevel := bmlog.ParseLevel(cfg.LogLevel)
 	logger, err := bmlog.NewDualLogger(p.LogFile, bmlog.LevelDebug, consoleLevel, true)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to initialize dual logger: %v\n", err)
+		fmt.Fprintf(os.Stderr, "警告: 初始化日志系统失败: %v\n", err)
 		logger = bmlog.Default()
 	}
 	defer logger.Close()
@@ -111,7 +111,7 @@ func main() {
 	if cfg.RepoPath != "" {
 		repoScanner, err = repo.NewScanner(cfg.RepoPath, browser.DefaultRegistry)
 		if err != nil {
-			logger.Warn("failed to create repository scanner: %v", err)
+			logger.Warn("创建仓库扫描器失败: %v", err)
 		} else {
 			repoImporter = repo.NewImporter(repoScanner, inst)
 		}
@@ -126,7 +126,7 @@ func main() {
 	// Create a shared scanner for import functionality (always available)
 	sharedScanner, err := repo.NewScanner("", browser.DefaultRegistry)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to create scanner: %v\n", err)
+		fmt.Fprintf(os.Stderr, "警告: 创建扫描器失败: %v\n", err)
 	}
 	ctx.Install = &installAdapter{mgr: inst, scanner: sharedScanner}
 	ctx.Profile = &profileAdapter{mgr: inst}
@@ -146,8 +146,8 @@ func main() {
 
 	// Execute
 	if err := app.Execute(os.Args[1:]); err != nil {
-		logger.Error("command failed: %v", err)
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		logger.Error("命令执行失败: %v", err)
+		fmt.Fprintf(os.Stderr, "错误: %v\n", err)
 		os.Exit(1)
 	}
 }
@@ -244,17 +244,17 @@ func firstTimeSetup(configPath string, cfg *config.Config) *config.Config {
 	// Create config directory
 	configDir := filepath.Dir(configPath)
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to create config directory: %v\n", err)
+		fmt.Fprintf(os.Stderr, "警告: 创建配置目录失败: %v\n", err)
 	}
 
 	// Save config
 	if err := config.Save(cfg, configPath); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to save config: %v\n", err)
+		fmt.Fprintf(os.Stderr, "警告: 保存配置失败: %v\n", err)
 	}
 
 	fmt.Println()
-	fmt.Printf("Configuration saved to: %s\n", configPath)
-	fmt.Println("Setup complete! Use 'bws --help' to see available commands.")
+	fmt.Printf("配置已保存: %s\n", configPath)
+	fmt.Println("初始化完成! 使用 'bws --help' 查看可用命令。")
 	fmt.Println()
 
 	return cfg
@@ -602,27 +602,27 @@ func (a *installAdapter) ImportFromDir(dir string, force bool, onProgress func(c
 		return nil, fmt.Errorf("scanner not available")
 	}
 
-	bmlog.Info("Starting import from directory: %s", dir)
-	bmlog.Debug("Force mode: %v", force)
+	bmlog.Info("开始从目录导入: %s", dir)
+	bmlog.Debug("强制模式: %v", force)
 
 	// Scan the directory
 	if onProgress != nil {
-		onProgress(0, 0, fmt.Sprintf("Scanning %s...", dir))
+		onProgress(0, 0, fmt.Sprintf("正在扫描 %s...", dir))
 	}
-	bmlog.Debug("Scanning directory for browser versions...")
+	bmlog.Debug("正在扫描目录中的浏览器版本...")
 	matches, err := a.scanner.ScanRepository(dir, "", "")
 	if err != nil {
-		bmlog.Error("Failed to scan directory: %v", err)
-		return nil, fmt.Errorf("scanning directory: %w", err)
+		bmlog.Error("扫描目录失败: %v", err)
+		return nil, fmt.Errorf("扫描目录: %w", err)
 	}
-	bmlog.Info("Found %d entries to process", len(matches))
+	bmlog.Info("发现 %d 个条目待处理", len(matches))
 
 	// Log match details at debug level
 	for _, m := range matches {
 		if m.Status == repo.MatchUnrecognized {
-			bmlog.Warn("Unrecognized: %s", filepath.Base(m.Path))
+			bmlog.Warn("无法识别: %s", filepath.Base(m.Path))
 		} else {
-			bmlog.Debug("Matched: %s -> %s@%s (arch=%s, platform=%s, status=%s, pattern=%s, detail=%s)",
+			bmlog.Debug("已匹配: %s -> %s@%s (arch=%s, platform=%s, status=%s, pattern=%s, detail=%s)",
 				filepath.Base(m.Path), m.Browser, m.Version, m.Arch, m.Platform, m.Status, m.Pattern, m.Detail)
 		}
 	}
@@ -638,18 +638,18 @@ func (a *installAdapter) ImportFromDir(dir string, force bool, onProgress func(c
 			summary.Failed++
 			summary.Errors = append(summary.Errors, cli.ImportError{
 				Path:  m.Path,
-				Error: "unrecognized",
+				Error: "无法识别",
 			})
-			bmlog.Warn("[%d/%d] Skipped (unrecognized): %s", idx, len(matches), filepath.Base(m.Path))
+			bmlog.Warn("[%d/%d] 跳过 (无法识别): %s", idx, len(matches), filepath.Base(m.Path))
 			if onProgress != nil {
-				onProgress(idx, len(matches), fmt.Sprintf("[%d/%d] Skipped (unrecognized): %s", idx, len(matches), filepath.Base(m.Path)))
+				onProgress(idx, len(matches), fmt.Sprintf("[%d/%d] 跳过 (无法识别): %s", idx, len(matches), filepath.Base(m.Path)))
 			}
 			continue
 		}
 
-		statusText := "Importing"
+		statusText := "导入中"
 		if m.IsFile {
-			statusText = "Extracting & importing"
+			statusText = "解压并导入中"
 		}
 		bmlog.Info("[%d/%d] %s %s@%s", idx, len(matches), statusText, m.Browser, m.Version)
 		if onProgress != nil {
@@ -660,27 +660,27 @@ func (a *installAdapter) ImportFromDir(dir string, force bool, onProgress func(c
 		if !force && a.mgr.IsInstalled(m.Browser, m.Version) {
 			summary.SkippedAlreadyInstalled++
 			summary.Skipped++
-			bmlog.Info("[%d/%d] Skipped (already installed): %s@%s", idx, len(matches), m.Browser, m.Version)
+			bmlog.Info("[%d/%d] 跳过 (已安装): %s@%s", idx, len(matches), m.Browser, m.Version)
 			if onProgress != nil {
-				onProgress(idx, len(matches), fmt.Sprintf("[%d/%d] Skipped (already installed): %s@%s", idx, len(matches), m.Browser, m.Version))
+				onProgress(idx, len(matches), fmt.Sprintf("[%d/%d] 跳过 (已安装): %s@%s", idx, len(matches), m.Browser, m.Version))
 			}
 			continue
 		}
 
 		// Force uninstall if needed
 		if force && a.mgr.IsInstalled(m.Browser, m.Version) {
-			bmlog.Debug("[%d/%d] Uninstalling existing version: %s@%s", idx, len(matches), m.Browser, m.Version)
+			bmlog.Debug("[%d/%d] 卸载现有版本: %s@%s", idx, len(matches), m.Browser, m.Version)
 			if err := a.mgr.Uninstall(m.Browser, m.Version); err != nil {
 				summary.Failed++
 				summary.Errors = append(summary.Errors, cli.ImportError{
 					Path:    m.Path,
 					Browser: m.Browser,
 					Version: m.Version,
-					Error:   fmt.Sprintf("uninstall failed: %v", err),
+					Error:   fmt.Sprintf("卸载失败: %v", err),
 				})
-				bmlog.Error("[%d/%d] Failed (uninstall): %s@%s - %v", idx, len(matches), m.Browser, m.Version, err)
+				bmlog.Error("[%d/%d] 失败 (卸载): %s@%s - %v", idx, len(matches), m.Browser, m.Version, err)
 				if onProgress != nil {
-					onProgress(idx, len(matches), fmt.Sprintf("[%d/%d] Failed (uninstall): %s@%s - %v", idx, len(matches), m.Browser, m.Version, err))
+					onProgress(idx, len(matches), fmt.Sprintf("[%d/%d] 失败 (卸载): %s@%s - %v", idx, len(matches), m.Browser, m.Version, err))
 				}
 				continue
 			}
@@ -689,10 +689,10 @@ func (a *installAdapter) ImportFromDir(dir string, force bool, onProgress func(c
 		// Install
 		var installErr error
 		if m.IsFile {
-			bmlog.Debug("Installing from file: %s", m.Path)
+			bmlog.Debug("从文件安装: %s", m.Path)
 			_, installErr = a.mgr.InstallFromFile(m.Browser, m.Version, m.Path)
 		} else {
-			bmlog.Debug("Installing from directory: %s", m.Path)
+			bmlog.Debug("从目录安装: %s", m.Path)
 			_, installErr = a.mgr.InstallFromDir(install.InstallOptions{
 				Browser:   m.Browser,
 				Version:   m.Version,
@@ -709,20 +709,20 @@ func (a *installAdapter) ImportFromDir(dir string, force bool, onProgress func(c
 				Version: m.Version,
 				Error:   installErr.Error(),
 			})
-			bmlog.Error("[%d/%d] Failed: %s@%s - %v", idx, len(matches), m.Browser, m.Version, installErr)
+			bmlog.Error("[%d/%d] 失败: %s@%s - %v", idx, len(matches), m.Browser, m.Version, installErr)
 			if onProgress != nil {
-				onProgress(idx, len(matches), fmt.Sprintf("[%d/%d] Failed: %s@%s - %v", idx, len(matches), m.Browser, m.Version, installErr))
+				onProgress(idx, len(matches), fmt.Sprintf("[%d/%d] 失败: %s@%s - %v", idx, len(matches), m.Browser, m.Version, installErr))
 			}
 		} else {
 			summary.Success++
-			bmlog.Info("[%d/%d] Imported: %s@%s", idx, len(matches), m.Browser, m.Version)
+			bmlog.Info("[%d/%d] 已导入: %s@%s", idx, len(matches), m.Browser, m.Version)
 			if onProgress != nil {
-				onProgress(idx, len(matches), fmt.Sprintf("[%d/%d] Imported: %s@%s", idx, len(matches), m.Browser, m.Version))
+				onProgress(idx, len(matches), fmt.Sprintf("[%d/%d] 已导入: %s@%s", idx, len(matches), m.Browser, m.Version))
 			}
 		}
 	}
 
-	bmlog.Info("Import complete: %d total, %d success, %d failed, %d skipped",
+	bmlog.Info("导入完成: 共 %d 个, 成功 %d, 失败 %d, 跳过 %d",
 		summary.Total, summary.Success, summary.Failed, summary.Skipped)
 
 	return summary, nil
@@ -790,7 +790,7 @@ func (a *launchAdapter) Run(opts cli.LaunchOptions) error {
 		return proc.Wait()
 	}
 
-	fmt.Printf("Launched %s@%s (PID: %d)\n", opts.Browser, opts.Version, proc.Pid)
+	fmt.Printf("已启动 %s@%s (PID: %d)\n", opts.Browser, opts.Version, proc.Pid)
 	return nil
 }
 

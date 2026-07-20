@@ -407,7 +407,7 @@ func (s *Server) Start() error {
 
 	// Save updated cache
 	if err := s.saveCache(cache); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to save cache: %v\n", err)
+		fmt.Fprintf(os.Stderr, "警告: 保存缓存失败: %v\n", err)
 	}
 
 	s.startTime = time.Now()
@@ -1029,7 +1029,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := tmpl.Execute(w, data); err != nil {
 		// Headers already written, just log the error
-		fmt.Fprintf(os.Stderr, "Warning: template execution error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "警告: 模板渲染错误: %v\n", err)
 	}
 }
 

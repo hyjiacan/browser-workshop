@@ -50,7 +50,7 @@ type ProgressCallback func(progress float64, message string)
 // InstallFromDir installs a browser version from a local directory (copy mode).
 // The source directory should contain the browser executable.
 func (m *Manager) InstallFromDir(opts InstallOptions, onProgress ProgressCallback) (*version.InstallRecord, error) {
-	log.Info("Installing %s@%s from directory: %s", opts.Browser, opts.Version, opts.SourceDir)
+	log.Info("正在安装 %s@%s，来源目录: %s", opts.Browser, opts.Version, opts.SourceDir)
 
 	if opts.Browser == "" || opts.Version == "" {
 		return nil, errors.New("browser and version are required")
@@ -61,60 +61,60 @@ func (m *Manager) InstallFromDir(opts InstallOptions, onProgress ProgressCallbac
 
 	// Check if already installed
 	if m.IsInstalled(opts.Browser, opts.Version) {
-		log.Warn("%s@%s is already installed", opts.Browser, opts.Version)
-		return nil, fmt.Errorf("%s@%s is already installed", opts.Browser, opts.Version)
+		log.Warn("%s@%s 已安装", opts.Browser, opts.Version)
+		return nil, fmt.Errorf("%s@%s 已安装", opts.Browser, opts.Version)
 	}
 
 	// Verify source directory exists
 	srcInfo, err := os.Stat(opts.SourceDir)
 	if err != nil {
-		log.Error("Source directory not found: %s", opts.SourceDir)
+		log.Error("源目录不存在: %s", opts.SourceDir)
 		return nil, fmt.Errorf("source directory not found: %w", err)
 	}
 	if !srcInfo.IsDir() {
-		log.Error("Source path is not a directory: %s", opts.SourceDir)
+		log.Error("源路径不是目录: %s", opts.SourceDir)
 		return nil, errors.New("source path is not a directory")
 	}
 
 	// Verify browser descriptor exists
 	desc := m.browsers.Get(opts.Browser)
 	if desc == nil {
-		log.Error("Unsupported browser: %s", opts.Browser)
+		log.Error("不支持的浏览器: %s", opts.Browser)
 		return nil, fmt.Errorf("unsupported browser: %s", opts.Browser)
 	}
 
 	// Verify source has the executable
 	execRelPath, err := m.browsers.FindExecutable(opts.Browser, opts.SourceDir, paths.Platform(), paths.Arch())
 	if err != nil {
-		log.Error("Validating source failed for %s@%s: %v", opts.Browser, opts.Version, err)
+		log.Error("验证源文件失败 %s@%s: %v", opts.Browser, opts.Version, err)
 		return nil, fmt.Errorf("validating source: %w", err)
 	}
 
-	log.Debug("Source validated, executable found at: %s", execRelPath)
+	log.Debug("源文件已验证，可执行文件位置: %s", execRelPath)
 
 	if onProgress != nil {
-		onProgress(0.1, "Preparing installation directory...")
+		onProgress(0.1, "正在准备安装目录...")
 	}
 
 	// Prepare destination directory
 	destDir := m.paths.VersionDir(opts.Browser, opts.Version)
 	if err := os.MkdirAll(filepath.Dir(destDir), 0o755); err != nil {
-		log.Error("Failed to create destination directory: %v", err)
+		log.Error("创建目标目录失败: %v", err)
 		return nil, err
 	}
 
 	// Use a temp dir first, then move (atomic-like)
 	tmpDir := destDir + ".tmp"
 	if err := os.RemoveAll(tmpDir); err != nil {
-		log.Error("Failed to clean temp directory: %v", err)
+		log.Error("清理临时目录失败: %v", err)
 		return nil, err
 	}
 
 	if onProgress != nil {
-		onProgress(0.2, "Copying files...")
+		onProgress(0.2, "正在复制文件...")
 	}
 
-	log.Debug("Copying files from %s to %s", opts.SourceDir, tmpDir)
+	log.Debug("正在复制文件 %s -> %s", opts.SourceDir, tmpDir)
 
 	// Copy entire directory (streaming progress by file count)
 	var copiedFiles int
@@ -122,52 +122,52 @@ func (m *Manager) InstallFromDir(opts InstallOptions, onProgress ProgressCallbac
 	err = copyDir(opts.SourceDir, tmpDir, func(fileName string, size int64) {
 		copiedFiles++
 		copiedBytes += size
-		log.Debug("Copied: %s (%d bytes)", fileName, size)
+		log.Debug("已复制: %s (%d 字节)", fileName, size)
 		if onProgress != nil {
 			// Estimate progress based on files copied + bytes
 			// We don't precompute total size (too slow for large dirs),
 			// so show incremental progress instead
-			onProgress(0.2+0.6*0.5, fmt.Sprintf("Copying... %d files, %s", copiedFiles, formatBytes(copiedBytes)))
+			onProgress(0.2+0.6*0.5, fmt.Sprintf("正在复制... %d 个文件, %s", copiedFiles, formatBytes(copiedBytes)))
 		}
 	})
 	if err != nil {
-		log.Error("Copying files failed: %v", err)
+		log.Error("复制文件失败: %v", err)
 		os.RemoveAll(tmpDir)
 		return nil, fmt.Errorf("copying files: %w", err)
 	}
 
-	log.Debug("Copy complete: %d files, %s", copiedFiles, formatBytes(copiedBytes))
+	log.Debug("复制完成: %d 个文件, %s", copiedFiles, formatBytes(copiedBytes))
 
 	if onProgress != nil {
-		onProgress(0.85, "Verifying installation...")
+		onProgress(0.85, "正在验证安装...")
 	}
 
 	// Verify the copy has the executable
 	_, err = m.browsers.FindExecutable(opts.Browser, tmpDir, paths.Platform(), paths.Arch())
 	if err != nil {
-		log.Error("Verifying installation failed: %v", err)
+		log.Error("验证安装失败: %v", err)
 		os.RemoveAll(tmpDir)
 		return nil, fmt.Errorf("verifying installation: %w", err)
 	}
 
 	// Move temp to final location
 	if err := os.Rename(tmpDir, destDir); err != nil {
-		log.Error("Finalizing installation failed: %v", err)
+		log.Error("完成安装失败: %v", err)
 		os.RemoveAll(tmpDir)
 		return nil, fmt.Errorf("finalizing installation: %w", err)
 	}
 
-	log.Debug("Installation moved to final location: %s", destDir)
+	log.Debug("安装已移动到最终位置: %s", destDir)
 
 	if onProgress != nil {
-		onProgress(0.95, "Writing metadata...")
+		onProgress(0.95, "正在写入元数据...")
 	}
 
 	// Calculate final size (best effort, non-fatal on error)
 	installSize, sizeErr := dirSize(destDir)
 	if sizeErr != nil {
 		installSize = 0
-		log.Warn("Failed to calculate install size: %v", sizeErr)
+		log.Warn("计算安装大小失败: %v", sizeErr)
 	}
 
 	// Create install record
@@ -186,26 +186,26 @@ func (m *Manager) InstallFromDir(opts InstallOptions, onProgress ProgressCallbac
 	// Write metadata file
 	metaPath := m.paths.VersionMetaFile(opts.Browser, opts.Version)
 	if err := writeMeta(metaPath, record); err != nil {
-		log.Error("Writing metadata failed: %v", err)
+		log.Error("写入元数据失败: %v", err)
 		return nil, fmt.Errorf("writing metadata: %w", err)
 	}
 
 	if onProgress != nil {
-		onProgress(1.0, "Installation complete")
+		onProgress(1.0, "安装完成")
 	}
 
-	log.Info("Successfully installed %s@%s (size: %s)", opts.Browser, opts.Version, formatBytes(installSize))
+	log.Info("成功安装 %s@%s (大小: %s)", opts.Browser, opts.Version, formatBytes(installSize))
 
 	return record, nil
 }
 
 // Uninstall removes an installed browser version.
 func (m *Manager) Uninstall(browserName string, version string) error {
-	log.Info("Uninstalling %s@%s", browserName, version)
+	log.Info("正在卸载 %s@%s", browserName, version)
 
 	if !m.IsInstalled(browserName, version) {
-		log.Warn("%s@%s is not installed", browserName, version)
-		return fmt.Errorf("%s@%s is not installed", browserName, version)
+		log.Warn("%s@%s 未安装", browserName, version)
+		return fmt.Errorf("%s@%s 未安装", browserName, version)
 	}
 
 	dir := m.paths.VersionDir(browserName, version)
@@ -213,19 +213,19 @@ func (m *Manager) Uninstall(browserName string, version string) error {
 	// Remove the metadata file first so IsInstalled immediately returns false
 	metaPath := m.paths.VersionMetaFile(browserName, version)
 	if err := os.Remove(metaPath); err != nil && !os.IsNotExist(err) {
-		log.Error("Failed to remove metadata for %s@%s: %v", browserName, version, err)
+		log.Error("删除元数据失败 %s@%s: %v", browserName, version, err)
 		return fmt.Errorf("removing metadata: %w", err)
 	}
 
-	log.Debug("Metadata removed for %s@%s", browserName, version)
+	log.Debug("已删除元数据 %s@%s", browserName, version)
 
 	// Remove the entire version directory
 	if err := removeAll(dir); err != nil {
-		log.Error("Failed to remove installation directory for %s@%s: %v", browserName, version, err)
+		log.Error("删除安装目录失败 %s@%s: %v", browserName, version, err)
 		return fmt.Errorf("removing installation: %w", err)
 	}
 
-	log.Info("Successfully uninstalled %s@%s", browserName, version)
+	log.Info("成功卸载 %s@%s", browserName, version)
 
 	return nil
 }
@@ -307,7 +307,7 @@ func (m *Manager) ResetProfile(browser string, version string, profileName strin
 
 	// If directory exists, remove it
 	if info, err := os.Stat(profileDir); err == nil && info.IsDir() {
-		log.Info("Resetting profile at: %s", profileDir)
+		log.Info("正在重置配置: %s", profileDir)
 		if err := removeAll(profileDir); err != nil {
 			return fmt.Errorf("failed to remove profile directory: %w", err)
 		}
@@ -318,7 +318,7 @@ func (m *Manager) ResetProfile(browser string, version string, profileName strin
 		return fmt.Errorf("failed to create profile directory: %w", err)
 	}
 
-	log.Info("Profile reset successfully: %s", profileDir)
+	log.Info("配置重置成功: %s", profileDir)
 	return nil
 }
 
@@ -421,13 +421,13 @@ func (m *Manager) IsInstalled(browserName string, version string) bool {
 	metaPath := m.paths.VersionMetaFile(browserName, version)
 	_, err := os.Stat(metaPath)
 	installed := err == nil
-	log.Debug("IsInstalled %s@%s: %v", browserName, version, installed)
+	log.Debug("已安装检查 %s@%s: %v", browserName, version, installed)
 	return installed
 }
 
 // ListInstalled returns all installed versions across all browsers.
 func (m *Manager) ListInstalled() (version.List, error) {
-	log.Debug("Listing all installed versions")
+	log.Debug("正在列出所有已安装版本")
 
 	var result version.List
 
@@ -435,10 +435,10 @@ func (m *Manager) ListInstalled() (version.List, error) {
 	entries, err := os.ReadDir(versionsDir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			log.Debug("No versions directory found at %s", versionsDir)
+			log.Debug("版本目录不存在: %s", versionsDir)
 			return result, nil
 		}
-		log.Error("Failed to read versions directory: %v", err)
+		log.Error("读取版本目录失败: %v", err)
 		return nil, err
 	}
 
@@ -451,7 +451,7 @@ func (m *Manager) ListInstalled() (version.List, error) {
 
 		versionDirs, err := os.ReadDir(browserDir)
 		if err != nil {
-			log.Debug("Failed to read browser directory %s: %v", browserDir, err)
+			log.Debug("读取浏览器目录失败 %s: %v", browserDir, err)
 			continue
 		}
 
@@ -461,42 +461,42 @@ func (m *Manager) ListInstalled() (version.List, error) {
 			}
 			record, err := m.readRecord(browserName, vEntry.Name())
 			if err != nil {
-				log.Debug("Failed to read record for %s@%s: %v", browserName, vEntry.Name(), err)
+				log.Debug("读取记录失败 %s@%s: %v", browserName, vEntry.Name(), err)
 				continue
 			}
 			result = append(result, record.ToVersion())
 		}
 	}
 
-	log.Debug("Found %d installed versions", len(result))
+	log.Debug("发现 %d 个已安装版本", len(result))
 
 	return result, nil
 }
 
 // ListInstalledByBrowser returns installed versions for a specific browser.
 func (m *Manager) ListInstalledByBrowser(browserName string) (version.List, error) {
-	log.Debug("Listing installed versions for browser: %s", browserName)
+	log.Debug("正在列出 %s 的已安装版本", browserName)
 	all, err := m.ListInstalled()
 	if err != nil {
 		return nil, err
 	}
 	result := all.Filter(version.Filter{Browser: browserName})
-	log.Debug("Found %d installed versions for %s", len(result), browserName)
+	log.Debug("发现 %d 个 %s 的已安装版本", len(result), browserName)
 	return result, nil
 }
 
 // GetRecord returns the install record for a specific version.
 func (m *Manager) GetRecord(browserName string, ver string) (*version.InstallRecord, error) {
-	log.Debug("Getting install record for %s@%s", browserName, ver)
+	log.Debug("正在获取安装记录 %s@%s", browserName, ver)
 	if !m.IsInstalled(browserName, ver) {
-		return nil, fmt.Errorf("%s@%s is not installed", browserName, ver)
+		return nil, fmt.Errorf("%s@%s 未安装", browserName, ver)
 	}
 	return m.readRecord(browserName, ver)
 }
 
 // GetExecutablePath returns the full path to the executable for an installed version.
 func (m *Manager) GetExecutablePath(browserName string, ver string) (string, error) {
-	log.Debug("Getting executable path for %s@%s", browserName, ver)
+	log.Debug("正在获取可执行文件路径 %s@%s", browserName, ver)
 	record, err := m.GetRecord(browserName, ver)
 	if err != nil {
 		return "", err
@@ -511,7 +511,7 @@ func (m *Manager) GetExecutablePath(browserName string, ver string) (string, err
 //   - "latest": returns the latest installed version
 //   - "system": returns the system browser version (if available)
 func (m *Manager) ResolveInstalledVersion(browserName string, ver string) (string, error) {
-	log.Debug("Resolving installed version for %s@%s", browserName, ver)
+	log.Debug("正在解析已安装版本 %s@%s", browserName, ver)
 
 	if browserName == "" || ver == "" {
 		return "", errors.New("browser and version are required")
@@ -522,11 +522,11 @@ func (m *Manager) ResolveInstalledVersion(browserName string, ver string) (strin
 		if m.systemDetector != nil {
 			sb, found := m.GetSystemDefault(browserName)
 			if found {
-				log.Debug("Resolved system version for %s: %s", browserName, sb.Version)
+				log.Debug("已解析系统版本 %s: %s", browserName, sb.Version)
 				return sb.Version, nil
 			}
 		}
-		return "", fmt.Errorf("no system browser found for %s", browserName)
+		return "", fmt.Errorf("未找到 %s 的系统浏览器", browserName)
 	}
 
 	// Get all installed versions (local + system) for this browser
@@ -536,23 +536,23 @@ func (m *Manager) ResolveInstalledVersion(browserName string, ver string) (strin
 	}
 
 	if len(allVersions) == 0 {
-		return "", fmt.Errorf("no installed versions found for %s", browserName)
+		return "", fmt.Errorf("%s 没有已安装的版本", browserName)
 	}
 
 	// Handle "latest" special version
 	if ver == "latest" {
 		latest, ok := allVersions.Latest()
 		if !ok {
-			return "", fmt.Errorf("no latest version found for %s", browserName)
+			return "", fmt.Errorf("%s 没有最新版本", browserName)
 		}
-		log.Debug("Resolved latest version for %s: %s", browserName, latest.Version)
+		log.Debug("已解析最新版本 %s: %s", browserName, latest.Version)
 		return latest.Version, nil
 	}
 
 	// Check for exact match first
 	for _, v := range allVersions {
 		if v.Version == ver {
-			log.Debug("Resolved exact version for %s: %s (system: %v)", browserName, ver, v.IsSystem)
+			log.Debug("已解析精确版本 %s: %s (系统: %v)", browserName, ver, v.IsSystem)
 			return ver, nil
 		}
 	}
@@ -568,17 +568,17 @@ func (m *Manager) ResolveInstalledVersion(browserName string, ver string) (strin
 
 	if len(matches) > 0 {
 		latest, _ := matches.Latest()
-		log.Debug("Resolved partial version %s for %s: %s", ver, browserName, latest.Version)
+		log.Debug("已解析前缀版本 %s@%s: %s", ver, browserName, latest.Version)
 		return latest.Version, nil
 	}
 
-	return "", fmt.Errorf("%s@%s is not installed", browserName, ver)
+	return "", fmt.Errorf("%s@%s 未安装", browserName, ver)
 }
 
 // FindMatchingVersions returns all installed versions matching the given version query,
 // sorted descending (newest first). The first element is the one that would be selected.
 func (m *Manager) FindMatchingVersions(browserName string, ver string) (version.List, error) {
-	log.Debug("Finding matching versions for %s@%s", browserName, ver)
+	log.Debug("正在查找匹配版本 %s@%s", browserName, ver)
 
 	if browserName == "" || ver == "" {
 		return nil, errors.New("browser and version are required")
@@ -589,11 +589,11 @@ func (m *Manager) FindMatchingVersions(browserName string, ver string) (version.
 		if m.systemDetector != nil {
 			sb, found := m.GetSystemDefault(browserName)
 			if found {
-				log.Debug("Found system version for %s: %s", browserName, sb.Version)
+				log.Debug("发现系统版本 %s: %s", browserName, sb.Version)
 				return version.List{systemBrowserToVersion(sb)}, nil
 			}
 		}
-		return nil, fmt.Errorf("no system browser found for %s", browserName)
+		return nil, fmt.Errorf("未找到 %s 的系统浏览器", browserName)
 	}
 
 	// Get all installed versions (local + system) for this browser
@@ -603,20 +603,20 @@ func (m *Manager) FindMatchingVersions(browserName string, ver string) (version.
 	}
 
 	if len(allVersions) == 0 {
-		return nil, fmt.Errorf("no installed versions found for %s", browserName)
+		return nil, fmt.Errorf("%s 没有已安装的版本", browserName)
 	}
 
 	// Handle "latest" special version: return all versions sorted descending
 	if ver == "latest" {
 		sorted := allVersions.Sort(true) // descending
-		log.Debug("Found %d versions for %s (latest)", len(sorted), browserName)
+		log.Debug("发现 %d 个 %s 的版本 (latest)", len(sorted), browserName)
 		return sorted, nil
 	}
 
 	// Check for exact match first
 	for _, v := range allVersions {
 		if v.Version == ver {
-			log.Debug("Found exact version match for %s: %s", browserName, ver)
+			log.Debug("发现精确版本匹配 %s: %s", browserName, ver)
 			return version.List{v}, nil
 		}
 	}
@@ -632,11 +632,11 @@ func (m *Manager) FindMatchingVersions(browserName string, ver string) (version.
 
 	if len(matches) > 0 {
 		sorted := matches.Sort(true) // descending
-		log.Debug("Found %d prefix matches for %s@%s", len(sorted), browserName, ver)
+		log.Debug("发现 %d 个前缀匹配 %s@%s", len(sorted), browserName, ver)
 		return sorted, nil
 	}
 
-	return nil, fmt.Errorf("%s@%s is not installed", browserName, ver)
+	return nil, fmt.Errorf("%s@%s 未安装", browserName, ver)
 }
 
 // readRecord reads the install record from .bws.json.
