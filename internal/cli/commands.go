@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -701,10 +702,9 @@ func runInstall(ctx *Context, args []string) error {
 
 	// Determine filename from URL
 	fileName := fmt.Sprintf("%s-%s-package", spec.Browser, versionInfo.Version)
-	if idx := strings.LastIndex(versionInfo.DownloadURL, "/"); idx >= 0 {
-		urlName := versionInfo.DownloadURL[idx+1:]
-		if urlName != "" {
-			fileName = urlName
+	if u, err := url.Parse(versionInfo.DownloadURL); err == nil {
+		if base := filepath.Base(u.Path); base != "" && base != "/" && base != "\\" && base != "." {
+			fileName = base
 		}
 	}
 	downloadDest := filepath.Join(tempDir, fileName)
@@ -1415,10 +1415,9 @@ func runDownload(ctx *Context, args []string) error {
 
 	// Determine filename from URL
 	fileName := fmt.Sprintf("%s-%s-package", spec.Browser, versionInfo.Version)
-	if idx := strings.LastIndex(versionInfo.DownloadURL, "/"); idx >= 0 {
-		urlName := versionInfo.DownloadURL[idx+1:]
-		if urlName != "" {
-			fileName = urlName
+	if u, err := url.Parse(versionInfo.DownloadURL); err == nil {
+		if base := filepath.Base(u.Path); base != "" && base != "/" && base != "\\" && base != "." {
+			fileName = base
 		}
 	}
 	destPath := filepath.Join(outputDir, fileName)
