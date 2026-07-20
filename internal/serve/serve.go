@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	serverName   = "bws-serve"
+	serverName   = "Browser Workshop"
 	cacheVersion = 1
 )
 
@@ -118,7 +118,7 @@ const pageTemplate = `<!DOCTYPE html>
     {{end}}
 
     <h2>配置</h2>
-    <p>将此服务器添加为 bws 的远程源：</p>
+    <p>将此服务器添加为 Browser Workshop 的远程源：</p>
     <pre><code>bws config set source {{.BaseURL}}</code></pre>
 
     <h2>开始使用</h2>
