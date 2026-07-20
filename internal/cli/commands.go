@@ -1057,6 +1057,7 @@ func runRepoScan(ctx *Context, args []string) error {
 		return fmt.Errorf("未配置仓库路径。请先使用 'bws repo set <路径>' 配置")
 	}
 
+	ctx.Printf("正在扫描仓库: %s ...\n", path)
 	results, err := ctx.Repo.Scan()
 	if err != nil {
 		return fmt.Errorf("扫描失败: %w", err)
@@ -1120,7 +1121,13 @@ func runRepoImport(ctx *Context, args []string) error {
 		ctx.Println("强制模式: 现有版本将被重新安装")
 	}
 
-	summary, err := ctx.Repo.Import(force)
+	lastMsg := ""
+	summary, err := ctx.Repo.Import(force, func(current int, total int, message string) {
+		if message != lastMsg {
+			ctx.Printf("  %s\n", message)
+			lastMsg = message
+		}
+	})
 	if err != nil {
 		return fmt.Errorf("导入失败: %w", err)
 	}

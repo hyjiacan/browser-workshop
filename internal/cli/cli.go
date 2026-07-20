@@ -81,7 +81,7 @@ type Logger interface {
 // RepoProvider provides repository scanning and importing.
 type RepoProvider interface {
 	Scan() ([]RepoScanResult, error)
-	Import(force bool) (*RepoImportSummary, error)
+	Import(force bool, onProgress func(int, int, string)) (*RepoImportSummary, error)
 }
 
 // RepoScanResult is a simplified view of a scanned repository entry.

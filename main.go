@@ -835,10 +835,16 @@ func (a *repoAdapter) Scan() ([]cli.RepoScanResult, error) {
 	return result, nil
 }
 
-func (a *repoAdapter) Import(force bool) (*cli.RepoImportSummary, error) {
+func (a *repoAdapter) Import(force bool, onProgress func(int, int, string)) (*cli.RepoImportSummary, error) {
+	var cb repo.ProgressCallback
+	if onProgress != nil {
+		cb = func(p repo.ImportProgress) {
+			onProgress(p.Current, p.Total, p.Message)
+		}
+	}
 	summary, err := a.importer.ImportAll(repo.ImportOptions{
 		Force: force,
-	}, nil)
+	}, cb)
 	if err != nil {
 		return nil, err
 	}

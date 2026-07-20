@@ -491,6 +491,8 @@ func (s *Server) printStartupInfo() {
 // scanPackages scans the packages directory and builds the file list.
 // It uses the cache to avoid recomputing checksums for unchanged files.
 func (s *Server) scanPackages(cache map[string]cacheEntry) error {
+	fmt.Printf("  正在扫描软件包目录: %s\n", s.packagesDir)
+
 	// Create a scanner for filename parsing
 	scanner, err := repo.NewScanner(s.packagesDir, browser.DefaultRegistry)
 	if err != nil {
@@ -501,6 +503,7 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 	entries, err := os.ReadDir(s.packagesDir)
 	if err != nil {
 		if os.IsNotExist(err) {
+			fmt.Println("  软件包目录不存在，跳过扫描")
 			return nil
 		}
 		return fmt.Errorf("reading packages directory: %w", err)
@@ -509,6 +512,8 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 	var files []PackageFile
 	var totalSize int64
 	seenFiles := make(map[string]bool)
+	cacheHits := 0
+	cacheMisses := 0
 
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -527,18 +532,20 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 		cached, ok := cache[filename]
 		if ok && cached.Mtime.Equal(info.ModTime()) && cached.Size == info.Size() {
 			// Cache hit - use cached checksum
-			// Parse metadata from filename
 			pkg := s.parsePackageFile(scanner, filename, info.Size(), cached.Checksum)
 			files = append(files, pkg)
 			totalSize += info.Size()
+			cacheHits++
 			continue
 		}
 
 		// Cache miss - compute checksum
+		cacheMisses++
+		fmt.Printf("  计算校验和: %s\n", filename)
 		fullPath := filepath.Join(s.packagesDir, filename)
 		checksum, err := computeXXH3(fullPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to compute checksum for %s: %v\n", filename, err)
+			fmt.Fprintf(os.Stderr, "  警告: 计算 %s 校验和失败: %v\n", filename, err)
 			continue
 		}
 
@@ -570,6 +577,8 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 	s.files = files
 	s.totalSize = totalSize
 	s.mu.Unlock()
+
+	fmt.Printf("  扫描完成: %d 个文件 (缓存命中 %d, 新计算 %d)\n", len(files), cacheHits, cacheMisses)
 
 	return nil
 }
