@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -488,8 +489,8 @@ func (s *Server) printStartupInfo() {
 	fmt.Println()
 }
 
-// scanPackages scans the packages directory and builds the file list.
-// It uses the cache to avoid recomputing checksums for unchanged files.
+// scanPackages scans the packages directory recursively and builds the file list.
+// Uses a worker pool for parallel checksum computation.
 func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 	fmt.Printf("  正在扫描软件包目录: %s\n", s.packagesDir)
 
@@ -499,67 +500,179 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 		return fmt.Errorf("creating scanner: %w", err)
 	}
 
-	// Read packages directory
-	entries, err := os.ReadDir(s.packagesDir)
+	// Phase 1: walk directory recursively to collect all files
+	type fileEntry struct {
+		relPath string
+		absPath string
+		info    os.FileInfo
+	}
+	var allFiles []fileEntry
+	seenFiles := make(map[string]bool)
+
+	err = filepath.WalkDir(s.packagesDir, func(absPath string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil // skip unreadable entries
+		}
+		if d.IsDir() {
+			return nil
+		}
+		relPath, err := filepath.Rel(s.packagesDir, absPath)
+		if err != nil {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return nil
+		}
+		seenFiles[relPath] = true
+		allFiles = append(allFiles, fileEntry{
+			relPath: relPath,
+			absPath: absPath,
+			info:    info,
+		})
+		return nil
+	})
 	if err != nil {
 		if os.IsNotExist(err) {
 			fmt.Println("  软件包目录不存在，跳过扫描")
 			return nil
 		}
-		return fmt.Errorf("reading packages directory: %w", err)
+		return fmt.Errorf("scanning packages directory: %w", err)
 	}
 
+	if len(allFiles) == 0 {
+		fmt.Println("  未找到任何文件")
+		s.mu.Lock()
+		s.files = nil
+		s.totalSize = 0
+		s.mu.Unlock()
+		return nil
+	}
+
+	// Phase 2: separate cache hits and misses
+	type missEntry struct {
+		idx     int
+		relPath string
+		absPath string
+		info    os.FileInfo
+	}
 	var files []PackageFile
 	var totalSize int64
-	seenFiles := make(map[string]bool)
 	cacheHits := 0
-	cacheMisses := 0
+	misses := make([]missEntry, 0)
+	files = make([]PackageFile, len(allFiles))
 
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		filename := entry.Name()
-		seenFiles[filename] = true
-
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-
-		// Check cache
-		cached, ok := cache[filename]
-		if ok && cached.Mtime.Equal(info.ModTime()) && cached.Size == info.Size() {
-			// Cache hit - use cached checksum
-			pkg := s.parsePackageFile(scanner, filename, info.Size(), cached.Checksum)
-			files = append(files, pkg)
-			totalSize += info.Size()
+	for i, fe := range allFiles {
+		cached, ok := cache[fe.relPath]
+		if ok && cached.Mtime.Equal(fe.info.ModTime()) && cached.Size == fe.info.Size() {
+			// Cache hit
+			pkg := s.parsePackageFile(scanner, fe.relPath, fe.info.Size(), cached.Checksum)
+			files[i] = pkg
+			totalSize += fe.info.Size()
 			cacheHits++
-			continue
+		} else {
+			// Cache miss - needs checksum computation
+			misses = append(misses, missEntry{
+				idx:     i,
+				relPath: fe.relPath,
+				absPath: fe.absPath,
+				info:    fe.info,
+			})
 		}
-
-		// Cache miss - compute checksum
-		cacheMisses++
-		fmt.Printf("  计算校验和: %s\n", filename)
-		fullPath := filepath.Join(s.packagesDir, filename)
-		checksum, err := computeXXH3(fullPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "  警告: 计算 %s 校验和失败: %v\n", filename, err)
-			continue
-		}
-
-		// Update cache
-		cache[filename] = cacheEntry{
-			Mtime:    info.ModTime(),
-			Checksum: checksum,
-			Size:     info.Size(),
-		}
-
-		pkg := s.parsePackageFile(scanner, filename, info.Size(), checksum)
-		files = append(files, pkg)
-		totalSize += info.Size()
 	}
+
+	// Phase 3: compute checksums in parallel using worker pool
+	if len(misses) > 0 {
+		numWorkers := runtime.NumCPU()
+		if numWorkers < 1 {
+			numWorkers = 1
+		}
+		if len(misses) < numWorkers {
+			numWorkers = len(misses)
+		}
+
+		type job struct {
+			idx     int
+			relPath string
+			absPath string
+		}
+		type result struct {
+			idx      int
+			relPath  string
+			checksum string
+			err      error
+		}
+
+		jobs := make(chan job, len(misses))
+		results := make(chan result, len(misses))
+
+		// Start workers
+		var wg sync.WaitGroup
+		for w := 0; w < numWorkers; w++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for j := range jobs {
+					fmt.Printf("  计算校验和: %s\n", j.relPath)
+					cs, err := computeXXH3(j.absPath)
+					results <- result{
+						idx:      j.idx,
+						relPath:  j.relPath,
+						checksum: cs,
+						err:      err,
+					}
+				}
+			}()
+		}
+
+		// Submit jobs
+		for _, m := range misses {
+			jobs <- job{
+				idx:     m.idx,
+				relPath: m.relPath,
+				absPath: m.absPath,
+			}
+		}
+		close(jobs)
+
+		// Wait for all workers to finish
+		go func() {
+			wg.Wait()
+			close(results)
+		}()
+
+		// Collect results
+		for r := range results {
+			if r.err != nil {
+				fmt.Fprintf(os.Stderr, "  警告: 计算 %s 校验和失败: %v\n", r.relPath, r.err)
+				continue
+			}
+			// Find the matching miss entry to get file info
+			for _, m := range misses {
+				if m.idx == r.idx {
+					pkg := s.parsePackageFile(scanner, r.relPath, m.info.Size(), r.checksum)
+					files[r.idx] = pkg
+					totalSize += m.info.Size()
+					// Update cache
+					cache[r.relPath] = cacheEntry{
+						Mtime:    m.info.ModTime(),
+						Checksum: r.checksum,
+						Size:     m.info.Size(),
+					}
+					break
+				}
+			}
+		}
+	}
+
+	// Phase 4: remove nil entries (failed checksums) and cleanup
+	validFiles := files[:0]
+	for _, f := range files {
+		if f.Filename != "" {
+			validFiles = append(validFiles, f)
+		}
+	}
+	files = validFiles
 
 	// Clean up cache entries for deleted files
 	for name := range cache {
@@ -578,7 +691,8 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 	s.totalSize = totalSize
 	s.mu.Unlock()
 
-	fmt.Printf("  扫描完成: %d 个文件 (缓存命中 %d, 新计算 %d)\n", len(files), cacheHits, cacheMisses)
+	computedSuccessfully := len(files) - cacheHits
+	fmt.Printf("  扫描完成: %d 个文件 (缓存命中 %d, 新计算 %d, 线程数 %d)\n", len(files), cacheHits, computedSuccessfully, runtime.NumCPU())
 
 	return nil
 }
