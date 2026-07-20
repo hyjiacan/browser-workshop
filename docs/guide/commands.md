@@ -506,8 +506,6 @@ bws serve <子命令> [选项]
 | `set <key> <value>` | 设置 serve 配置项（写入 bws-serve.ini） |
 | `get <key>` | 获取 serve 配置项的值 |
 | `show` | 显示所有 serve 配置 |
-| `install` | 安装为系统服务（从配置读取 host/port） |
-| `uninstall` | 卸载系统服务 |
 
 ### 配置项
 

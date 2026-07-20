@@ -2,6 +2,7 @@
   "name": "bws-docs",
   "version": "1.0.0",
   "description": "bws 文档站点",
+  "license": "MIT",
   "type": "module",
   "private": true,
   "scripts": {
