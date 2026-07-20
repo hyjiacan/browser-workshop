@@ -1,7 +1,7 @@
-# bws 命令测试计划
+# Browser Workshop 命令测试计划
 
 > 版本: 0.1.0 | 更新日期: 2026-07-14
-> 仓库: https://github.com/hyjiacan/bws | https://gitee.com/hyjiacan/bws
+> 仓库: https://github.com/hyjiacan/browser-workshop | https://gitee.com/hyjiacan/browser-workshop
 
 ## 1. 测试策略
 

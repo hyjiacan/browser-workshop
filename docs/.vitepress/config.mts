@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  title: 'browser-workshop',
+  title: 'Browser Workshop',
   description: '多版本浏览器管理工具，支持本地导入、远程下载、版本切换、隔离运行。',
   lang: 'zh-CN',
   lastUpdated: true,
@@ -14,14 +14,14 @@ export default defineConfig({
 
   themeConfig: {
     logo: '/logo.png',
-    siteTitle: 'bws',
+    siteTitle: 'Browser Workshop',
 
     nav: [
       { text: '指南', link: '/guide/getting-started' },
       { text: '命令参考', link: '/guide/commands' },
       { text: 'Serve 服务', link: '/guide/serve' },
-      { text: 'GitHub', link: 'https://github.com/hyjiacan/bws' },
-      { text: 'Gitee', link: 'https://gitee.com/hyjiacan/bws' },
+      { text: 'GitHub', link: 'https://github.com/hyjiacan/browser-workshop' },
+      { text: 'Gitee', link: 'https://gitee.com/hyjiacan/browser-workshop' },
     ],
 
     sidebar: {
@@ -66,13 +66,13 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/hyjiacan/bws' },
-      { icon: 'git', link: 'https://gitee.com/hyjiacan/bws' },
+      { icon: 'github', link: 'https://github.com/hyjiacan/browser-workshop' },
+      { icon: 'git', link: 'https://gitee.com/hyjiacan/browser-workshop' },
     ],
 
     footer: {
       message: 'MIT Licensed',
-      copyright: `Copyright © ${new Date().getFullYear()} bws contributors`,
+      copyright: `Copyright © ${new Date().getFullYear()} Browser Workshop contributors`,
     },
 
     search: {

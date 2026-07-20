@@ -1,7 +1,7 @@
-# bws - Browser Workshop
+# Browser Workshop
 
 <p align="center">
-  <img src="https://gitee.com/hyjiacan/browser-workshop/raw/master/logo.png" alt="bws logo" width="128" />
+  <img src="https://gitee.com/hyjiacan/browser-workshop/raw/master/logo.png" alt="Browser Workshop logo" width="128" />
 </p>
 
 <p align="center">
@@ -39,27 +39,25 @@ bws run gc@120 -i      # 隐身模式
 
 ## 文档
 
-完整文档请访问：**[bws 文档站](https://hyjiacan.github.io/bws)**
+完整文档请访问：**[Browser Workshop 文档站](https://hyjiacan.github.io/browser-workshop)**
 
-- [快速上手](https://hyjiacan.github.io/bws/guide/getting-started)
-- [命令参考](https://hyjiacan.github.io/bws/guide/commands)
-- [Serve 服务](https://hyjiacan.github.io/bws/guide/serve)
-- [浏览器短别名](https://hyjiacan.github.io/bws/guide/short-aliases)
-
-国内用户也可访问 Gitee 文档镜像：[https://hyjiacan.gitee.io/bws](https://hyjiacan.gitee.io/bws)
+- [快速上手](https://hyjiacan.github.io/browser-workshop/guide/getting-started)
+- [命令参考](https://hyjiacan.github.io/browser-workshop/guide/commands)
+- [Serve 服务](https://hyjiacan.github.io/browser-workshop/guide/serve)
+- [浏览器短别名](https://hyjiacan.github.io/browser-workshop/guide/short-aliases)
 
 ## 安装
 
 ```bash
-go install github.com/hyjiacan/bws@latest
+go install github.com/hyjiacan/browser-workshop/cmd/bws@latest
 ```
 
-或从 [Releases](https://github.com/hyjiacan/bws/releases) 下载预编译二进制。
+或从 [Releases](https://github.com/hyjiacan/browser-workshop/releases) 下载预编译二进制。
 
 国内用户也可以通过 Gitee 安装：
 
 ```bash
-go install gitee.com/hyjiacan/bws@latest
+go install gitee.com/hyjiacan/browser-workshop/cmd/bws@latest
 ```
 
 ## 命令一览
@@ -75,7 +73,7 @@ go install gitee.com/hyjiacan/bws@latest
 | `bws config` | 管理配置 |
 | `bws profile` | 管理 Profile |
 
-完整命令说明请查看 [命令参考](https://hyjiacan.github.io/bws/guide/commands)。
+完整命令说明请查看 [命令参考](https://hyjiacan.github.io/browser-workshop/guide/commands)。
 
 ## 浏览器短别名
 
@@ -85,7 +83,7 @@ go install gitee.com/hyjiacan/bws@latest
 | `ff` | firefox |
 | `cm` | chromium |
 
-所有命令都支持短别名。详见 [浏览器短别名](https://hyjiacan.github.io/bws/guide/short-aliases)。
+所有命令都支持短别名。详见 [浏览器短别名](https://hyjiacan.github.io/browser-workshop/guide/short-aliases)。
 
 ## Serve 服务
 
@@ -98,7 +96,7 @@ bws serve
 bws serve
 ```
 
-详见 [Serve 服务文档](https://hyjiacan.github.io/bws/guide/serve)。
+详见 [Serve 服务文档](https://hyjiacan.github.io/browser-workshop/guide/serve)。
 
 ## 许可证
 

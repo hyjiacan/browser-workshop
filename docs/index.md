@@ -2,19 +2,19 @@
 layout: home
 
 hero:
-  name: bws
-  text: Browser Workshop
+  name: Browser Workshop
+  text: ''
   tagline: 多版本浏览器管理工具，支持本地导入、远程下载、版本切换、隔离运行。
   image:
     src: /logo.png
-    alt: bws logo
+    alt: Browser Workshop logo
   actions:
     - theme: brand
       text: 快速开始
       link: /guide/getting-started
     - theme: alt
       text: 在 GitHub 上查看
-      link: https://github.com/hyjiacan/bws
+      link: https://github.com/hyjiacan/browser-workshop
 
 features:
   - icon: 📦
