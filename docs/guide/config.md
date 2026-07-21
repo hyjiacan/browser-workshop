@@ -12,15 +12,26 @@ bws cfg show
 
 输出示例：
 
-```json
-{
-  "default-browser": "chrome",
-  "default-channel": "stable",
-  "log-level": "info",
-  "data-dir": "bws-data",
-  "repo-path": "",
-  "source": ""
-}
+```
+配置信息：
+
+  配置文件:       D:\bws-data\config.json
+  数据目录:       D:\bws-data
+  默认浏览器:     chrome
+  默认渠道:       stable
+  日志级别:       info
+  仓库路径:       （空）
+
+  数据源开关:
+    Serve 源:     true
+    Omaha 源:     true
+    Firefox FTP:  true
+
+  磁盘空间阈值:   5 GB (低于此值会提示)
+
+  别名:
+    stable -> chrome@latest
+    beta -> chrome@beta
 ```
 
 ## 获取配置项
@@ -177,6 +188,179 @@ bws cfg set source ""
 ```
 
 `source` 和 `remote-source` 是等效的，设置任意一个都可以。
+
+### source-omaha
+
+Chrome Omaha 数据源开关。
+
+| 属性 | 值 |
+|------|-----|
+| 默认值 | `true` |
+| 可选值 | `true`, `false` |
+| 说明 | 是否启用 Chrome Omaha 协议数据源 |
+
+示例：
+
+```bash
+# 禁用 Omaha 源
+bws cfg set source-omaha false
+
+# 重新启用
+bws cfg set source-omaha true
+```
+
+### source-firefox-ftp
+
+Firefox FTP 数据源开关。
+
+| 属性 | 值 |
+|------|-----|
+| 默认值 | `true` |
+| 可选值 | `true`, `false` |
+| 说明 | 是否启用 Firefox FTP 发布数据源 |
+
+示例：
+
+```bash
+# 禁用 Firefox FTP 源
+bws cfg set source-firefox-ftp false
+```
+
+### source-serve
+
+Serve HTTP 数据源开关。
+
+| 属性 | 值 |
+|------|-----|
+| 默认值 | `true` |
+| 可选值 | `true`, `false` |
+| 说明 | 是否启用 `bws sv` 搭建的 HTTP 分发数据源 |
+
+示例：
+
+```bash
+# 禁用 Serve 源
+bws cfg set source-serve false
+```
+
+### download.max-concurrency
+
+下载最大并发数。
+
+| 属性 | 值 |
+|------|-----|
+| 默认值 | `3` |
+| 可选值 | 正整数 |
+| 说明 | 同时下载文件的最大数量，值越大下载越快，但占用带宽和系统资源越多 |
+
+示例：
+
+```bash
+# 设置为 5 个并发
+bws cfg set download.max-concurrency 5
+```
+
+### download.retry-count
+
+下载重试次数。
+
+| 属性 | 值 |
+|------|-----|
+| 默认值 | `3` |
+| 可选值 | 非负整数 |
+| 说明 | 下载失败后的最大重试次数 |
+
+示例：
+
+```bash
+# 设置为 5 次重试
+bws cfg set download.retry-count 5
+```
+
+### download.retry-delay
+
+下载重试间隔。
+
+| 属性 | 值 |
+|------|-----|
+| 默认值 | `2s` |
+| 可选值 | Go duration 格式字符串（如 `1s`、`500ms`、`1m`） |
+| 说明 | 每次下载重试之间的等待时间 |
+
+示例：
+
+```bash
+# 设置为 5 秒间隔
+bws cfg set download.retry-delay 5s
+```
+
+### download.timeout
+
+下载超时时间。
+
+| 属性 | 值 |
+|------|-----|
+| 默认值 | `30m` |
+| 可选值 | Go duration 格式字符串（如 `10m`、`1h`） |
+| 说明 | 单个下载任务的最大超时时间，超时后将取消下载并重试或报错 |
+
+示例：
+
+```bash
+# 设置为 1 小时超时
+bws cfg set download.timeout 1h
+```
+
+### cache.manifest-ttl
+
+版本清单缓存有效期。
+
+| 属性 | 值 |
+|------|-----|
+| 默认值 | `24h` |
+| 可选值 | Go duration 格式字符串（如 `12h`、`48h`） |
+| 说明 | 从远程获取的版本清单（版本列表）在本地的缓存有效时长，过期后会重新拉取 |
+
+示例：
+
+```bash
+# 设置为 12 小时
+bws cfg set cache.manifest-ttl 12h
+```
+
+### cache.download-ttl
+
+已下载文件缓存有效期。
+
+| 属性 | 值 |
+|------|-----|
+| 默认值 | `168h`（7 天） |
+| 可选值 | Go duration 格式字符串（如 `72h`、`336h`） |
+| 说明 | 已下载的安装包在本地缓存中的保留时长，过期后会被自动清理 |
+
+示例：
+
+```bash
+# 设置为 3 天（72 小时）
+bws cfg set cache.download-ttl 72h
+```
+
+### disk-threshold
+
+磁盘空间告警阈值。
+
+| 属性 | 值 |
+|------|-----|
+| 默认值 | `5`（GB） |
+| 可选值 | 正整数（单位 GB） |
+| 说明 | 下载前检查磁盘剩余空间，低于此值时会提示用户 |
+
+示例：
+
+```bash
+# 设置为 10 GB
+bws cfg set disk-threshold 10
+```
 
 ## 数据源与优先级
 
