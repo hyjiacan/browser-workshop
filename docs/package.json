@@ -11,8 +11,7 @@
     "preview": "vitepress preview ."
   },
   "devDependencies": {
-    "vitepress": "^1.6.4",
-    "vitepress-plugin-mermaid": "^2.0.17"
+    "vitepress": "^1.6.4"
   },
   "allowScripts": {
     "esbuild@0.21.5": true

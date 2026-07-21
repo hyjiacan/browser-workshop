@@ -8,26 +8,26 @@
 
 | 命令 | 说明 |
 |------|------|
-| `bws ls` | 列出已安装的浏览器版本 |
-| `bws show` | 显示版本详细信息 |
-| `bws r` / `bws open` | 运行指定版本的浏览器 |
-| `bws i` | 安装浏览器版本 |
-| `bws imp` | 从目录批量导入（自动识别） |
-| `bws rm` | 卸载浏览器版本 |
-| `bws u` | 设置默认浏览器版本 |
-| `bws dl` | 仅下载不安装 |
-| `bws pf` | 管理浏览器 Profile |
+| `bws list` / `bws ls` | 列出已安装的浏览器版本 |
+| `bws info` / `bws show` | 显示版本详细信息 |
+| `bws run` / `bws r` / `bws open` | 运行指定版本的浏览器 |
+| `bws install` / `bws i` | 安装浏览器版本 |
+| `bws import` / `bws imp` | 从目录批量导入（自动识别） |
+| `bws uninstall` / `bws rm` / `bws remove` | 卸载浏览器版本 |
+| `bws use` / `bws u` | 设置默认浏览器版本 |
+| `bws download` / `bws dl` | 仅下载不安装 |
+| `bws profile` / `bws pf` | 管理浏览器 Profile |
 | `bws alias` | 管理版本别名 |
-| `bws sv` / `bws server` | 启动 HTTP 分发服务 |
-| `bws cfg` | 管理配置 |
+| `bws serve` / `bws sv` / `bws server` | 启动 HTTP 分发服务 |
+| `bws config` / `bws cfg` | 管理配置 |
 | `bws repo` | 管理本地二进制仓库 |
-| `bws cc` | 管理下载缓存 |
-| `bws dt` | 系统健康检查 |
+| `bws cache` / `bws cc` | 管理下载缓存 |
+| `bws doctor` / `bws dt` | 系统健康检查 |
 | `bws help` / `bws h` | 显示帮助信息 |
 
 ---
 
-## bws ls
+## bws list (别名: ls)
 
 列出已安装的浏览器版本。
 
@@ -90,7 +90,7 @@ bws ls --json
 
 ---
 
-## bws show
+## bws info (别名: show)
 
 显示指定版本的详细信息。
 
@@ -134,7 +134,7 @@ bws show ff@121
 
 ---
 
-## bws r / bws open
+## bws run (别名: r, open)
 
 运行指定版本的浏览器。
 
@@ -203,7 +203,7 @@ bws open chrome@120
 
 ---
 
-## bws i
+## bws install (别名: i)
 
 安装浏览器版本。
 
@@ -260,7 +260,7 @@ bws i chrome@120 --force
 
 ---
 
-## bws imp
+## bws import (别名: imp)
 
 从目录批量导入浏览器版本（自动识别）。
 
@@ -294,7 +294,7 @@ bws imp /path/to/browsers -f
 
 ---
 
-## bws rm
+## bws uninstall (别名: rm, remove)
 
 卸载指定的浏览器版本。
 
@@ -327,7 +327,7 @@ bws rm chrome@85
 
 ---
 
-## bws u
+## bws use (别名: u)
 
 设置默认浏览器版本。
 
@@ -358,7 +358,7 @@ bws r chrome
 
 ---
 
-## bws dl
+## bws download (别名: dl)
 
 仅下载安装包，不安装。
 
@@ -402,7 +402,7 @@ bws dl chrome@beta -c beta
 
 ---
 
-## bws pf
+## bws profile (别名: pf)
 
 管理浏览器 Profile。
 
@@ -502,7 +502,7 @@ bws alias remove mychrome
 
 ---
 
-## bws sv / bws server
+## bws serve (别名: sv, server)
 
 启动 HTTP 分发服务。配置通过 `bws-serve.ini` 文件管理，首次运行时会自动创建默认配置文件。
 
@@ -557,7 +557,7 @@ bws server
 
 ---
 
-## bws cfg
+## bws config (别名: cfg)
 
 管理配置。
 
@@ -647,7 +647,7 @@ bws repo import -f
 
 ---
 
-## bws cc
+## bws cache (别名: cc)
 
 管理下载缓存。下载文件存储在临时目录中，安装后会自动清理。
 
@@ -676,7 +676,7 @@ bws cc clear
 
 ---
 
-## bws dt
+## bws doctor (别名: dt)
 
 系统健康检查。
 
@@ -702,7 +702,7 @@ bws dt
 
 ---
 
-## bws help / bws h
+## bws help (别名: h)
 
 显示帮助信息。
 

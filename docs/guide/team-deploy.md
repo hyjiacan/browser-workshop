@@ -5,35 +5,18 @@
 ## 架构概览
 
 ```mermaid
-flowchart TB
-    subgraph Public["公网下载源"]
-        direction LR
-        GH["GitHub Release"]
-        FTP["Firefox FTP"]
-        GCS["Chromium GCS"]
-        CDN["chromedownloads.net"]
-    end
+graph TD
+    A["🌐 公网下载源"] -->|"自动同步 / 手动导入"| B["🖥️ 中央分发服务器<br/>bws sv HTTP :8080"]
+    B <-->|"存储 / 读取"| C["📦 packages/<br/>浏览器安装包"]
+    B -->|"HTTP 分发"| D["👥 团队成员客户端<br/>bws r / bws i"]
+    D -.->|"bws cfg set source<br/>指向服务器"| B
 
-    subgraph Server["中央分发服务器"]
-        direction TB
-        BSV["bws sv<br/>HTTP 服务 :8080"]
-        PKG["packages/<br/>浏览器安装包"]
-    end
-
-    subgraph Clients["团队成员客户端"]
-        direction LR
-        C1["成员 A<br/>bws r / bws i"]
-        C2["成员 B<br/>bws r / bws i"]
-        C3["成员 C<br/>bws r / bws i"]
-    end
-
-    Public -->|"自动同步 / 手动导入"| BSV
-    BSV <-->|"存储 / 读取"| PKG
-    BSV -->|"HTTP 分发<br/>局域网高速下载"| C1
-    BSV -->|"HTTP 分发<br/>局域网高速下载"| C2
-    BSV -->|"HTTP 分发<br/>局域网高速下载"| C3
-
-    C1 -.->|"bws cfg set source<br/>指向服务器"| BSV
+    classDef source fill:#e1f5fe,stroke:#0288d1,stroke-width:2px
+    classDef server fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef client fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    class A source
+    class B,C server
+    class D client
 ```
 
 上图展示了完整的团队离线部署架构：

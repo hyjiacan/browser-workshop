@@ -1,5 +1,4 @@
 import { defineConfig } from 'vitepress'
-import { MermaidMarkdown, MermaidPlugin } from 'vitepress-plugin-mermaid'
 
 export default defineConfig({
   title: 'Browser Workshop',
@@ -11,16 +10,28 @@ export default defineConfig({
 
   head: [
     ['link', { rel: 'icon', type: 'image/png', href: '/logo.png' }],
+    // CDN 加载 mermaid
+    ['script', { src: 'https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js' }],
   ],
 
   markdown: {
     config: (md) => {
-      md.use(MermaidMarkdown)
+      // 将 mermaid 代码块渲染为带特殊类的 div，客户端再处理
+      const originalFence = md.renderer.rules.fence!
+      md.renderer.rules.fence = (tokens, idx, options, env, self) => {
+        const token = tokens[idx]
+        if (token.info.trim() === 'mermaid') {
+          // 使用 data 属性存储原始内容，避免 pre 标签转义 HTML
+          const escapedContent = token.content
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+          return `<div class="mermaid-diagram" data-mermaid="${escapedContent}"></div>`
+        }
+        return originalFence(tokens, idx, options, env, self)
+      }
     },
-  },
-
-  vite: {
-    plugins: [MermaidPlugin()],
   },
 
   themeConfig: {
