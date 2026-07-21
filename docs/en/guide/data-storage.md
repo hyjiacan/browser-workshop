@@ -44,58 +44,6 @@ bws/
 - **No system pollution**: Does not write any data to system directories
 - **USB drive friendly**: Can be placed on a USB drive and carried around
 
-## Traditional Mode
-
-If portable mode is not used, bws determines the data directory based on the following priority:
-
-### Priority Order
-
-1. **BWS_HOME environment variable**: If the `BWS_HOME` environment variable is set, use the directory specified by it
-2. **data-dir configuration**: If `data-dir` is set in the configuration, use that configuration
-3. **Portable mode**: By default, use the `bws-data/` directory at the same level as the program
-4. **User home directory**: If all of the above are unavailable, fall back to `.bws/` under the user home directory
-
-### Setting BWS_HOME
-
-**Windows:**
-
-```cmd
-set BWS_HOME=D:\browser-data
-```
-
-**PowerShell:**
-
-```powershell
-$env:BWS_HOME = "D:\browser-data"
-```
-
-**Linux / macOS:**
-
-```bash
-export BWS_HOME=~/browser-data
-```
-
-### Setting via Configuration
-
-```bash
-bws cfg set data-dir D:\browser-data
-```
-
-> **Note**: After changing the data directory, data in the original directory is not automatically migrated; manual moving is required.
-
-### Traditional Mode Directory Structure
-
-The structure is the same as portable mode, only the root directory location differs:
-
-```
-~/.bws/                       # Under user home directory
-├── config.json
-├── logs/
-├── cache/
-├── versions/
-└── runtime/
-```
-
 ## Directory Descriptions
 
 ### config.json
@@ -107,13 +55,19 @@ Configuration file, storing all user configuration items. JSON format.
   "default-browser": "chrome",
   "default-channel": "stable",
   "log-level": "info",
-  "data-dir": "bws-data",
+  "dataDir": "",
   "repo-path": "",
   "source": ""
 }
 ```
 
 Usually no manual editing is needed; use the `bws cfg` command to manage.
+
+If you need to store data in another location, you can set a custom data directory via the configuration command:
+
+```bash
+bws cfg set data-dir D:\browser-data
+```
 
 ### logs/
 
@@ -135,7 +89,7 @@ Version manifest cache, storing version lists fetched from remote sources to avo
 
 - Speeds up response for commands like `ls --remote`
 - Has an expiration time; automatically re-fetches after expiry
-- Can be cleaned via `bws cc clean`
+- Can be cleaned via `bws cc clear`
 
 #### cache/downloads/
 
@@ -143,7 +97,7 @@ Downloaded file cache, storing installer packages downloaded via the `download` 
 
 - Downloaded files are retained here for easy subsequent reuse
 - May occupy a large amount of space; can be cleaned periodically
-- Can be cleaned via `bws cc clean`
+- Can be cleaned via `bws cc clear`
 - Can check occupied space via `bws cc size`
 
 ### versions/
@@ -203,30 +157,7 @@ If you need to move data to another location:
 
 1. Stop all running browser instances
 2. Copy or move the entire `bws-data/` directory to the new location
-3. Update the `data-dir` configuration or `BWS_HOME` environment variable
-4. Verify data integrity (`bws ls` to check if versions are normal)
-
-### Switching Between Portable and Traditional Mode
-
-**Portable mode -> Traditional mode:**
-
-```bash
-# Move data to user home directory
-mv bws-data ~/.bws
-
-# Or set data-dir configuration
-bws cfg set data-dir /path/to/new/location
-```
-
-**Traditional mode -> Portable mode:**
-
-```bash
-# Move the data directory to the same level as the program, named bws-data
-mv ~/.bws ./bws-data
-
-# Clear data-dir configuration (if set)
-bws cfg set data-dir ""
-```
+3. Verify data integrity (`bws ls` to check if versions are normal)
 
 ## Disk Space Management
 
@@ -244,7 +175,7 @@ du -sh bws-data/
 
 ```bash
 # Clean download cache
-bws cc clean
+bws cc clear
 
 # Uninstall unneeded versions
 bws rm chrome@79

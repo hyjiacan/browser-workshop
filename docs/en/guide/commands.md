@@ -379,7 +379,7 @@ bws dl <browser@version> [options]
 | Option | Short | Description |
 |--------|-------|-------------|
 | `--output <directory>` | `-o` | Specify the output directory |
-| `--channel <channel>` | - | Specify the release channel |
+| `--channel <channel>` | `-c` | Specify the release channel |
 
 ### Examples
 
@@ -580,12 +580,16 @@ bws cfg <subcommand> [arguments]
 
 | Configuration Item | Description | Default Value |
 |--------------------|-------------|---------------|
+| `data-dir` | Data storage directory | Empty (portable mode) |
 | `default-browser` | Default browser | `chrome` |
 | `default-channel` | Default channel | `stable` |
 | `log-level` | Console log level | `info` |
-| `data-dir` | Data storage directory | `bws-data/` |
 | `repo-path` | Local repository path | Empty |
 | `source` | Offline source address | Empty |
+| `source-serve` | Serve source switch | `true` |
+| `source-omaha` | Omaha source switch | `true` |
+| `source-firefox-ftp` | Firefox FTP source switch | `true` |
+| `disk-threshold` | Disk space alert threshold (GB) | `5` |
 
 ### Examples
 

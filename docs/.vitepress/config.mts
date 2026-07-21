@@ -95,10 +95,6 @@ const zhThemeConfig = {
     copyright: `Copyright © ${new Date().getFullYear()} Browser Workshop contributors`,
   },
 
-  search: {
-    provider: 'local',
-  },
-
   outline: {
     level: [2, 3],
     label: '目录',
@@ -190,10 +186,6 @@ const enThemeConfig = {
     copyright: `Copyright © ${new Date().getFullYear()} Browser Workshop contributors`,
   },
 
-  search: {
-    provider: 'local',
-  },
-
   outline: {
     level: [2, 3],
     label: 'On this page',
@@ -222,6 +214,41 @@ const enThemeConfig = {
 
 export default defineConfig({
   ...sharedConfig,
+
+  themeConfig: {
+    search: {
+      provider: 'local',
+      options: {
+        locales: {
+          root: {
+            translations: {
+              button: {
+                buttonText: '搜索文档',
+                buttonAriaLabel: '搜索文档',
+              },
+              modal: {
+                noResultsText: '无法找到相关结果',
+                resetButtonTitle: '清除查询条件',
+                footer: {
+                  selectText: '选择',
+                  navigateText: '切换',
+                  closeText: '关闭',
+                },
+              },
+            },
+          },
+          en: {
+            translations: {
+              button: {
+                buttonText: 'Search',
+                buttonAriaLabel: 'Search',
+              },
+            },
+          },
+        },
+      },
+    },
+  },
 
   locales: {
     root: {

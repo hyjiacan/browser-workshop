@@ -93,7 +93,7 @@ bws i -f /path/to/file.exe chrome@120
 
 ## Supported File Formats
 
-bws supports zip, 7z, tar.gz, tar.bz2, tar.xz, .exe, and more file formats, mainly including the following categories:
+bws supports zip, 7z, tar.gz, tar.bz2, tar.xz, tar.zst, gz, bz2, xz, zst, exe, dmg, cab, apk, jar, war, and more file formats, mainly including the following categories:
 
 ### Archive Formats
 
@@ -106,12 +106,26 @@ bws supports zip, 7z, tar.gz, tar.bz2, tar.xz, .exe, and more file formats, main
 | Tar+Bzip2 | `.tar.bz2`, `.tbz2` | High compression ratio format |
 | Tar+XZ | `.tar.xz`, `.txz` | High compression ratio format |
 | Tar+Zstd | `.tar.zst` | zstd compression format |
+| Gzip | `.gz` | Gzip single-file compression |
+| Bzip2 | `.bz2` | Bzip2 single-file compression |
+| XZ | `.xz` | XZ single-file compression |
+| Zstd | `.zst` | Zstd single-file compression |
 
-### Executable File Formats
+### Executable and Special Formats
 
 | Format | Extension | Description |
 |--------|-----------|-------------|
 | Windows Executable | `.exe` | Self-extracting installer (extracted as zip), does not execute installation |
+| macOS Disk Image | `.dmg` | macOS disk image (zip-based) |
+| Windows Cabinet | `.cab` | Windows Cabinet compressed file |
+
+### Other Archive Formats
+
+| Format | Extension | Description |
+|--------|-----------|-------------|
+| Android APK | `.apk` | Android application package (zip-based) |
+| Java JAR | `.jar` | Java archive file (zip-based) |
+| Web WAR | `.war` | Web application archive (zip-based) |
 
 ### Directory Format
 

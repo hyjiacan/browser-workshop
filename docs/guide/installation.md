@@ -74,23 +74,18 @@ bws/
 - **易于备份**：只需备份 `bws-data/` 目录即可完整备份所有配置和数据
 - **适合 U 盘**：可以放在 U 盘随身携带，在不同电脑上使用
 
-### 传统模式
+### 自定义数据目录
 
-如果不希望使用便携模式，可以通过以下方式切换到传统模式：
-
-- 设置 `BWS_HOME` 环境变量，指定数据存储目录
-- 如果 exe 路径无法获取，会自动回退到用户主目录 `~/.bws/`
-
-```bash
-# Windows
-set BWS_HOME=D:\browser-data
-
-# Linux / macOS
-export BWS_HOME=~/browser-data
-```
-
-也可以通过配置命令设置数据目录：
+如果不想使用程序同级的 `bws-data/` 目录，可以通过配置命令设置自定义数据目录：
 
 ```bash
 bws cfg set data-dir D:\browser-data
 ```
+
+设置后，所有数据（配置、版本、缓存、日志）将存储到指定目录中。清空该配置可恢复默认的便携模式：
+
+```bash
+bws cfg set data-dir ""
+```
+
+

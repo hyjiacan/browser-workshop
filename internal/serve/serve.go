@@ -12,6 +12,7 @@ package serve
 
 import (
 	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -33,214 +34,24 @@ import (
 	"github.com/zeebo/xxh3"
 )
 
+//go:embed page.html
+var pageHTML embed.FS
+
 const (
 	serverName   = "Browser Workshop"
 	cacheVersion = 1
 )
 
-// pageTemplate is the HTML template for the root help page.
-const pageTemplate = `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.ServerName}} v{{.Version}}</title>
-    <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #333; line-height: 1.6; }
-        h1 { font-size: 28px; margin-bottom: 8px; color: #1a1a1a; }
-        h2 { font-size: 20px; margin-top: 32px; margin-bottom: 12px; color: #2c2c2c; border-bottom: 1px solid #e5e5e5; padding-bottom: 6px; }
-        .subtitle { color: #666; margin-bottom: 24px; font-size: 14px; }
-        ul { list-style: none; padding: 0; }
-        li { padding: 8px 0; border-bottom: 1px solid #f0f0f0; }
-        li:last-child { border-bottom: none; }
-        a { color: #0066cc; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; font-size: 13px; line-height: 1.5; }
-        code { background: #f6f8fa; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
-        pre code { background: none; padding: 0; }
-        .stats { display: flex; gap: 24px; margin-bottom: 16px; flex-wrap: wrap; }
-        .stat-item { background: #f6f8fa; padding: 12px 20px; border-radius: 8px; }
-        .stat-label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
-        .stat-value { font-size: 20px; font-weight: 600; color: #1a1a1a; }
-        .api-list li { font-family: "SF Mono", Monaco, Consolas, monospace; font-size: 13px; }
-        .api-method { display: inline-block; width: 50px; font-weight: 600; color: #0550ae; }
-        .empty { color: #999; font-style: italic; }
-        .platform-tag { display: inline-block; padding: 2px 8px; background: #e8f0fe; color: #1967d2; border-radius: 12px; font-size: 12px; margin-left: 8px; }
-        .sync-section { background: #f6f8fa; padding: 16px; border-radius: 8px; margin-bottom: 16px; }
-        .sync-status { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
-        .sync-indicator { width: 10px; height: 10px; border-radius: 50%; background: #ccc; display: inline-block; }
-        .sync-indicator.running { background: #f59e0b; animation: pulse 1.5s infinite; }
-        .sync-indicator.idle { background: #10b981; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
-        .sync-info { font-size: 13px; color: #666; }
-        .sync-btn { background: #0066cc; color: white; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; }
-        .sync-btn:hover { background: #0052a3; }
-        .sync-btn:disabled { background: #999; cursor: not-allowed; }
-        .sync-progress { font-size: 13px; color: #555; margin-top: 8px; }
-        .sync-time { font-size: 12px; color: #888; }
-    </style>
-</head>
-<body>
-    <h1>{{.ServerName}}</h1>
-    <p class="subtitle">服务端 v{{.Version}} &middot; API v1</p>
-
-    <div class="intro" style="background:#f0f7ff; border-left:4px solid #0066cc; padding:12px 16px; margin:16px 0; border-radius:4px;">
-        <p style="margin:0 0 8px 0; color:#333;"><strong>Browser Workshop</strong> — 多版本浏览器管理工具</p>
-        <ul style="margin:0; padding-left:18px; color:#555; font-size:13px; line-height:1.8;">
-            <li>同时安装和管理多个浏览器版本，支持版本前缀快速筛选</li>
-            <li>从目录或压缩包自动识别并导入，支持 zip、7z、tar.gz 等多种格式</li>
-            <li>从官方源下载指定版本（Chrome Omaha、Firefox FTP）</li>
-            <li>内置 serve 命令，支持自动同步，搭建局域网分发服务</li>
-            <li>每个版本独立 Profile，支持命名 Profile</li>
-            <li>便携模式：数据存储在 bws-data/ 子目录，U 盘随身携带</li>
-        </ul>
-    </div>
-
-    <div class="stats">
-        <div class="stat-item">
-            <div class="stat-label">软件包</div>
-            <div class="stat-value">{{.FileCount}}</div>
-        </div>
-        <div class="stat-item">
-            <div class="stat-label">总大小</div>
-            <div class="stat-value">{{.TotalSize}}</div>
-        </div>
-    </div>
-
-    <div class="sync-section" id="syncSection" style="display:none;">
-        <div class="sync-status">
-            <span class="sync-indicator" id="syncIndicator"></span>
-            <span id="syncStatusText">正在加载...</span>
-            <button class="sync-btn" id="syncBtn" onclick="triggerSync()">立即同步</button>
-        </div>
-        <div class="sync-progress" id="syncProgress"></div>
-        <div class="sync-time" id="syncTime"></div>
-    </div>
-
-    <h2>下载客户端</h2>
-    {{if .BinFiles}}
-    <ul>
-        {{range .BinFiles}}
-        <li><a href="/bin/{{.File}}">{{.Name}}</a><span class="platform-tag">{{.PlatformLabel}}</span> <span style="color:#999;font-size:12px;">({{.Size}})</span></li>
-        {{end}}
-    </ul>
-    {{else}}
-    <p class="empty">暂无可用的客户端二进制文件。</p>
-    {{end}}
-
-    <h2>配置</h2>
-    <p>将此服务器添加为 Browser Workshop 的远程源：</p>
-    <pre><code>bws config set source {{.BaseURL}}</code></pre>
-
-    <h2>开始使用</h2>
-    <p>查看可用的浏览器版本：</p>
-    <pre><code>bws ls --remote chrome
-
-# 安装指定版本
-bws install chrome@120.0.6099.109
-
-# 运行浏览器
-bws run chrome@120</code></pre>
-
-    <h2>API 参考</h2>
-    <ul class="api-list">
-        <li><span class="api-method">GET</span><a href="/api/v1/manifest">/api/v1/manifest</a> &mdash; 文件清单（含校验和）</li>
-        <li><span class="api-method">GET</span>/api/v1/download/{filename} &mdash; 文件下载（支持断点续传）</li>
-        <li><span class="api-method">GET</span><a href="/api/v1/status">/api/v1/status</a> &mdash; 服务状态</li>
-        <li><span class="api-method">GET</span><a href="/api/v1/sync/status">/api/v1/sync/status</a> &mdash; 同步状态</li>
-        <li><span class="api-method">POST</span>/api/v1/sync/trigger &mdash; 触发同步</li>
-        <li><span class="api-method">GET</span><a href="/">/</a> &mdash; 本页面</li>
-    </ul>
-</body>
-<script>
-(function() {
-    var syncSection = document.getElementById('syncSection');
-    var syncIndicator = document.getElementById('syncIndicator');
-    var syncStatusText = document.getElementById('syncStatusText');
-    var syncProgress = document.getElementById('syncProgress');
-    var syncTime = document.getElementById('syncTime');
-    var syncBtn = document.getElementById('syncBtn');
-
-    function formatTime(iso) {
-        if (!iso) return '-';
-        try {
-            var d = new Date(iso);
-            return d.toLocaleString('zh-CN');
-        } catch(e) { return iso; }
-    }
-
-    function updateSyncStatus() {
-        fetch('/api/v1/sync/status')
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                var s = data.data;
-                if (!s || (!s.running && !s.last_sync && !s.progress)) {
-                    // Sync not enabled
-                    syncSection.style.display = 'none';
-                    return;
-                }
-                syncSection.style.display = 'block';
-
-                if (s.running) {
-                    syncIndicator.className = 'sync-indicator running';
-                    syncStatusText.textContent = '同步中...';
-                    syncBtn.disabled = true;
-                } else {
-                    syncIndicator.className = 'sync-indicator idle';
-                    syncStatusText.textContent = '同步空闲';
-                    syncBtn.disabled = false;
-                }
-
-                if (s.progress) {
-                    if (s.synced_files > 0 || s.total_files > 0) {
-                        syncProgress.textContent = s.progress + ' (' + s.synced_files + '/' + s.total_files + ')';
-                    } else {
-                        syncProgress.textContent = s.progress;
-                    }
-                } else {
-                    syncProgress.textContent = '';
-                }
-
-                var timeInfo = [];
-                if (s.last_sync) {
-                    timeInfo.push('上次同步: ' + formatTime(s.last_sync));
-                }
-                if (s.next_sync && !s.running) {
-                    timeInfo.push('下次: ' + formatTime(s.next_sync));
-                }
-                if (s.last_error) {
-                    timeInfo.push('错误: ' + s.last_error);
-                }
-                syncTime.textContent = timeInfo.join('  |  ');
-            })
-            .catch(function() {
-                syncSection.style.display = 'none';
-            });
-    }
-
-    window.triggerSync = function() {
-        syncBtn.disabled = true;
-        fetch('/api/v1/sync/trigger', { method: 'POST' })
-            .then(function() {
-                setTimeout(updateSyncStatus, 500);
-            });
-    };
-
-    updateSyncStatus();
-    setInterval(updateSyncStatus, 3000);
-})();
-</script>
-</html>`
-
 // pageData holds the data for rendering the HTML page template.
 type pageData struct {
-	Version    string
-	ServerName string
-	FileCount  int
-	TotalSize  string
-	BinFiles   []binFileView
-	BaseURL    string
+	Version     string
+	ServerName  string
+	Description string
+	Features    []string
+	FileCount   int
+	TotalSize   string
+	BinFiles    []binFileView
+	BaseURL     string
 }
 
 // binFileView represents a bin file for template rendering.
@@ -1023,16 +834,25 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := pageData{
-		Version:    s.version,
-		ServerName: serverName,
-		FileCount:  fileCount,
-		TotalSize:  formatSize(totalSize),
-		BinFiles:   binFileViews,
-		BaseURL:    baseURL,
+		Version:     s.version,
+		ServerName:  serverName,
+		Description: "多版本浏览器管理工具，支持本地导入、远程下载、版本切换、隔离运行。",
+		Features: []string{
+			"多版本管理：同时安装和管理多个浏览器版本，支持版本前缀快速筛选",
+			"本地导入：支持 zip、7z、tar.gz 等多种格式自动识别导入",
+			"远程下载：从官方源下载指定版本（Chrome Omaha、Firefox FTP）",
+			"离线分发：局域网浏览器版本分发服务，支持自动同步",
+			"隔离运行：每个版本独立 Profile，互不干扰",
+			"便携模式：数据存储在 bws-data/ 子目录，U 盘随身携带",
+		},
+		FileCount: fileCount,
+		TotalSize: formatSize(totalSize),
+		BinFiles:  binFileViews,
+		BaseURL:   baseURL,
 	}
 
 	// Parse and execute template
-	tmpl, err := template.New("page").Parse(pageTemplate)
+	tmpl, err := template.ParseFS(pageHTML, "page.html")
 	if err != nil {
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return

@@ -379,7 +379,7 @@ bws dl <浏览器@版本> [选项]
 | 选项 | 简写 | 说明 |
 |------|------|------|
 | `--output <目录>` | `-o` | 指定输出目录 |
-| `--channel <渠道>` | - | 指定发布渠道 |
+| `--channel <渠道>` | `-c` | 指定发布渠道 |
 
 ### 示例
 
@@ -580,12 +580,16 @@ bws cfg <子命令> [参数]
 
 | 配置项 | 说明 | 默认值 |
 |--------|------|--------|
+| `data-dir` | 数据存储目录 | 空（便携模式） |
 | `default-browser` | 默认浏览器 | `chrome` |
 | `default-channel` | 默认渠道 | `stable` |
 | `log-level` | 控制台日志级别 | `info` |
-| `data-dir` | 数据存储目录 | `bws-data/` |
 | `repo-path` | 本地仓库路径 | 空 |
 | `source` | 离线源地址 | 空 |
+| `source-serve` | Serve 源开关 | `true` |
+| `source-omaha` | Omaha 源开关 | `true` |
+| `source-firefox-ftp` | Firefox FTP 源开关 | `true` |
+| `disk-threshold` | 磁盘空间告警阈值（GB） | `5` |
 
 ### 示例
 

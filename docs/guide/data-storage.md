@@ -44,58 +44,6 @@ bws/
 - **不污染系统**：不向系统目录写入任何数据
 - **适合 U 盘**：可以放在 U 盘随身携带
 
-## 传统模式
-
-如果不使用便携模式，bws 会根据以下优先级确定数据目录：
-
-### 优先级顺序
-
-1. **BWS_HOME 环境变量**：如果设置了 `BWS_HOME` 环境变量，使用该变量指定的目录
-2. **data-dir 配置**：如果在配置中设置了 `data-dir`，使用该配置
-3. **便携模式**：默认使用程序同级的 `bws-data/` 目录
-4. **用户主目录**：如果以上都不可用，回退到用户主目录下的 `.bws/`
-
-### 设置 BWS_HOME
-
-**Windows：**
-
-```cmd
-set BWS_HOME=D:\browser-data
-```
-
-**PowerShell：**
-
-```powershell
-$env:BWS_HOME = "D:\browser-data"
-```
-
-**Linux / macOS：**
-
-```bash
-export BWS_HOME=~/browser-data
-```
-
-### 通过配置设置
-
-```bash
-bws cfg set data-dir D:\browser-data
-```
-
-> **注意**：修改数据目录后，原目录中的数据不会自动迁移，需要手动移动。
-
-### 传统模式目录结构
-
-结构与便携模式相同，只是根目录位置不同：
-
-```
-~/.bws/                       # 用户主目录下
-├── config.json
-├── logs/
-├── cache/
-├── versions/
-└── runtime/
-```
-
 ## 各目录说明
 
 ### config.json
@@ -107,13 +55,19 @@ bws cfg set data-dir D:\browser-data
   "default-browser": "chrome",
   "default-channel": "stable",
   "log-level": "info",
-  "data-dir": "bws-data",
+  "dataDir": "",
   "repo-path": "",
   "source": ""
 }
 ```
 
 通常不需要手动编辑，使用 `bws cfg` 命令管理。
+
+如果需要将数据存储到其他位置，可以通过配置命令设置自定义数据目录：
+
+```bash
+bws cfg set data-dir D:\browser-data
+```
 
 ### logs/
 
@@ -135,7 +89,7 @@ bws cfg set data-dir D:\browser-data
 
 - 加速 `ls --remote` 等命令的响应
 - 有过期时间，过期后自动重新获取
-- 可以通过 `bws cc clean` 清理
+- 可以通过 `bws cc clear` 清理
 
 #### cache/downloads/
 
@@ -143,7 +97,7 @@ bws cfg set data-dir D:\browser-data
 
 - 下载的文件会保留在这里，便于后续重复使用
 - 占用空间可能较大，可定期清理
-- 可以通过 `bws cc clean` 清理
+- 可以通过 `bws cc clear` 清理
 - 可以通过 `bws cc size` 查看占用空间
 
 ### versions/
@@ -203,30 +157,7 @@ runtime/chrome/profiles/personal/
 
 1. 停止所有正在运行的浏览器实例
 2. 复制或移动整个 `bws-data/` 目录到新位置
-3. 更新 `data-dir` 配置或 `BWS_HOME` 环境变量
-4. 验证数据完整性（`bws ls` 检查版本是否正常）
-
-### 便携模式和传统模式切换
-
-**便携模式 → 传统模式：**
-
-```bash
-# 移动数据到用户主目录
-mv bws-data ~/.bws
-
-# 或者设置 data-dir 配置
-bws cfg set data-dir /path/to/new/location
-```
-
-**传统模式 → 便携模式：**
-
-```bash
-# 将数据目录移动到程序同级目录，命名为 bws-data
-mv ~/.bws ./bws-data
-
-# 清除 data-dir 配置（如果设置了）
-bws cfg set data-dir ""
-```
+3. 验证数据完整性（`bws ls` 检查版本是否正常）
 
 ## 磁盘空间管理
 
@@ -244,7 +175,7 @@ du -sh bws-data/
 
 ```bash
 # 清理下载缓存
-bws cc clean
+bws cc clear
 
 # 卸载不需要的版本
 bws rm chrome@79

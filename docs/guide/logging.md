@@ -100,19 +100,15 @@ bws-data/
     └── bws.log
 ```
 
-### 传统模式
+### 默认位置
 
-如果设置了 `BWS_HOME` 或 `data-dir`：
-
-```
-$data-dir/logs/bws.log
-```
-
-如果使用用户主目录：
+日志文件位于数据目录下的 `logs/` 子目录中：
 
 ```
-~/.bws/logs/bws.log
+bws-data/logs/bws.log
 ```
+
+如果通过 `bws cfg set data-dir` 设置了自定义数据目录，日志将位于 `$data-dir/logs/bws.log`。
 
 ### 日志文件格式
 

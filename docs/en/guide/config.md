@@ -133,20 +133,24 @@ Data storage directory.
 
 | Attribute | Value |
 |------|-----|
-| Default value | `bws-data` (portable mode, same level as the program) |
-| Optional values | Any valid directory path |
-| Description | Specifies the storage location for all bws data |
+| Default value | Empty (in portable mode, uses the `bws-data/` directory at the same level as the program) |
+| Optional values | Any directory path |
+| Description | Sets the data storage directory for bws (configuration, versions, cache, logs, etc.); after setting, all data will be stored in the specified directory |
 
 Example:
 
 ```bash
-# Set the data directory to an absolute path
+# Set a custom data directory
 bws cfg set data-dir D:\browser-data
 
-# After setting, all configurations, versions, and logs are stored under this directory
+# View the current data directory
+bws cfg get data-dir
+
+# Restore defaults (clear to return to portable mode)
+bws cfg set data-dir ""
 ```
 
-After changing the data directory, data in the original directory will not be automatically migrated and needs to be moved manually.
+> **Note**: If this configuration item is set, all data (including configuration, installed versions, cache, and logs) will be stored in the specified directory. When not set, the `bws-data/` directory at the same level as the program is used by default.
 
 ### repo-path
 

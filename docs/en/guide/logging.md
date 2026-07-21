@@ -100,19 +100,15 @@ bws-data/
     └── bws.log
 ```
 
-### Traditional Mode
+### Default Location
 
-If `BWS_HOME` or `data-dir` is set:
-
-```
-$data-dir/logs/bws.log
-```
-
-If using the user home directory:
+Log files are located in the `logs/` subdirectory of the data directory:
 
 ```
-~/.bws/logs/bws.log
+bws-data/logs/bws.log
 ```
+
+If a custom data directory is set via `bws cfg set data-dir`, logs will be located at `$data-dir/logs/bws.log`.
 
 ### Log File Format
 

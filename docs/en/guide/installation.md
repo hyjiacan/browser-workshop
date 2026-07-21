@@ -74,23 +74,18 @@ bws/
 - **Easy backup**: Simply back up the `bws-data/` directory to completely back up all configuration and data
 - **USB-friendly**: Can be placed on a USB drive and carried around for use on different computers
 
-### Traditional Mode
+### Custom Data Directory
 
-If you do not wish to use portable mode, you can switch to traditional mode in the following ways:
-
-- Set the `BWS_HOME` environment variable to specify the data storage directory
-- If the exe path cannot be obtained, it will automatically fall back to the user home directory `~/.bws/`
-
-```bash
-# Windows
-set BWS_HOME=D:\browser-data
-
-# Linux / macOS
-export BWS_HOME=~/browser-data
-```
-
-You can also set the data directory via the configuration command:
+If you do not want to use the `bws-data/` directory at the same level as the program, you can set a custom data directory via the configuration command:
 
 ```bash
 bws cfg set data-dir D:\browser-data
 ```
+
+After setting, all data (configuration, versions, cache, logs) will be stored in the specified directory. Clear this configuration to restore the default portable mode:
+
+```bash
+bws cfg set data-dir ""
+```
+
+
