@@ -42,7 +42,7 @@ bws imp /path/to/browsers -f
 ✓ firefox-121.0-win64.zip → firefox 121.0
 ✗ unknown_setup.exe → 无法识别
 ✓ chrome-79.0.3945.79.zip → chrome 79.0.3945.79
-✓ Edge_120.0.2210.91_x64.msi → edge 120.0.2210.91
+✓ chrome-79.0.3945.79.tar.gz → chrome 79.0.3945.79
 
 导入完成：成功 4 个，失败 1 个
 ```
@@ -101,18 +101,17 @@ bws 支持 25+ 种文件格式，主要包括以下类别：
 |------|--------|------|
 | ZIP | `.zip` | 最常见的压缩格式 |
 | 7-Zip | `.7z` | 高压缩比格式 |
-| RAR | `.rar` | 常见压缩格式 |
 | Tar | `.tar` | Unix 归档格式 |
 | Tar+Gzip | `.tar.gz`, `.tgz` | 常见 Unix 压缩格式 |
 | Tar+Bzip2 | `.tar.bz2`, `.tbz2` | 高压缩比格式 |
 | Tar+XZ | `.tar.xz`, `.txz` | 高压缩比格式 |
+| Tar+Zstd | `.tar.zst` | zstd 压缩格式 |
 
-### 安装包格式
+### 可执行文件格式
 
 | 格式 | 扩展名 | 说明 |
 |------|--------|------|
-| Windows 可执行 | `.exe` | 自解压安装包，直接解压不执行安装 |
-| Windows Installer | `.msi` | Microsoft Installer 安装包 |
+| Windows 可执行 | `.exe` | 自解压安装包（作为 zip 解压），不执行安装 |
 
 ### 目录格式
 
@@ -142,7 +141,7 @@ GoogleChrome_148.0.7778.167_Windows_x64_Offline.exe
 firefox-115.0esr-win64.zip
 Chrome_120.0.6099.109_Windows_x64.zip
 chromium-85.0.4183.121-linux-x64.tar.gz
-MicrosoftEdge_120.0.2210.91_x64.msi
+firefox-121.0-x64.tar.bz2
 ```
 
 ### 识别优先级

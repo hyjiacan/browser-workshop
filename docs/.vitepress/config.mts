@@ -52,6 +52,7 @@ export default defineConfig({
             { text: '概述', link: '/guide/serve' },
             { text: '自动同步', link: '/guide/serve-sync' },
             { text: 'API 参考', link: '/guide/serve-api' },
+            { text: '团队部署', link: '/guide/team-deploy' },
           ],
         },
         {

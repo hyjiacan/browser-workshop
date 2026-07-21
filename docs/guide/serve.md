@@ -163,7 +163,7 @@ GoogleChrome_148.0.7778.167_Windows_x64_Offline.exe
 firefox-115.0esr-win64.zip
 Chrome_121.0.6167.85_Windows_x64.zip
 chromium-85.0.4183.121-linux-x64.tar.gz
-MicrosoftEdge_120.0.2210.91_x64.msi
+chromium-85.0.4183.121-linux-x64.tar.gz
 44.0.2403.107_chrome64_stable_windows_installer.exe
 ```
 
