@@ -22,7 +22,7 @@ features:
     details: Install and manage multiple browser versions simultaneously, with quick filtering by version prefix.
   - icon: 📥
     title: Local Import
-    details: Automatically identify and import browser versions from directories or archives, supporting 25+ formats.
+    details: Automatically identify and import browser versions from directories or archives. Supports zip, 7z, tar.gz, tar.bz2, tar.xz, and more. Intelligent filename recognition eliminates the need to manually specify version information.
   - icon: 🌐
     title: Remote Download
     details: Download specified browser versions from official sources (Chrome Omaha protocol).

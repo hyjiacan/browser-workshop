@@ -22,7 +22,7 @@ features:
     details: 同时安装和管理多个浏览器版本，支持版本前缀快速筛选。
   - icon: 📥
     title: 本地导入
-    details: 从目录或压缩包自动识别并导入浏览器版本，支持 25+ 种格式。
+    details: 从目录或压缩包自动识别并导入浏览器版本，支持 zip、7z、tar.gz 等多种格式。
   - icon: 🌐
     title: 远程下载
     details: 从官方源（Chrome Omaha 协议）下载指定版本的浏览器。

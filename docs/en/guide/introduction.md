@@ -10,7 +10,7 @@ Install and manage multiple browser versions simultaneously, with complete isola
 
 ### Local Import
 
-Automatically identify and import browser versions from directories or archives. Supports 25+ archive formats, including zip, 7z, rar, tar.gz, and more. Intelligent filename recognition eliminates the need to manually specify version information.
+Automatically identify and import browser versions from directories or archives. Supports zip, 7z, tar.gz, tar.bz2, tar.xz, and more. Intelligent filename recognition eliminates the need to manually specify version information.
 
 ### Remote Download
 
@@ -34,7 +34,7 @@ Supports named Profiles, Profile reset, and cleanup of orphaned Profiles. The sa
 
 ### Multi-format Support
 
-Supports 25+ archive formats including zip, 7z, rar, exe, and msi. Whether it's an official installer or a portable archive, it can be easily imported.
+Supports zip, 7z, tar.gz, tar.bz2, tar.xz, .exe, and more. Whether it's an official installer or a portable archive, it can be easily imported.
 
 ### Architecture Compatibility
 

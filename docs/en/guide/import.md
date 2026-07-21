@@ -93,7 +93,7 @@ bws i -f /path/to/file.exe chrome@120
 
 ## Supported File Formats
 
-bws supports 25+ file formats, mainly including the following categories:
+bws supports zip, 7z, tar.gz, tar.bz2, tar.xz, .exe, and more file formats, mainly including the following categories:
 
 ### Archive Formats
 

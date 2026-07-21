@@ -85,6 +85,18 @@ const pageTemplate = `<!DOCTYPE html>
     <h1>{{.ServerName}}</h1>
     <p class="subtitle">服务端 v{{.Version}} &middot; API v1</p>
 
+    <div class="intro" style="background:#f0f7ff; border-left:4px solid #0066cc; padding:12px 16px; margin:16px 0; border-radius:4px;">
+        <p style="margin:0 0 8px 0; color:#333;"><strong>Browser Workshop</strong> — 多版本浏览器管理工具</p>
+        <ul style="margin:0; padding-left:18px; color:#555; font-size:13px; line-height:1.8;">
+            <li>同时安装和管理多个浏览器版本，支持版本前缀快速筛选</li>
+            <li>从目录或压缩包自动识别并导入，支持 zip、7z、tar.gz 等多种格式</li>
+            <li>从官方源下载指定版本（Chrome Omaha、Firefox FTP）</li>
+            <li>内置 serve 命令，支持自动同步，搭建局域网分发服务</li>
+            <li>每个版本独立 Profile，支持命名 Profile</li>
+            <li>便携模式：数据存储在 bws-data/ 子目录，U 盘随身携带</li>
+        </ul>
+    </div>
+
     <div class="stats">
         <div class="stat-item">
             <div class="stat-label">软件包</div>

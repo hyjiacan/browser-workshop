@@ -54,7 +54,7 @@ bws imp /path/to/browsers -f
 
 The import process will display progress in real time, and unrecognizable files will be prompted immediately.
 
-> **Tip**: Supported file formats include zip, 7z, rar, exe, msi, and 25+ other archive formats. Filenames are automatically recognized. For detailed rules, please refer to the [Local Import](./import.md) chapter.
+> **Tip**: Supported file formats include zip, 7z, tar.gz, tar.bz2, tar.xz, .exe, and more. Filenames are automatically recognized. For detailed rules, please refer to the [Local Import](./import.md) chapter.
 
 ## 3. Remote Download and Install
 

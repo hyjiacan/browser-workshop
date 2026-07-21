@@ -93,7 +93,7 @@ bws i -f /path/to/file.exe chrome@120
 
 ## 支持的文件格式
 
-bws 支持 25+ 种文件格式，主要包括以下类别：
+bws 支持 zip、7z、tar.gz、tar.bz2、tar.xz、.exe 等多种文件格式，主要包括以下类别：
 
 ### 压缩包格式
 
