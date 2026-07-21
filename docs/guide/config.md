@@ -72,7 +72,7 @@ bws cfg set source http://server:8080
 | 属性 | 值 |
 |------|-----|
 | 默认值 | `chrome` |
-| 可选值 | `chrome`, `firefox`, `chromium`, `edge` 等 |
+| 可选值 | `chrome`, `firefox`, `chromium` |
 | 说明 | 当命令中未指定浏览器时使用的默认值 |
 
 示例：

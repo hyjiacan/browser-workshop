@@ -108,11 +108,10 @@ sync-browsers = chrome,firefox
 sync-browsers = chrome,firefox,chromium
 ```
 
-支持的浏览器名称：
+支持的浏览器名称（内置源可下载）：
 - `chrome` - Google Chrome
 - `firefox` - Mozilla Firefox
 - `chromium` - Chromium
-- `edge` - Microsoft Edge
 
 ### 指定同步的渠道
 
