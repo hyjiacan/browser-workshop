@@ -19,11 +19,12 @@ go build -o bws.exe .
 
 ## 下载预编译二进制
 
-你可以从项目发布页面下载对应平台的预编译二进制文件：
+你可以从以下平台的 Release 页面下载对应平台的预编译二进制文件（Windows / macOS / Linux）：
 
-1. 前往项目 Release 页面
-2. 下载对应操作系统和架构的压缩包
-3. 解压后将二进制文件放到合适的目录
+- **GitHub**: https://github.com/hyjiacan/browser-workshop/releases
+- **Gitee**: https://gitee.com/hyjiacan/browser-workshop/releases
+
+纯 Go 实现，无需安装任何外部工具。下载对应操作系统和架构的压缩包，解压后将二进制文件放到合适的目录即可。
 
 ### Windows
 

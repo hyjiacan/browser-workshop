@@ -1,24 +1,27 @@
-// Package archive provides unified archive extraction.
-// It prefers 7-Zip for multi-format support, with native zip as fallback.
+// Package archive provides unified archive extraction using pure Go.
+// Supports .zip, .tar.gz, .tar.bz2, .tar.xz, .tar.zst, .7z formats.
 package archive
 
 import (
+	"archive/tar"
 	"archive/zip"
+	"compress/bzip2"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
+
+	"github.com/bodgit/sevenzip"
+	"github.com/klauspost/compress/zstd"
+	"github.com/ulikunitz/xz"
 )
 
-// supportedFormats lists all archive format extensions we can handle.
-// Order matters for compound extensions like .tar.gz.
+// supportedFormats lists archive format extensions we can handle (pure Go).
 var supportedFormats = []string{
 	".zip",
 	".7z",
-	".rar",
 	".tar.gz",
 	".tar.bz2",
 	".tar.xz",
@@ -28,29 +31,18 @@ var supportedFormats = []string{
 	".bz2",
 	".xz",
 	".zst",
-	".exe", // self-extracting archives
-	".msi", // Windows installers (extractable via 7z)
-	".dmg", // macOS disk images (extractable via 7z)
-	".pkg", // macOS packages (extractable via 7z)
-	".deb", // Debian packages (extractable via 7z)
-	".rpm", // RPM packages (extractable via 7z)
+	".exe", // self-extracting archives (often zip-based)
+	".dmg", // macOS disk images (zip-based)
 	".apk", // Android APKs (zip-based)
 	".jar", // Java archives (zip-based)
 	".war", // Web archives (zip-based)
 	".cab", // Windows cabinet files
-	".iso", // ISO images (extractable via 7z)
-	".wim", // Windows imaging format
 }
 
-// nestedArchiveFormats lists formats that are definitely pure archives and safe
-// to extract during recursive nested extraction. This excludes executable and
-// installer formats (.exe, .msi, .dmg, etc.) which might be real programs
-// rather than self-extracting archives, preventing over-extraction of actual
-// browser binaries like chrome.exe.
+// nestedArchiveFormats lists formats safe for recursive nested extraction.
 var nestedArchiveFormats = []string{
 	".zip",
 	".7z",
-	".rar",
 	".tar.gz",
 	".tar.bz2",
 	".tar.xz",
@@ -77,8 +69,7 @@ func IsSupportedFormat(path string) bool {
 	return hasSupportedFormat(path, supportedFormats)
 }
 
-// isNestedArchiveFormat checks if a file has an extension that is definitely
-// a pure archive format (safe for recursive nested extraction).
+// isNestedArchiveFormat checks if a file has a pure archive extension.
 func isNestedArchiveFormat(path string) bool {
 	return hasSupportedFormat(path, nestedArchiveFormats)
 }
@@ -94,7 +85,6 @@ func hasSupportedFormat(path string, formats []string) bool {
 }
 
 // detectFormat returns the archive format extension from a file path.
-// It checks compound extensions first (e.g., .tar.gz before .gz).
 func detectFormat(path string) string {
 	lower := strings.ToLower(path)
 	for _, ext := range supportedFormats {
@@ -102,7 +92,6 @@ func detectFormat(path string) string {
 			return ext
 		}
 	}
-	// Fallback: last extension
 	ext := filepath.Ext(lower)
 	if ext != "" {
 		return ext
@@ -110,98 +99,54 @@ func detectFormat(path string) string {
 	return ""
 }
 
-// Extract extracts an archive file to the destination directory.
-// It auto-detects the best extraction method based on file format and available tools.
-// For .zip files, native Go extraction is used first.
-// For other formats, 7-Zip is used if available.
+// Extract extracts an archive file to the destination directory using pure Go.
+// No external tools (7z, etc.) are required.
 func Extract(srcPath, destDir string) error {
-	// Ensure source file exists
 	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
-		return fmt.Errorf("source file not found: %s", srcPath)
+		return fmt.Errorf("源文件不存在: %s", srcPath)
 	}
 
-	// Ensure destination directory exists
 	if err := os.MkdirAll(destDir, 0o755); err != nil {
-		return fmt.Errorf("creating destination directory: %w", err)
+		return fmt.Errorf("创建目标目录失败: %w", err)
 	}
 
 	format := detectFormat(srcPath)
-	has7z := Has7z()
 
-	// Strategy based on format
 	switch {
-	case format == ".zip":
-		// Try native zip first
-		err := extractZipNative(srcPath, destDir)
-		if err == nil {
-			return nil
-		}
-		// Fall back to 7z if available
-		if has7z {
-			return extractWith7z(srcPath, destDir)
-		}
-		return fmt.Errorf("extracting zip: %w", err)
+	case format == ".zip", format == ".jar", format == ".war", format == ".apk":
+		return extractZip(srcPath, destDir)
 
-	case format == ".exe":
-		// For .exe files, try native zip first (self-extracting archives are often zips)
+	case format == ".7z":
+		return extract7z(srcPath, destDir)
+
+	case format == ".exe", format == ".dmg", format == ".cab":
+		// Self-extracting archives are often zip-based
 		if isZipFile(srcPath) {
-			err := extractZipNative(srcPath, destDir)
-			if err == nil {
-				return nil
-			}
+			return extractZip(srcPath, destDir)
 		}
-		// Then try 7z
-		if has7z {
-			return extractWith7z(srcPath, destDir)
-		}
-		return fmt.Errorf("cannot extract .exe file: 7-Zip not available. "+
-			"Install 7-Zip from https://www.7-zip.org/ to extract %s and other formats", format)
+		return fmt.Errorf("无法提取 %s 文件：不是有效的 zip 格式自解压包", format)
 
-	case format == ".jar", format == ".war", format == ".apk":
-		// These are zip-based, try native first
-		err := extractZipNative(srcPath, destDir)
-		if err == nil {
-			return nil
-		}
-		if has7z {
-			return extractWith7z(srcPath, destDir)
-		}
-		return fmt.Errorf("extracting %s: %w", format, err)
+	case strings.HasPrefix(format, ".tar") || format == ".gz" || format == ".bz2" || format == ".xz" || format == ".zst":
+		return extractTar(srcPath, destDir, format)
 
 	default:
-		// For all other formats, require 7z
-		if has7z {
-			return extractWith7z(srcPath, destDir)
-		}
-		return fmt.Errorf("cannot extract %s archive: 7-Zip is not available. "+
-			"Install 7-Zip from https://www.7-zip.org/ to enable multi-format support", format)
+		return fmt.Errorf("不支持的压缩格式: %s", format)
 	}
 }
 
 // ExtractRecursive extracts an archive and recursively extracts any nested archives.
-// It scans the extracted directory for archive files and extracts them in-place,
-// continuing until no more archives are found.
-// Returns the path to destDir (the root directory containing the final extracted content).
 func ExtractRecursive(srcPath, destDir string) (string, error) {
-	// Step 1: Extract the initial archive
 	if err := Extract(srcPath, destDir); err != nil {
-		return "", fmt.Errorf("initial extraction: %w", err)
+		return "", fmt.Errorf("初始解压失败: %w", err)
 	}
-
-	// Step 2: Recursively extract any nested archives
 	if err := extractNested(destDir); err != nil {
-		return "", fmt.Errorf("extracting nested archives: %w", err)
+		return "", fmt.Errorf("递归解压嵌套包失败: %w", err)
 	}
-
 	return destDir, nil
 }
 
-// maxExtractPasses is the maximum number of extraction passes for nested archives.
-// This prevents infinite loops in edge cases.
 const maxExtractPasses = 10
 
-// extractNested walks the directory tree and extracts any archive files found.
-// It repeats the process until no more archives are found.
 func extractNested(rootDir string) error {
 	for passes := 0; passes < maxExtractPasses; passes++ {
 		found, err := extractNestedOnce(rootDir)
@@ -209,16 +154,12 @@ func extractNested(rootDir string) error {
 			return err
 		}
 		if !found {
-			// No more archives found, we're done
 			return nil
 		}
-		// We found and extracted at least one archive; loop again to check for more
 	}
-	return fmt.Errorf("exceeded maximum nested extraction passes (%d)", maxExtractPasses)
+	return fmt.Errorf("超过最大嵌套解压次数 (%d)", maxExtractPasses)
 }
 
-// extractNestedOnce performs one pass of the directory tree, extracting any
-// archive files found. Returns true if at least one archive was extracted.
 func extractNestedOnce(rootDir string) (bool, error) {
 	var archives []string
 
@@ -229,7 +170,6 @@ func extractNestedOnce(rootDir string) (bool, error) {
 		if d.IsDir() {
 			return nil
 		}
-		// Skip files we've already processed (marked with sentinel suffixes)
 		if strings.HasSuffix(path, ".bm_done") || strings.HasSuffix(path, ".extracted") {
 			return nil
 		}
@@ -239,57 +179,33 @@ func extractNestedOnce(rootDir string) (bool, error) {
 		return nil
 	})
 	if err != nil {
-		return false, fmt.Errorf("scanning for nested archives: %w", err)
+		return false, fmt.Errorf("扫描嵌套包失败: %w", err)
 	}
-
 	if len(archives) == 0 {
 		return false, nil
 	}
 
-	// Extract each archive found
 	extractedAny := false
 	for _, archivePath := range archives {
-		// Create extraction directory name based on the archive file name
 		extractDir := deriveExtractDir(archivePath)
-
-		// Ensure the extraction directory doesn't already exist
 		if _, err := os.Stat(extractDir); err == nil {
-			// Directory already exists; append a suffix to avoid collision
 			extractDir = extractDir + "_extracted"
 		}
-
 		if err := Extract(archivePath, extractDir); err != nil {
-			// If extraction fails, skip this archive but continue with others
-			// This could happen if the file has an archive extension but isn't actually an archive
-			// (e.g. a regular .exe file that isn't a self-extracting archive)
 			continue
 		}
-
-		// Remove the archive file after successful extraction
 		if err := os.Remove(archivePath); err != nil {
-			// If we can't delete the archive, rename it to avoid infinite re-extraction
-			renamedPath := archivePath + ".extracted"
-			if renameErr := os.Rename(archivePath, renamedPath); renameErr != nil {
-				// If even rename fails, at least mark it by touching a sentinel file
-				// to prevent infinite loop in extractNested
-				sentinelPath := archivePath + ".bm_done"
-				os.WriteFile(sentinelPath, []byte("extracted"), 0o644)
-			}
+			_ = os.Rename(archivePath, archivePath+".extracted")
 		}
 		extractedAny = true
 	}
-
 	return extractedAny, nil
 }
 
-// deriveExtractDir returns the directory path where an archive should be extracted.
-// It strips the archive extension from the file name and uses that as the directory name.
 func deriveExtractDir(archivePath string) string {
 	dir := filepath.Dir(archivePath)
 	base := filepath.Base(archivePath)
 	lowerBase := strings.ToLower(base)
-
-	// Check compound extensions first (e.g., .tar.gz)
 	for _, ext := range supportedFormats {
 		if strings.HasSuffix(lowerBase, ext) {
 			name := base[:len(base)-len(ext)]
@@ -299,8 +215,6 @@ func deriveExtractDir(archivePath string) string {
 			return filepath.Join(dir, name)
 		}
 	}
-
-	// Fallback: strip last extension
 	ext := filepath.Ext(base)
 	name := base[:len(base)-len(ext)]
 	if name == "" {
@@ -309,118 +223,63 @@ func deriveExtractDir(archivePath string) string {
 	return filepath.Join(dir, name)
 }
 
-// --- 7-Zip integration ---
+// --- Zip extraction (native Go) ---
 
-var cached7zPath string
-var cached7zChecked bool
-
-// Has7z checks if the 7z executable is available on the system.
-func Has7z() bool {
-	path := find7z()
-	return path != ""
-}
-
-// find7z locates the 7z executable, checking PATH and common install locations.
-// Results are cached after the first call.
-func find7z() string {
-	if cached7zChecked {
-		return cached7zPath
-	}
-	cached7zChecked = true
-
-	// Check PATH first
-	if path, err := exec.LookPath("7z"); err == nil {
-		cached7zPath = path
-		return path
-	}
-	// Also try 7za (standalone version)
-	if path, err := exec.LookPath("7za"); err == nil {
-		cached7zPath = path
-		return path
-	}
-
-	// Check common install locations by platform
-	var candidates []string
-	switch runtime.GOOS {
-	case "windows":
-		candidates = []string{
-			`C:\Program Files\7-Zip\7z.exe`,
-			`C:\Program Files (x86)\7-Zip\7z.exe`,
-			filepath.Join(os.Getenv("ProgramFiles"), "7-Zip", "7z.exe"),
-			filepath.Join(os.Getenv("ProgramFiles(x86)"), "7-Zip", "7z.exe"),
-			filepath.Join(os.Getenv("LOCALAPPDATA"), "Programs", "7-Zip", "7z.exe"),
-		}
-	case "darwin":
-		candidates = []string{
-			"/opt/homebrew/bin/7z",
-			"/usr/local/bin/7z",
-			"/Applications/Keka.app/Contents/MacOS/Keka",
-		}
-	case "linux":
-		candidates = []string{
-			"/usr/bin/7z",
-			"/usr/bin/7za",
-			"/usr/local/bin/7z",
-			"/snap/bin/7z",
-		}
-	default:
-		candidates = []string{
-			"/usr/bin/7z",
-			"/usr/local/bin/7z",
-		}
-	}
-
-	for _, candidate := range candidates {
-		if candidate == "" {
-			continue
-		}
-		if _, err := os.Stat(candidate); err == nil {
-			cached7zPath = candidate
-			return candidate
-		}
-	}
-
-	return ""
-}
-
-// extractWith7z extracts an archive using the 7z command-line tool.
-func extractWith7z(srcPath, destDir string) error {
-	exePath := find7z()
-	if exePath == "" {
-		return fmt.Errorf("7z executable not found")
-	}
-
-	// 7z x <src> -o<dest> -y
-	// x = extract with full paths
-	// -o = output directory
-	// -y = assume yes to all queries
-	cmd := exec.Command(exePath, "x", srcPath, "-o"+destDir, "-y")
-	cmd.Stdout = nil
-	cmd.Stderr = nil
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("7z extraction failed: %w", err)
-	}
-
-	return nil
-}
-
-// --- Native zip extraction ---
-
-// extractZipNative extracts a zip archive using Go's archive/zip package.
-func extractZipNative(srcPath, destDir string) error {
+func extractZip(srcPath, destDir string) error {
 	r, err := zip.OpenReader(srcPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("打开 zip 失败: %w", err)
 	}
 	defer r.Close()
 
 	for _, f := range r.File {
-		// Sanitize path to prevent zip slip
 		fpath := filepath.Join(destDir, f.Name)
 		cleanDest := filepath.Clean(destDir) + string(os.PathSeparator)
 		if !strings.HasPrefix(filepath.Clean(fpath), cleanDest) {
-			return fmt.Errorf("illegal file path in zip: %s", f.Name)
+			return fmt.Errorf("非法路径: %s", f.Name)
+		}
+		if f.FileInfo().IsDir() {
+			if err := os.MkdirAll(fpath, 0o755); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(fpath), 0o755); err != nil {
+			return err
+		}
+		dstFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
+		if err != nil {
+			return err
+		}
+		srcFile, err := f.Open()
+		if err != nil {
+			dstFile.Close()
+			return err
+		}
+		_, err = io.Copy(dstFile, srcFile)
+		srcFile.Close()
+		dstFile.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// --- 7z extraction (pure Go via sevenzip) ---
+
+func extract7z(srcPath, destDir string) error {
+	r, err := sevenzip.OpenReader(srcPath)
+	if err != nil {
+		return fmt.Errorf("打开 7z 文件失败: %w", err)
+	}
+	defer r.Close()
+
+	for _, f := range r.File {
+		fpath := filepath.Join(destDir, f.Name)
+		cleanDest := filepath.Clean(destDir) + string(os.PathSeparator)
+		if !strings.HasPrefix(filepath.Clean(fpath), cleanDest) {
+			return fmt.Errorf("非法路径: %s", f.Name)
 		}
 
 		if f.FileInfo().IsDir() {
@@ -434,25 +293,111 @@ func extractZipNative(srcPath, destDir string) error {
 			return err
 		}
 
+		rc, err := f.Open()
+		if err != nil {
+			return fmt.Errorf("打开 7z 内文件失败: %w", err)
+		}
+
 		dstFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
 		if err != nil {
+			rc.Close()
 			return err
 		}
 
-		srcFile, err := f.Open()
-		if err != nil {
-			dstFile.Close()
-			return err
-		}
-
-		_, err = io.Copy(dstFile, srcFile)
-		srcFile.Close()
+		_, err = io.Copy(dstFile, rc)
+		rc.Close()
 		dstFile.Close()
 		if err != nil {
 			return err
 		}
 	}
+	return nil
+}
 
+// --- Tar extraction (pure Go) ---
+
+func extractTar(srcPath, destDir string, format string) error {
+	// Open the file
+	f, err := os.Open(srcPath)
+	if err != nil {
+		return fmt.Errorf("打开文件失败: %w", err)
+	}
+	defer f.Close()
+
+	// Determine the decompressor based on format
+	var tr *tar.Reader
+	switch {
+	case format == ".tar.gz", format == ".tgz", format == ".gz":
+		gr, err := newGzipReader(f)
+		if err != nil {
+			return fmt.Errorf("gzip 解压失败: %w", err)
+		}
+		defer gr.Close()
+		tr = tar.NewReader(gr)
+
+	case format == ".tar.bz2", format == ".bz2":
+		br := bzip2.NewReader(f)
+		tr = tar.NewReader(br)
+
+	case format == ".tar.xz", format == ".xz":
+		xr, err := newxzReader(f)
+		if err != nil {
+			return fmt.Errorf("xz 解压失败: %w", err)
+		}
+		defer xr.Close()
+		tr = tar.NewReader(xr)
+
+	case format == ".tar.zst", format == ".zst":
+		zr, err := newZstdReader(f)
+		if err != nil {
+			return fmt.Errorf("zstd 解压失败: %w", err)
+		}
+		defer zr.Close()
+		tr = tar.NewReader(zr)
+
+	case format == ".tar":
+		tr = tar.NewReader(f)
+
+	default:
+		return fmt.Errorf("不支持的 tar 格式: %s", format)
+	}
+
+	// Extract files
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("读取 tar 失败: %w", err)
+		}
+
+		fpath := filepath.Join(destDir, header.Name)
+		cleanDest := filepath.Clean(destDir) + string(os.PathSeparator)
+		if !strings.HasPrefix(filepath.Clean(fpath), cleanDest) {
+			return fmt.Errorf("非法路径: %s", header.Name)
+		}
+
+		switch header.Typeflag {
+		case tar.TypeDir:
+			if err := os.MkdirAll(fpath, os.FileMode(header.Mode)); err != nil {
+				return err
+			}
+		case tar.TypeReg, tar.TypeRegA:
+			if err := os.MkdirAll(filepath.Dir(fpath), 0o755); err != nil {
+				return err
+			}
+			dstFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.FileMode(header.Mode))
+			if err != nil {
+				return err
+			}
+			_, err = io.Copy(dstFile, tr)
+			dstFile.Close()
+			if err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
@@ -463,25 +408,64 @@ func isZipFile(path string) bool {
 		return false
 	}
 	defer f.Close()
-
 	buf := make([]byte, 4)
 	n, err := f.Read(buf)
 	if err != nil || n < 4 {
 		return false
 	}
-
-	// ZIP magic number: PK\x03\x04
 	return buf[0] == 'P' && buf[1] == 'K' && buf[2] == 0x03 && buf[3] == 0x04
+}
+
+// --- Helper wrappers for decompressors ---
+
+// newGzipReader wraps os.File with gzip decompression.
+func newGzipReader(f *os.File) (io.ReadCloser, error) {
+	return gzip.NewReader(f)
+}
+
+// newxzReader wraps os.File with xz decompression.
+func newxzReader(f *os.File) (io.ReadCloser, error) {
+	r, err := xz.NewReader(f)
+	if err != nil {
+		return nil, err
+	}
+	return &xzReadCloser{Reader: r, file: f}, nil
+}
+
+type xzReadCloser struct {
+	*xz.Reader
+	file *os.File
+}
+
+func (x *xzReadCloser) Close() error { return nil }
+
+// newZstdReader wraps os.File with zstd decompression.
+func newZstdReader(f *os.File) (io.ReadCloser, error) {
+	decoder, err := zstd.NewReader(f)
+	if err != nil {
+		return nil, err
+	}
+	return &zstdReadCloser{decompressor: decoder}, nil
+}
+
+type zstdReadCloser struct {
+	decompressor *zstd.Decoder
+}
+
+func (z *zstdReadCloser) Read(p []byte) (int, error) {
+	return z.decompressor.Read(p)
+}
+
+func (z *zstdReadCloser) Close() error {
+	z.decompressor.Close()
+	return nil
 }
 
 // --- Browser executable detection ---
 
 // FindBrowserExe searches for a browser executable in the extracted directory.
-// It looks for known executable names up to maxDepth levels deep.
-// Returns the directory containing the executable, or an error if not found.
 func FindBrowserExe(rootDir, browserName, platform, arch string, executableNames []string) (string, error) {
 	if len(executableNames) == 0 {
-		// Fallback: use browser name as executable
 		exeName := browserName
 		if platform == "windows" {
 			exeName += ".exe"
@@ -489,35 +473,27 @@ func FindBrowserExe(rootDir, browserName, platform, arch string, executableNames
 		executableNames = []string{exeName}
 	}
 
-	// Search up to 3 levels deep
 	const maxDepth = 3
-
 	var result string
 	var walk func(dir string, depth int) bool
 	walk = func(dir string, depth int) bool {
 		if depth > maxDepth {
 			return false
 		}
-
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			return false
 		}
-
-		// Check for executable files in current directory
 		for _, entry := range entries {
-			if entry.IsDir() {
-				continue
-			}
-			for _, exeName := range executableNames {
-				if strings.EqualFold(entry.Name(), exeName) {
-					result = dir
-					return true
+			if !entry.IsDir() {
+				for _, exeName := range executableNames {
+					if strings.EqualFold(entry.Name(), exeName) {
+						result = dir
+						return true
+					}
 				}
 			}
 		}
-
-		// Recurse into subdirectories
 		for _, entry := range entries {
 			if entry.IsDir() {
 				if walk(filepath.Join(dir, entry.Name()), depth+1) {
@@ -525,41 +501,29 @@ func FindBrowserExe(rootDir, browserName, platform, arch string, executableNames
 				}
 			}
 		}
-
 		return false
 	}
-
 	if walk(rootDir, 0) {
 		return result, nil
 	}
-
-	return "", fmt.Errorf("browser executable not found in %s (searched %d levels deep for: %s)",
-		rootDir, maxDepth, strings.Join(executableNames, ", "))
+	return "", fmt.Errorf("未找到浏览器可执行文件 (搜索 %d 层: %s)", maxDepth, strings.Join(executableNames, ", "))
 }
 
 // FindContentDir finds the actual content directory within an extracted archive.
-// It first tries to find a browser executable. If not found, it falls back to
-// the single-subdirectory heuristic.
-func FindContentDir(root string, browserName string, platform string, arch string, exeCandidates []string) (string, error) {
-	// Try to find browser executable first (most reliable)
+func FindContentDir(root, browserName, platform, arch string, exeCandidates []string) (string, error) {
 	if len(exeCandidates) > 0 {
 		if dir, err := FindBrowserExe(root, browserName, platform, arch, exeCandidates); err == nil {
 			return dir, nil
 		}
 	}
-
-	// Fallback: single subdirectory heuristic
 	return findContentDirHeuristic(root)
 }
 
-// findContentDirHeuristic finds the content directory using the single-subdir heuristic.
-// If the archive contains a single top-level directory, it recurses into it.
 func findContentDirHeuristic(root string) (string, error) {
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return "", err
 	}
-
 	var dirs []os.DirEntry
 	var files []os.DirEntry
 	for _, e := range entries {
@@ -569,17 +533,11 @@ func findContentDirHeuristic(root string) (string, error) {
 			files = append(files, e)
 		}
 	}
-
-	// If there are files at root level, the root itself is the content dir
 	if len(files) > 0 {
 		return root, nil
 	}
-
-	// If there's exactly one directory, look inside it
 	if len(dirs) == 1 {
 		return findContentDirHeuristic(filepath.Join(root, dirs[0].Name()))
 	}
-
-	// Multiple directories or empty - return root
 	return root, nil
 }
