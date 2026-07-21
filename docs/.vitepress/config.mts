@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitepress'
+import { MermaidMarkdown, MermaidPlugin } from 'vitepress-plugin-mermaid'
 
 export default defineConfig({
   title: 'Browser Workshop',
@@ -11,6 +12,16 @@ export default defineConfig({
   head: [
     ['link', { rel: 'icon', type: 'image/png', href: '/logo.png' }],
   ],
+
+  markdown: {
+    config: (md) => {
+      md.use(MermaidMarkdown)
+    },
+  },
+
+  vite: {
+    plugins: [MermaidPlugin()],
+  },
 
   themeConfig: {
     logo: '/logo.png',
