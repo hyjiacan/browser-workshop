@@ -187,7 +187,23 @@ bws 支持多个版本数据源，按固定优先级顺序查询：
 | 优先级 | 数据源 | 说明 | 配置方式 |
 |--------|--------|------|----------|
 | 1（最高） | 离线源 | 通过 `bws sv` 搭建的分发服务 | `bws cfg set source <url>` |
-| 2（最低） | 内置在线源 | 浏览器官方更新渠道（Chrome Omaha 等） | 内置，无需配置 |
+| 2（最低） | 内置在线源 | 浏览器官方更新渠道（Firefox FTP、Chromium GCS） | 内置，无需配置 |
+
+### 手动下载 Chrome 历史版本
+
+Chrome 官方不提供公开的下载链接，以下第三方站点可手动下载历史版本：
+
+- **ChromeDownloads**: https://chromedownloads.net/ — 提供 Chrome 全平台历史版本下载
+
+下载后可通过以下方式安装：
+
+```bash
+# 从压缩包安装
+bws i --from-file chrome-120.0.6099.109-win64.zip chrome@120
+
+# 从解压目录安装
+bws i -d D:\chrome-120-win64 chrome@120
+```
 
 ### 优先级规则
 

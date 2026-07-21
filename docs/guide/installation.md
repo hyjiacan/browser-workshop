@@ -14,7 +14,7 @@ go build -o bws.exe .
 
 ### 编译要求
 
-- Go 1.21 或更高版本
+- Go 1.22 或更高版本
 - 支持 Windows、macOS、Linux 等主流平台
 
 ## 下载预编译二进制

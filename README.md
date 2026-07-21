@@ -12,7 +12,7 @@
 
 - **多版本管理**：同时安装和管理多个浏览器版本，支持版本前缀快速筛选
 - **本地导入**：从目录或压缩包自动识别并导入，支持 25+ 种格式
-- **远程下载**：从官方源（Chrome Omaha 协议）下载指定版本
+- **远程下载**：从官方源（Firefox FTP、Chromium GCS）下载指定版本
 - **离线分发**：内置 `serve` 命令，支持自动同步，搭建局域网分发服务
 - **隔离运行**：每个版本独立 Profile，支持命名 Profile
 - **便携模式**：数据存储在 `bws-data/` 子目录，U 盘随身携带
@@ -31,6 +31,10 @@ bws import /path/to/browsers
 
 # 远程下载安装
 bws install chrome@120
+
+# Chrome 历史版本需手动下载后导入
+# 下载地址: https://chromedownloads.net/
+bws install --from-file chrome-120-win64.zip chrome@120
 
 # 运行浏览器
 bws run chrome@120

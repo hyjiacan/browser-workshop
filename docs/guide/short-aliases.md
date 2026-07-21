@@ -6,7 +6,7 @@
 
 | 短别名 | 完整名称 | 说明 |
 |--------|----------|------|
-| `gc` | chrome / googlechrome | Google Chrome 浏览器 |
+| `gc` | chrome / googlechrome / google-chrome | Google Chrome 浏览器 |
 | `ff` | firefox | Mozilla Firefox 浏览器 |
 | `cm` | chromium | Chromium 开源浏览器 |
 

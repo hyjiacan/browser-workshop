@@ -108,15 +108,6 @@ func Default() *Config {
 					Priority: 10,
 				},
 			},
-			"chrome": {
-				{
-					Name:     "chromedownloads",
-					Type:     "chrome-third-party",
-					BaseURL:  "https://chromedownloads.net/",
-					Enabled:  false,
-					Priority: 10,
-				},
-			},
 		},
 		Download: DownloadConfig{
 			MaxConcurrency: 3,

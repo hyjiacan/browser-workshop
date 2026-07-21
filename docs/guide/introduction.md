@@ -6,7 +6,7 @@ Browser Workshop 是一款多版本浏览器管理工具，支持本地导入、
 
 ### 多版本管理
 
-同时安装和管理多个浏览器版本，版本之间完全隔离，互不干扰。支持 Chrome、Firefox、Chromium、Edge、Brave、Opera 等主流浏览器。
+同时安装和管理多个浏览器版本，版本之间完全隔离，互不干扰。内置支持 Chrome、Firefox、Chromium 三种浏览器。
 
 ### 本地导入
 
@@ -55,6 +55,10 @@ Browser Workshop 是一款多版本浏览器管理工具，支持本地导入、
 ### 浏览器短别名
 
 支持 `gc`（chrome）、`ff`（firefox）、`cm`（chromium）等短别名，所有命令都可使用，大幅减少输入量。
+
+### 多名称识别
+
+浏览器支持多种名称输入，如 Chrome 可通过 `chrome`、`googlechrome`、`google-chrome` 等名称引用，无需记忆单一名称。
 
 ## 适用场景
 

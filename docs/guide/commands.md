@@ -1,14 +1,16 @@
-﻿# 命令参考
+# 命令参考
 
 本文档列出 bws 的所有命令及其详细说明，包括用途、用法、示例和参数。
+
+> 版本信息通过全局标志 `--version` / `-v` 获取，例如 `bws --version` 或 `bws -v`。
 
 ## 命令总览
 
 | 命令 | 说明 |
 |------|------|
-| `bws ls` / `bws ls` | 列出已安装的浏览器版本 |
+| `bws ls` | 列出已安装的浏览器版本 |
 | `bws show` | 显示版本详细信息 |
-| `bws r` | 运行指定版本的浏览器 |
+| `bws r` / `bws open` | 运行指定版本的浏览器 |
 | `bws i` | 安装浏览器版本 |
 | `bws imp` | 从目录批量导入（自动识别） |
 | `bws rm` | 卸载浏览器版本 |
@@ -16,24 +18,22 @@
 | `bws dl` | 仅下载不安装 |
 | `bws pf` | 管理浏览器 Profile |
 | `bws alias` | 管理版本别名 |
-| `bws sv` | 启动 HTTP 分发服务 |
+| `bws sv` / `bws server` | 启动 HTTP 分发服务 |
 | `bws cfg` | 管理配置 |
 | `bws repo` | 管理本地二进制仓库 |
 | `bws cc` | 管理下载缓存 |
 | `bws dt` | 系统健康检查 |
-| `bws help` | 显示帮助信息 |
-| `bws version` | 显示版本信息 |
+| `bws help` / `bws h` | 显示帮助信息 |
 
 ---
 
-## bws ls / bws ls
+## bws ls
 
 列出已安装的浏览器版本。
 
 ### 用法
 
 ```bash
-bws ls [浏览器[@版本]] [选项]
 bws ls [浏览器[@版本]] [选项]
 ```
 
@@ -48,9 +48,11 @@ bws ls [浏览器[@版本]] [选项]
 | 选项 | 简写 | 说明 |
 |------|------|------|
 | `--remote` | `-R` | 列出远程可用版本 |
-| `--all` | `-a` | 列出所有版本（本地 + 远程） |
+| `--all` | `-a` | 显示所有浏览器 |
 | `--no-system` | - | 不显示系统浏览器 |
-| `--channel` | - | 指定渠道（仅远程列表有效） |
+| `--channel <渠道>` | `-c` | 指定渠道（仅远程列表有效） |
+| `--limit <数量>` | `-n` | 限制结果数量（默认 20，仅远程列表有效） |
+| `--json` | - | 以 JSON 格式输出 |
 
 ### 示例
 
@@ -70,11 +72,20 @@ bws ls chrome@79
 # 列出远程可用版本
 bws ls -R chrome
 
+# 显示所有浏览器
+bws ls -a
+
 # 不显示系统浏览器
 bws ls --no-system
 
 # 列出指定渠道的远程版本
-bws ls -R chrome --channel beta
+bws ls -R chrome -c beta
+
+# 限制远程结果数量
+bws ls -R chrome -n 5
+
+# JSON 格式输出
+bws ls --json
 ```
 
 ---
@@ -123,7 +134,7 @@ bws show ff@121
 
 ---
 
-## bws r
+## bws r / bws open
 
 运行指定版本的浏览器。
 
@@ -185,6 +196,9 @@ bws r chrome@120 -- --disable-gpu --no-sandbox
 
 # 试运行
 bws r chrome@120 --dry-run
+
+# 使用 open 别名
+bws open chrome@120
 ```
 
 ---
@@ -198,7 +212,7 @@ bws r chrome@120 --dry-run
 ```bash
 bws i <浏览器@版本> [选项]
 bws i -d <目录> [浏览器@版本]
-bws i -f <文件> [浏览器@版本]
+bws i --from-file <文件> [浏览器@版本]
 ```
 
 ### 参数
@@ -212,9 +226,9 @@ bws i -f <文件> [浏览器@版本]
 | 选项 | 简写 | 说明 |
 |------|------|------|
 | `--dir <path>` | `-d` | 从本地目录安装 |
-| `--file <path>` | `-f` | 从本地文件安装 |
-| `--channel` | - | 指定发布渠道 |
-| `--force` | `-f` | 强制重新安装（注意：与 -f 文件选项冲突，使用长格式 --force） |
+| `--from-file <path>` | - | 从本地压缩包安装 |
+| `--channel <渠道>` | - | 指定发布渠道 |
+| `--force` | `-f` | 强制重新安装 |
 
 ### 示例
 
@@ -238,7 +252,10 @@ bws i -d /path/to/browser-dir
 bws i -d /path/to/browser-dir chrome@120
 
 # 从文件安装
-bws i -f /path/to/chrome-setup.exe chrome@120
+bws i --from-file /path/to/chrome-setup.exe chrome@120
+
+# 强制重新安装
+bws i chrome@120 --force
 ```
 
 ---
@@ -284,7 +301,7 @@ bws imp /path/to/browsers -f
 ### 用法
 
 ```bash
-bws rm <浏览器@版本> [选项]
+bws rm <浏览器@版本>
 ```
 
 ### 参数
@@ -292,12 +309,6 @@ bws rm <浏览器@版本> [选项]
 | 参数 | 说明 |
 |------|------|
 | `浏览器@版本` | 要卸载的浏览器版本（支持部分版本号） |
-
-### 选项
-
-| 选项 | 简写 | 说明 |
-|------|------|------|
-| `--force` | `-f` | 跳过确认直接卸载 |
 
 ### 示例
 
@@ -307,16 +318,12 @@ bws rm chrome@120
 
 # 卸载部分版本号匹配的最新版本
 bws rm chrome@85
-
-# 跳过确认
-bws rm chrome@120 -f
 ```
 
 ### 注意事项
 
 - 卸载只删除程序文件，不删除 Profile 数据
 - 系统安装的浏览器无法通过 bws 卸载
-- 卸载前会显示确认提示
 
 ---
 
@@ -371,7 +378,8 @@ bws dl <浏览器@版本> [选项]
 
 | 选项 | 简写 | 说明 |
 |------|------|------|
-| `--channel` | - | 指定发布渠道 |
+| `--output <目录>` | `-o` | 指定输出目录 |
+| `--channel <渠道>` | - | 指定发布渠道 |
 
 ### 示例
 
@@ -384,6 +392,12 @@ bws dl chrome@120.0.6478.114
 
 # 下载部分版本号
 bws dl chrome@85
+
+# 指定输出目录
+bws dl chrome@latest -o ~/downloads
+
+# 下载指定渠道
+bws dl chrome@beta -c beta
 ```
 
 ---
@@ -488,7 +502,7 @@ bws alias remove mychrome
 
 ---
 
-## bws sv
+## bws sv / bws server
 
 启动 HTTP 分发服务。配置通过 `bws-serve.ini` 文件管理，首次运行时会自动创建默认配置文件。
 
@@ -532,6 +546,9 @@ bws sv
 
 # 指定基础目录
 bws sv -d D:\bws-data
+
+# 使用 server 别名
+bws server
 ```
 
 ### 后台运行
@@ -557,6 +574,7 @@ bws cfg <子命令> [参数]
 | `show` | 查看所有配置 |
 | `get <key>` | 获取指定配置项的值 |
 | `set <key> <value>` | 设置指定配置项的值 |
+| `path` | 显示配置文件路径 |
 
 ### 配置项
 
@@ -582,6 +600,9 @@ bws cfg get default-browser
 bws cfg set default-browser firefox
 bws cfg set log-level debug
 bws cfg set source http://server:8080
+
+# 显示配置文件路径
+bws cfg path
 ```
 
 ---
@@ -600,43 +621,57 @@ bws repo <子命令> [参数]
 
 | 子命令 | 说明 |
 |--------|------|
-| `list` | 列出仓库中的版本 |
-| `add` | 添加版本到仓库 |
-| `remove` | 从仓库移除版本 |
-| `path` | 查看仓库路径 |
+| `path` | 显示当前仓库路径 |
+| `set <路径>` | 设置仓库路径 |
+| `scan` | 扫描仓库中的浏览器版本 |
+| `import` | 从仓库导入浏览器版本（支持 `--force` / `-f` 强制重新安装） |
+
+### 示例
+
+```bash
+# 查看当前仓库路径
+bws repo path
+
+# 设置仓库路径
+bws repo set /path/to/repo
+
+# 扫描仓库
+bws repo scan
+
+# 从仓库导入
+bws repo import
+
+# 强制重新导入
+bws repo import -f
+```
 
 ---
 
 ## bws cc
 
-管理下载缓存。
+管理下载缓存。下载文件存储在临时目录中，安装后会自动清理。
 
 ### 用法
 
 ```bash
-bws cc <子命令> [参数]
+bws cc <子命令>
 ```
 
 ### 子命令
 
 | 子命令 | 说明 |
 |--------|------|
-| `list` | 列出缓存内容 |
-| `clean` | 清理下载缓存 |
-| `size` | 查看缓存大小 |
-| `path` | 查看缓存路径 |
+| `clear` | 清除缓存的下载文件（提示：文件存储在临时目录中，会自动清理） |
+| `info` | 显示缓存信息（类型：临时，自动清理） |
 
 ### 示例
 
 ```bash
-# 列出缓存
-bws cc list
+# 查看缓存信息
+bws cc info
 
-# 清理缓存
-bws cc clean
-
-# 查看缓存大小
-bws cc size
+# 清除缓存
+bws cc clear
 ```
 
 ---
@@ -667,7 +702,7 @@ bws dt
 
 ---
 
-## bws help
+## bws help / bws h
 
 显示帮助信息。
 
@@ -675,6 +710,7 @@ bws dt
 
 ```bash
 bws help [命令]
+bws h [命令]
 ```
 
 ### 示例
@@ -686,28 +722,7 @@ bws help
 # 显示指定命令的帮助
 bws help r
 bws help i
-```
 
----
-
-## bws version
-
-显示 bws 版本信息。
-
-### 用法
-
-```bash
-bws version
-```
-
-### 示例
-
-```bash
-bws version
-```
-
-输出示例：
-
-```
-bws version 1.0.0
+# 使用 h 别名
+bws h ls
 ```
