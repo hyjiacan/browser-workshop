@@ -1,4 +1,4 @@
-# 日志系统
+﻿# 日志系统
 
 bws 采用双输出日志系统，文件和控制台独立控制级别，既能保留完整的调试信息，又能保持控制台输出的简洁。
 
@@ -141,18 +141,18 @@ $data-dir/logs/bws.log
 
 ## 修改控制台日志级别
 
-使用 `bws config` 命令修改控制台日志级别。
+使用 `bws cfg` 命令修改控制台日志级别。
 
 ### 设置日志级别
 
 ```bash
-bws config set log-level debug
+bws cfg set log-level debug
 ```
 
 ### 查看当前级别
 
 ```bash
-bws config get log-level
+bws cfg get log-level
 ```
 
 ### 级别选择建议
@@ -173,10 +173,10 @@ bws config get log-level
 
 ```bash
 # 设置为 debug 级别
-bws config set log-level debug
+bws cfg set log-level debug
 
 # 重新执行有问题的命令
-bws install chrome@120
+bws i chrome@120
 
 # 查看更多输出信息，帮助定位问题
 ```
@@ -187,10 +187,10 @@ bws install chrome@120
 
 ```bash
 # 设置为 error 级别，只输出错误
-bws config set log-level error
+bws cfg set log-level error
 
 # 或者设置为 fatal，几乎不输出
-bws config set log-level fatal
+bws cfg set log-level fatal
 ```
 
 ## 文件日志级别
@@ -269,4 +269,4 @@ Get-Content bws-data\logs\bws.log -Wait -Tail 50
 2. **日志自动轮转**：不用担心日志文件无限增大，系统会自动轮转和清理
 3. **日志包含敏感信息**：日志中可能包含文件路径等信息，分享日志前注意脱敏
 4. **性能影响**：提高日志级别（如 trace）可能会略微影响性能，调试后建议改回 info
-5. **日志目录位置**：可以通过 `bws cache path` 或查看数据目录找到 logs 文件夹
+5. **日志目录位置**：可以通过 `bws cc path` 或查看数据目录找到 logs 文件夹

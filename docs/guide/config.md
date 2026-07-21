@@ -1,13 +1,13 @@
-# 配置管理
+﻿# 配置管理
 
-bws 的所有配置通过 `bws config` 命令统一管理。本章介绍配置的查看、设置以及各配置项的详细说明。
+bws 的所有配置通过 `bws cfg` 命令统一管理。本章介绍配置的查看、设置以及各配置项的详细说明。
 
 ## 查看所有配置
 
-使用 `bws config show` 命令查看当前所有配置项及其值。
+使用 `bws cfg show` 命令查看当前所有配置项及其值。
 
 ```bash
-bws config show
+bws cfg show
 ```
 
 输出示例：
@@ -25,12 +25,12 @@ bws config show
 
 ## 获取配置项
 
-使用 `bws config get` 命令获取单个配置项的值。
+使用 `bws cfg get` 命令获取单个配置项的值。
 
 ```bash
-bws config get default-browser
-bws config get log-level
-bws config get source
+bws cfg get default-browser
+bws cfg get log-level
+bws cfg get source
 ```
 
 输出示例：
@@ -41,13 +41,13 @@ chrome
 
 ## 设置配置项
 
-使用 `bws config set` 命令设置配置项的值。
+使用 `bws cfg set` 命令设置配置项的值。
 
 ```bash
-bws config set default-browser firefox
-bws config set log-level debug
-bws config set data-dir D:\browser-data
-bws config set source http://server:8080
+bws cfg set default-browser firefox
+bws cfg set log-level debug
+bws cfg set data-dir D:\browser-data
+bws cfg set source http://server:8080
 ```
 
 设置成功后会显示确认信息。
@@ -68,10 +68,10 @@ bws config set source http://server:8080
 
 ```bash
 # 设置默认浏览器为 Firefox
-bws config set default-browser firefox
+bws cfg set default-browser firefox
 
 # 设置后，以下命令运行 Firefox 的默认版本
-bws run
+bws r
 ```
 
 ### default-channel
@@ -88,10 +88,10 @@ bws run
 
 ```bash
 # 设置默认渠道为 beta
-bws config set default-channel beta
+bws cfg set default-channel beta
 
 # 设置后，安装最新版本时默认使用 beta 渠道
-bws install chrome@latest
+bws i chrome@latest
 ```
 
 ### log-level
@@ -108,10 +108,10 @@ bws install chrome@latest
 
 ```bash
 # 设置为 debug 级别，输出更多调试信息
-bws config set log-level debug
+bws cfg set log-level debug
 
 # 设置为 warn 级别，只显示警告和错误
-bws config set log-level warn
+bws cfg set log-level warn
 ```
 
 > **注意**：此配置仅影响控制台输出。文件日志始终使用 `debug` 级别，不受此配置影响。更多信息请参考 [日志系统](./logging.md) 章节。
@@ -130,7 +130,7 @@ bws config set log-level warn
 
 ```bash
 # 设置数据目录为绝对路径
-bws config set data-dir D:\browser-data
+bws cfg set data-dir D:\browser-data
 
 # 设置后，所有配置、版本、日志都存储在该目录下
 ```
@@ -150,12 +150,12 @@ bws config set data-dir D:\browser-data
 示例：
 
 ```bash
-bws config set repo-path D:\browser-repo
+bws cfg set repo-path D:\browser-repo
 ```
 
 ### source / remote-source
 
-离线源地址（bws serve 服务地址）。
+离线源地址（bws sv 服务地址）。
 
 | 属性 | 值 |
 |------|-----|
@@ -167,13 +167,13 @@ bws config set repo-path D:\browser-repo
 
 ```bash
 # 设置离线源
-bws config set source http://192.168.1.100:8080
+bws cfg set source http://192.168.1.100:8080
 
 # 查看当前源
-bws config get source
+bws cfg get source
 
 # 清除离线源配置
-bws config set source ""
+bws cfg set source ""
 ```
 
 `source` 和 `remote-source` 是等效的，设置任意一个都可以。
@@ -186,7 +186,7 @@ bws 支持多个版本数据源，按固定优先级顺序查询：
 
 | 优先级 | 数据源 | 说明 | 配置方式 |
 |--------|--------|------|----------|
-| 1（最高） | 离线源 | 通过 `bws serve` 搭建的分发服务 | `bws config set source <url>` |
+| 1（最高） | 离线源 | 通过 `bws sv` 搭建的分发服务 | `bws cfg set source <url>` |
 | 2（最低） | 内置在线源 | 浏览器官方更新渠道（Chrome Omaha 等） | 内置，无需配置 |
 
 ### 优先级规则
@@ -195,7 +195,7 @@ bws 支持多个版本数据源，按固定优先级顺序查询：
 
 ### 工作流程
 
-当执行 `bws install` 或 `bws ls --remote` 时：
+当执行 `bws i` 或 `bws ls --remote` 时：
 
 1. 如果配置了离线源，首先查询离线源
 2. 离线源中有匹配的版本，直接使用（或提示用户选择）
@@ -219,12 +219,12 @@ bws-data/
 └── config.json
 ```
 
-通常不需要手动编辑配置文件，建议使用 `bws config` 命令进行管理。
+通常不需要手动编辑配置文件，建议使用 `bws cfg` 命令进行管理。
 
 ## 配置命令汇总
 
 | 命令 | 说明 |
 |------|------|
-| `bws config show` | 查看所有配置 |
-| `bws config get <key>` | 获取指定配置项的值 |
-| `bws config set <key> <value>` | 设置指定配置项的值 |
+| `bws cfg show` | 查看所有配置 |
+| `bws cfg get <key>` | 获取指定配置项的值 |
+| `bws cfg set <key> <value>` | 设置指定配置项的值 |

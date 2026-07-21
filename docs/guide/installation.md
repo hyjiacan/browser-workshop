@@ -1,4 +1,4 @@
-# 安装
+﻿# 安装
 
 本章介绍 bws 的安装方法，包括源码编译和下载预编译二进制两种方式，以及便携模式的说明。
 
@@ -91,5 +91,5 @@ export BWS_HOME=~/browser-data
 也可以通过配置命令设置数据目录：
 
 ```bash
-bws config set data-dir D:\browser-data
+bws cfg set data-dir D:\browser-data
 ```

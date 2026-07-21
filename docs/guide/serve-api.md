@@ -1,6 +1,6 @@
-# Serve API 参考
+﻿# Serve API 参考
 
-bws serve 提供了完整的 REST API 接口，用于查询文件清单、下载文件、管理同步等。本文档详细说明所有 API 端点的用法。
+bws sv 提供了完整的 REST API 接口，用于查询文件清单、下载文件、管理同步等。本文档详细说明所有 API 端点的用法。
 
 ## API 端点总览
 

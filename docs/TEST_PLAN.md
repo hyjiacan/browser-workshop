@@ -57,20 +57,20 @@
 
 | ID | 场景 | 输入 | 预期 | 优先级 |
 |----|------|------|------|--------|
-| INS-01 | 正常 — 安装最新版 | `bws install ff@latest` | 下载并安装最新稳定版 | P0 |
-| INS-02 | 正常 — 安装指定版本 | `bws install ff@101.0.1` | 下载并安装该版本 | P0 |
-| INS-03 | 正常 — 版本前缀安装 | `bws install gc@120` | 安装 120.x 最新匹配版 | P0 |
-| INS-04 | 正常 — 使用短别名 | `bws install ff@latest` | 与全称效果一致 | P0 |
-| INS-05 | 正常 — 指定渠道 | `bws install ff@latest -c esr` | 安装 ESR 版本 | P1 |
-| INS-06 | 正常 — 指定平台 | `bws install gc@120 -p mac` | 下载 mac 版本 | P1 |
-| INS-07 | 正常 — 指定架构 | `bws install gc@120 -a arm64` | 下载 arm64 版本 | P1 |
-| INS-08 | 正常 — 从目录安装 | `bws install -d /path/to/dir` | 识别并安装目录中的浏览器 | P1 |
-| INS-09 | 正常 — 从文件安装 | `bws install --from-file /path/to.zip` | 解压并安装 | P1 |
-| INS-10 | 正常 — 强制覆盖 | `bws install ff@101 -f` | 覆盖已存在的同名版本 | P1 |
-| INS-11 | 异常 — 版本不存在 | `bws install ff@999.999` | 报错 "版本未找到" | P1 |
-| INS-12 | 异常 — 磁盘空间不足 | `bws install ff@latest` (空间不足) | 提示确认或报错 | P1 |
-| INS-13 | 异常 — 无网络 | `bws install ff@latest` (断网) | 报错 "网络连接失败" | P1 |
-| INS-14 | 边界 — 重复安装（无 -f） | `bws install ff@101` (已存在) | 提示已存在，跳过或询问 | P1 |
+| INS-01 | 正常 — 安装最新版 | `bws i ff@latest` | 下载并安装最新稳定版 | P0 |
+| INS-02 | 正常 — 安装指定版本 | `bws i ff@101.0.1` | 下载并安装该版本 | P0 |
+| INS-03 | 正常 — 版本前缀安装 | `bws i gc@120` | 安装 120.x 最新匹配版 | P0 |
+| INS-04 | 正常 — 使用短别名 | `bws i ff@latest` | 与全称效果一致 | P0 |
+| INS-05 | 正常 — 指定渠道 | `bws i ff@latest -c esr` | 安装 ESR 版本 | P1 |
+| INS-06 | 正常 — 指定平台 | `bws i gc@120 -p mac` | 下载 mac 版本 | P1 |
+| INS-07 | 正常 — 指定架构 | `bws i gc@120 -a arm64` | 下载 arm64 版本 | P1 |
+| INS-08 | 正常 — 从目录安装 | `bws i -d /path/to/dir` | 识别并安装目录中的浏览器 | P1 |
+| INS-09 | 正常 — 从文件安装 | `bws i --from-file /path/to.zip` | 解压并安装 | P1 |
+| INS-10 | 正常 — 强制覆盖 | `bws i ff@101 -f` | 覆盖已存在的同名版本 | P1 |
+| INS-11 | 异常 — 版本不存在 | `bws i ff@999.999` | 报错 "版本未找到" | P1 |
+| INS-12 | 异常 — 磁盘空间不足 | `bws i ff@latest` (空间不足) | 提示确认或报错 | P1 |
+| INS-13 | 异常 — 无网络 | `bws i ff@latest` (断网) | 报错 "网络连接失败" | P1 |
+| INS-14 | 边界 — 重复安装（无 -f） | `bws i ff@101` (已存在) | 提示已存在，跳过或询问 | P1 |
 
 ---
 
@@ -78,15 +78,15 @@
 
 | ID | 场景 | 输入 | 预期 | 优先级 |
 |----|------|------|------|--------|
-| RUN-01 | 正常 — 运行指定版本 | `bws run gc@120` | 启动 Chrome 120 | P0 |
-| RUN-02 | 正常 — 隐身模式 | `bws run gc@120 -i` | 以隐身模式启动 | P1 |
-| RUN-03 | 正常 — 指定 Profile | `bws run gc@120 -p myprofile` | 使用指定 Profile 启动 | P1 |
-| RUN-04 | 正常 — 无头模式 | `bws run gc@120 -H` | 以无头模式启动 | P1 |
-| RUN-05 | 正常 — 新窗口 | `bws run gc@120 -w` | 打开新窗口 | P2 |
-| RUN-06 | 正常 — 传递浏览器参数 | `bws run gc@120 -- https://example.com` | 启动并打开指定 URL | P1 |
-| RUN-07 | 正常 — 试运行 | `bws run gc@120 --dry-run` | 打印启动命令，不执行 | P2 |
-| RUN-08 | 异常 — 版本未安装 | `bws run gc@999` | 报错 "版本未安装" | P1 |
-| RUN-09 | 异常 — 不支持的浏览器 | `bws run safari@latest` | 报错 "不支持的浏览器" | P1 |
+| RUN-01 | 正常 — 运行指定版本 | `bws r gc@120` | 启动 Chrome 120 | P0 |
+| RUN-02 | 正常 — 隐身模式 | `bws r gc@120 -i` | 以隐身模式启动 | P1 |
+| RUN-03 | 正常 — 指定 Profile | `bws r gc@120 -p myprofile` | 使用指定 Profile 启动 | P1 |
+| RUN-04 | 正常 — 无头模式 | `bws r gc@120 -H` | 以无头模式启动 | P1 |
+| RUN-05 | 正常 — 新窗口 | `bws r gc@120 -w` | 打开新窗口 | P2 |
+| RUN-06 | 正常 — 传递浏览器参数 | `bws r gc@120 -- https://example.com` | 启动并打开指定 URL | P1 |
+| RUN-07 | 正常 — 试运行 | `bws r gc@120 --dry-run` | 打印启动命令，不执行 | P2 |
+| RUN-08 | 异常 — 版本未安装 | `bws r gc@999` | 报错 "版本未安装" | P1 |
+| RUN-09 | 异常 — 不支持的浏览器 | `bws r safari@latest` | 报错 "不支持的浏览器" | P1 |
 
 ---
 
@@ -94,11 +94,11 @@
 
 | ID | 场景 | 输入 | 预期 | 优先级 |
 |----|------|------|------|--------|
-| UNI-01 | 正常 — 卸载指定版本 | `bws uninstall ff@101` | 删除该版本文件和配置 | P0 |
+| UNI-01 | 正常 — 卸载指定版本 | `bws rm ff@101` | 删除该版本文件和配置 | P0 |
 | UNI-02 | 正常 — 使用 rm 别名 | `bws rm ff@101` | 与 uninstall 效果一致 | P0 |
 | UNI-03 | 正常 — 使用 remove 别名 | `bws remove ff@101` | 与 uninstall 效果一致 | P0 |
-| UNI-04 | 异常 — 版本未安装 | `bws uninstall ff@999` | 报错 "版本未安装" | P1 |
-| UNI-05 | 异常 — 版本正在运行 | `bws uninstall ff@101` (运行中) | 提示占用或强制卸载 | P2 |
+| UNI-04 | 异常 — 版本未安装 | `bws rm ff@999` | 报错 "版本未安装" | P1 |
+| UNI-05 | 异常 — 版本正在运行 | `bws rm ff@101` (运行中) | 提示占用或强制卸载 | P2 |
 
 ---
 
@@ -106,12 +106,12 @@
 
 | ID | 场景 | 输入 | 预期 | 优先级 |
 |----|------|------|------|--------|
-| IMP-01 | 正常 — 从目录导入 | `bws import /path/to/browsers` | 扫描并导入所有识别到的浏览器 | P0 |
-| IMP-02 | 正常 — flags 前置 | `bws import -f /path/to/browsers` | 正确识别 -f 并导入 | P0 |
-| IMP-03 | 正常 — 强制覆盖 | `bws import /path -f` | 覆盖已存在的版本 | P1 |
-| IMP-04 | 异常 — 目录不存在 | `bws import /not/exist` | 报错 "目录不存在" | P1 |
-| IMP-05 | 异常 — 空目录 | `bws import /empty/dir` | 提示 "未找到可导入的文件" | P1 |
-| IMP-06 | 边界 — 大目录导入 | `bws import /very/large/dir` | 显示流式进度，不卡住 | P1 |
+| IMP-01 | 正常 — 从目录导入 | `bws imp /path/to/browsers` | 扫描并导入所有识别到的浏览器 | P0 |
+| IMP-02 | 正常 — flags 前置 | `bws imp -f /path/to/browsers` | 正确识别 -f 并导入 | P0 |
+| IMP-03 | 正常 — 强制覆盖 | `bws imp /path -f` | 覆盖已存在的版本 | P1 |
+| IMP-04 | 异常 — 目录不存在 | `bws imp /not/exist` | 报错 "目录不存在" | P1 |
+| IMP-05 | 异常 — 空目录 | `bws imp /empty/dir` | 提示 "未找到可导入的文件" | P1 |
+| IMP-06 | 边界 — 大目录导入 | `bws imp /very/large/dir` | 显示流式进度，不卡住 | P1 |
 
 ---
 
@@ -132,10 +132,10 @@
 
 | ID | 场景 | 输入 | 预期 | 优先级 |
 |----|------|------|------|--------|
-| SRV-01 | 首次运行 — 创建配置 | `bws serve`（无 bws-serve.ini） | 创建默认配置文件，提示编辑后重新运行 | P0 |
-| SRV-02 | 正常 — 启动服务 | `bws serve`（已有 bws-serve.ini） | 启动 HTTP 服务，监听配置端口 | P0 |
-| SRV-03 | 异常 — 端口占用 | `bws serve`（端口占用） | 报错 "端口已被占用" | P1 |
-| SRV-04 | 正常 — 指定目录 | `bws serve -d D:\bws-data` | 从指定目录读取配置并启动服务 | P1 |
+| SRV-01 | 首次运行 — 创建配置 | `bws sv`（无 bws-serve.ini） | 创建默认配置文件，提示编辑后重新运行 | P0 |
+| SRV-02 | 正常 — 启动服务 | `bws sv`（已有 bws-serve.ini） | 启动 HTTP 服务，监听配置端口 | P0 |
+| SRV-03 | 异常 — 端口占用 | `bws sv`（端口占用） | 报错 "端口已被占用" | P1 |
+| SRV-04 | 正常 — 指定目录 | `bws sv -d D:\bws-data` | 从指定目录读取配置并启动服务 | P1 |
 
 ---
 
@@ -143,12 +143,12 @@
 
 | ID | 场景 | 输入 | 预期 | 优先级 |
 |----|------|------|------|--------|
-| CFG-01 | 正常 — 查看所有配置 | `bws config show` | 显示所有配置项及当前值 | P0 |
-| CFG-02 | 正常 — 获取配置项 | `bws config get repo-path` | 显示该配置项的值 | P0 |
-| CFG-03 | 正常 — 设置配置项 | `bws config set repo-path D:\browsers` | 保存配置 | P0 |
-| CFG-04 | 正常 — 设置数据源开关 | `bws config set omaha-source false` | 禁用 Omaha 源 | P1 |
-| CFG-05 | 异常 — 配置项不存在 | `bws config get not-exist` | 报错 "未知配置项" | P1 |
-| CFG-06 | 异常 — 值类型错误 | `bws config set disk-threshold abc` | 报错 "值类型错误" | P2 |
+| CFG-01 | 正常 — 查看所有配置 | `bws cfg show` | 显示所有配置项及当前值 | P0 |
+| CFG-02 | 正常 — 获取配置项 | `bws cfg get repo-path` | 显示该配置项的值 | P0 |
+| CFG-03 | 正常 — 设置配置项 | `bws cfg set repo-path D:\browsers` | 保存配置 | P0 |
+| CFG-04 | 正常 — 设置数据源开关 | `bws cfg set omaha-source false` | 禁用 Omaha 源 | P1 |
+| CFG-05 | 异常 — 配置项不存在 | `bws cfg get not-exist` | 报错 "未知配置项" | P1 |
+| CFG-06 | 异常 — 值类型错误 | `bws cfg set disk-threshold abc` | 报错 "值类型错误" | P2 |
 
 ---
 
@@ -156,11 +156,11 @@
 
 | ID | 场景 | 输入 | 预期 | 优先级 |
 |----|------|------|------|--------|
-| PROF-01 | 正常 — 列出 Profile | `bws profile list` | 显示所有 Profile | P1 |
-| PROF-02 | 正常 — 按浏览器筛选 | `bws profile list chrome` | 只显示 chrome 的 Profile | P1 |
-| PROF-03 | 正常 — 查看路径 | `bws profile path` | 显示 Profile 存储路径 | P1 |
-| PROF-04 | 正常 — 重置 Profile | `bws profile reset myprofile` | 清空该 Profile 数据 | P2 |
-| PROF-05 | 异常 — Profile 不存在 | `bws profile reset notexist` | 报错 "Profile 不存在" | P2 |
+| PROF-01 | 正常 — 列出 Profile | `bws pf list` | 显示所有 Profile | P1 |
+| PROF-02 | 正常 — 按浏览器筛选 | `bws pf list chrome` | 只显示 chrome 的 Profile | P1 |
+| PROF-03 | 正常 — 查看路径 | `bws pf path` | 显示 Profile 存储路径 | P1 |
+| PROF-04 | 正常 — 重置 Profile | `bws pf reset myprofile` | 清空该 Profile 数据 | P2 |
+| PROF-05 | 异常 — Profile 不存在 | `bws pf reset notexist` | 报错 "Profile 不存在" | P2 |
 
 ---
 
@@ -168,8 +168,8 @@
 
 | ID | 场景 | 输入 | 预期 | 优先级 |
 |----|------|------|------|--------|
-| CACHE-01 | 正常 — 查看缓存 | `bws cache info` | 显示缓存大小和路径 | P2 |
-| CACHE-02 | 正常 — 清空缓存 | `bws cache clear` | 删除所有缓存文件 | P2 |
+| CACHE-01 | 正常 — 查看缓存 | `bws cc info` | 显示缓存大小和路径 | P2 |
+| CACHE-02 | 正常 — 清空缓存 | `bws cc clear` | 删除所有缓存文件 | P2 |
 
 ---
 
@@ -189,7 +189,7 @@
 
 | ID | 场景 | 输入 | 预期 | 优先级 |
 |----|------|------|------|--------|
-| ALIAS-01 | 正常 — 设置默认版本 | `bws use gc@120` | 设置 gc@120 为默认版本 | P1 |
+| ALIAS-01 | 正常 — 设置默认版本 | `bws u gc@120` | 设置 gc@120 为默认版本 | P1 |
 | ALIAS-02 | 正常 — 列出别名 | `bws alias list` | 显示所有别名 | P2 |
 | ALIAS-03 | 正常 — 添加别名 | `bws alias add stable120 gc@120` | 创建别名 | P2 |
 | ALIAS-04 | 正常 — 删除别名 | `bws alias remove stable120` | 删除别名 | P2 |
@@ -200,9 +200,9 @@
 
 | ID | 场景 | 输入 | 预期 | 优先级 |
 |----|------|------|------|--------|
-| DL-01 | 正常 — 下载到指定路径 | `bws download ff@101 -o /output` | 下载安装包到指定目录 | P1 |
-| DL-02 | 正常 — 默认路径下载 | `bws download ff@101` | 下载到仓库目录 | P1 |
-| DL-03 | 异常 — 版本不存在 | `bws download ff@999` | 报错 "版本未找到" | P1 |
+| DL-01 | 正常 — 下载到指定路径 | `bws dl ff@101 -o /output` | 下载安装包到指定目录 | P1 |
+| DL-02 | 正常 — 默认路径下载 | `bws dl ff@101` | 下载到仓库目录 | P1 |
+| DL-03 | 异常 — 版本不存在 | `bws dl ff@999` | 报错 "版本未找到" | P1 |
 
 ---
 
@@ -210,8 +210,8 @@
 
 | ID | 场景 | 输入 | 预期 | 优先级 |
 |----|------|------|------|--------|
-| INFO-01 | 正常 — 查看版本信息 | `bws info gc@120` | 显示该版本的详细信息 | P2 |
-| DOC-01 | 正常 — 系统诊断 | `bws doctor` | 检查环境并输出诊断报告 | P2 |
+| INFO-01 | 正常 — 查看版本信息 | `bws show gc@120` | 显示该版本的详细信息 | P2 |
+| DOC-01 | 正常 — 系统诊断 | `bws dt` | 检查环境并输出诊断报告 | P2 |
 
 ---
 
@@ -237,7 +237,7 @@
 | SRC-03 | 正常 — Omaha 源查询 Chromium | `bws ls -R cm` | 从 Omaha 获取 Chromium 版本 | P0 |
 | SRC-04 | 正常 — Firefox 源 | `bws ls -R ff` | 从 Mozilla API 获取 Firefox 版本 | P0 |
 | SRC-05 | 正常 — 按浏览器过滤源 | `bws ls -R ff` | 不查询 Omaha 源（Firefox 不支持） | P0 |
-| SRC-06 | 正常 — 源开关生效 | `bws config set omaha-source false` | 查询时不再访问 Omaha 源 | P1 |
+| SRC-06 | 正常 — 源开关生效 | `bws cfg set omaha-source false` | 查询时不再访问 Omaha 源 | P1 |
 | SRC-07 | 边界 — 所有源禁用 | `bws ls -R gc` (所有源禁用) | 提示 "没有可用的远程源" | P1 |
 
 ---
@@ -267,7 +267,7 @@ bws ls -R ff -n 3
 bws ls -R gc -n 3
 
 # 配置
-bws config show
+bws cfg show
 bws repo path
 
 echo "=== 冒烟测试通过 ==="
@@ -288,14 +288,14 @@ bws --version
 bws --help
 bws help
 bws help ls
-bws help install
+bws help i
 bws help sources
 bws help faq
 
 # 2. 配置管理
-bws config show
-bws config get repo-path
-bws config set disk-threshold 1073741824
+bws cfg show
+bws cfg get repo-path
+bws cfg set disk-threshold 1073741824
 
 # 3. 仓库管理
 bws repo path
@@ -309,10 +309,10 @@ bws ls -R ff -c esr -n 5
 bws ls -R ff@101
 
 # 5. 安装（下载小版本测试）
-# bws install ff@101.0.1
+# bws i ff@101.0.1
 
 # 6. serve 配置
-bws serve
+bws sv
 
 echo "=== 完整测试通过 ==="
 ```

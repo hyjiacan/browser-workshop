@@ -1,6 +1,6 @@
-# Serve 自动同步
+﻿# Serve 自动同步
 
-bws serve 支持自动从在线源同步浏览器安装包到本地 `packages/` 目录，实现离线源的自动更新。
+bws sv 支持自动从在线源同步浏览器安装包到本地 `packages/` 目录，实现离线源的自动更新。
 
 ## 功能说明
 
@@ -37,7 +37,7 @@ sync-interval = 24h
 sync-channels = stable
 ```
 
-然后运行 `bws serve` 启动服务。
+然后运行 `bws sv` 启动服务。
 
 默认配置：
 - 同步间隔：24 小时（每天一次）
@@ -160,7 +160,7 @@ sync-browsers = chrome,firefox
 sync-channels = stable
 ```
 
-配置完成后，运行 `bws serve` 启动服务。
+配置完成后，运行 `bws sv` 启动服务。
 
 ## Web 页面手动触发
 

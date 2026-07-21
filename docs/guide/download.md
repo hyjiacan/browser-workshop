@@ -1,4 +1,4 @@
-# 远程下载
+﻿# 远程下载
 
 bws 支持从远程源下载浏览器版本，包括在线源和离线源两种方式。本章详细介绍远程下载的配置和使用方法。
 
@@ -22,9 +22,9 @@ bws 支持两种类型的远程源：
 
 ### 离线源
 
-离线源是通过 `bws serve` 搭建的本地/局域网分发服务，提供浏览器版本的内网分发。
+离线源是通过 `bws sv` 搭建的本地/局域网分发服务，提供浏览器版本的内网分发。
 
-- 由 `bws serve` 命令提供服务
+- 由 `bws sv` 命令提供服务
 - 存储在本地 `packages/` 目录中
 - 支持自动同步在线源的版本
 - 适合团队内部或离线环境使用
@@ -53,7 +53,7 @@ bws 采用固定的源优先级策略：
 
 ### 优先级示例
 
-假设配置了离线源 `http://server:8080`，执行 `bws install chrome@120` 时：
+假设配置了离线源 `http://server:8080`，执行 `bws i chrome@120` 时：
 
 1. 先查询 `http://server:8080` 是否有 chrome 120 版本
 2. 如果有，从离线源下载（速度快）
@@ -62,41 +62,41 @@ bws 采用固定的源优先级策略：
 
 ## 配置离线源
 
-使用 `bws config` 命令配置离线源地址。
+使用 `bws cfg` 命令配置离线源地址。
 
 ### 设置离线源
 
 ```bash
-bws config set source http://server:8080
+bws cfg set source http://server:8080
 ```
 
 也可以使用 `remote-source` 配置项（与 `source` 等效）：
 
 ```bash
-bws config set remote-source http://server:8080
+bws cfg set remote-source http://server:8080
 ```
 
 ### 查看当前源
 
 ```bash
-bws config get source
+bws cfg get source
 ```
 
 ### 清除离线源配置
 
 ```bash
-bws config set source ""
+bws cfg set source ""
 ```
 
 清除后将只使用在线源。
 
 ### 客户端配置步骤
 
-1. 确保服务端已启动 `bws serve`
+1. 确保服务端已启动 `bws sv`
 2. 在客户端执行配置命令：
 
 ```bash
-bws config set source http://server-ip:8080
+bws cfg set source http://server-ip:8080
 ```
 
 3. 验证配置是否生效：
@@ -165,18 +165,18 @@ chrome 的可用版本：
 
 ```bash
 # 安装最新稳定版
-bws install chrome@latest
+bws i chrome@latest
 
 # 安装指定渠道的最新版
-bws install chrome@beta
-bws install chrome@dev
-bws install chrome@canary
+bws i chrome@beta
+bws i chrome@dev
+bws i chrome@canary
 
 # 安装指定完整版本
-bws install chrome@120.0.6478.114
+bws i chrome@120.0.6478.114
 
 # 安装部分版本号（自动匹配最新的匹配版本）
-bws install chrome@85
+bws i chrome@85
 ```
 
 ### 安装过程
@@ -192,9 +192,9 @@ bws install chrome@85
 ### 使用短别名
 
 ```bash
-bws install gc@latest     # chrome
-bws install ff@beta       # firefox
-bws install cm@120        # chromium
+bws i gc@latest     # chrome
+bws i ff@beta       # firefox
+bws i cm@120        # chromium
 ```
 
 ## 仅下载不安装
@@ -205,13 +205,13 @@ bws install cm@120        # chromium
 
 ```bash
 # 下载最新稳定版
-bws download chrome@latest
+bws dl chrome@latest
 
 # 下载指定版本
-bws download chrome@120.0.6478.114
+bws dl chrome@120.0.6478.114
 
 # 下载部分版本号
-bws download chrome@85
+bws dl chrome@85
 ```
 
 ### 下载文件位置
@@ -239,4 +239,4 @@ bws-data/
 - 下载安装包用于其他用途
 - 批量下载用于搭建离线源
 
-下载后的安装包可以通过 `bws install -f` 命令进行本地安装。
+下载后的安装包可以通过 `bws i -f` 命令进行本地安装。

@@ -45,9 +45,9 @@ func NewLsCommand() *Command {
 		Description: "列出已安装或远程可用的浏览器版本",
 		Usage:       "bws list [浏览器[@版本前缀]] [选项]",
 		Examples: []string{
-			"list",
-			"list chrome",
-			"list chrome@79",
+			"ls",
+			"ls chrome",
+			"ls chrome@79",
 			"ls chrome@79.0",
 			"ls --all",
 			"ls --no-system",
@@ -138,7 +138,7 @@ func runLs(ctx *Context, args []string) error {
 		if spec.Version != "" {
 			ctx.Printf("筛选条件: %s@%s\n", spec.Browser, spec.Version)
 		}
-		ctx.Println("使用 'bws install <浏览器@版本>' 安装一个版本。")
+		ctx.Println("使用 'bws i <浏览器@版本>' 安装一个版本。")
 		return nil
 	}
 
@@ -267,13 +267,13 @@ func runRemoteQuery(ctx *Context, args []string) error {
 		ctx.Printf("没有为 %s 配置可用的远程源。\n", spec.Browser)
 		if ctx.Config != nil {
 			if (spec.Browser == "chrome" || spec.Browser == "chromium") && !ctx.Config.IsOmahaSourceEnabled() {
-				ctx.Println("提示: Omaha 源已禁用，使用 'bws config set source-omaha true' 启用。")
+				ctx.Println("提示: Omaha 源已禁用，使用 'bws cfg set source-omaha true' 启用。")
 			}
 			if spec.Browser == "firefox" && !ctx.Config.IsFirefoxFTPEnabled() {
-				ctx.Println("提示: Firefox 源已禁用，使用 'bws config set source-firefox-ftp true' 启用。")
+				ctx.Println("提示: Firefox 源已禁用，使用 'bws cfg set source-firefox-ftp true' 启用。")
 			}
 			if !ctx.Config.IsServeSourceEnabled() {
-				ctx.Println("提示: Serve 源已禁用，使用 'bws config set source-serve true' 启用。")
+				ctx.Println("提示: Serve 源已禁用，使用 'bws cfg set source-serve true' 启用。")
 			}
 		}
 		return nil
@@ -409,7 +409,7 @@ func runRemoteQuery(ctx *Context, args []string) error {
 		ctx.Printf("\n  已安装 %d 个版本。\n", installedCount)
 	}
 
-	ctx.Printf("\n  安装命令: bws install %s@<版本>\n", spec.Browser)
+	ctx.Printf("\n  安装命令: bws i %s@<版本>\n", spec.Browser)
 	return nil
 }
 
@@ -420,13 +420,13 @@ func NewRunCommand() *Command {
 		Name:        "run",
 		Aliases:     []string{"r", "open"},
 		Description: "运行指定版本的浏览器",
-		Usage:       "bws run <浏览器@版本> [选项] [-- <浏览器参数>]",
+		Usage:       "bws r <浏览器@版本> [选项] [-- <浏览器参数>]",
 		Examples: []string{
-			"run chrome@120",
-			"run firefox -- https://example.com",
-			"run chrome@latest --headless",
-			"run chrome --native",
-			"run chrome@system",
+			"r chrome@120",
+			"r firefox -- https://example.com",
+			"r chrome@latest --headless",
+			"r chrome --native",
+			"r chrome@system",
 		},
 		Flags: []*Flag{
 			{Name: "headless", Short: "H", Usage: "无头模式运行", HasValue: false, Default: "false"},
@@ -473,7 +473,7 @@ func runRun(ctx *Context, args []string) error {
 	}
 
 	if len(positional) == 0 {
-		return fmt.Errorf("请指定浏览器版本，例如 'bws run chrome@120'")
+		return fmt.Errorf("请指定浏览器版本，例如 'bws r chrome@120'")
 	}
 
 	// Parse browser@version
@@ -547,13 +547,13 @@ func NewInstallCommand() *Command {
 		Name:        "install",
 		Aliases:     []string{"i"},
 		Description: "安装指定版本的浏览器",
-		Usage:       "bws install <浏览器@版本> [选项]",
+		Usage:       "bws i <浏览器@版本> [选项]",
 		Examples: []string{
-			"install chrome@120",
-			"install firefox@latest",
-			"install -d /path/to/browsers",
-			"install -f /path/to/installer.exe chrome@120",
-			"install -d /path/to/browser-dir chrome@120",
+			"i chrome@120",
+			"i firefox@latest",
+			"i -d /path/to/browsers",
+			"i -f /path/to/installer.exe chrome@120",
+			"i -d /path/to/browser-dir chrome@120",
 		},
 		Flags: []*Flag{
 			{Name: "from-dir", Short: "d", Usage: "从本地目录安装", HasValue: true, Default: ""},
@@ -584,7 +584,7 @@ func runInstall(ctx *Context, args []string) error {
 	channel := flagVals["channel"]
 
 	if len(positional) == 0 && fromDir == "" && fromFile == "" {
-		return fmt.Errorf("请指定要安装的版本，例如 'bws install chrome@120'")
+		return fmt.Errorf("请指定要安装的版本，例如 'bws i chrome@120'")
 	}
 
 	spec := browserVersionSpec{Browser: ctx.Config.DefaultBrowser(), Version: "latest", IsAlias: true}
@@ -743,10 +743,10 @@ func NewImportCommand() *Command {
 		Name:        "import",
 		Aliases:     []string{"imp"},
 		Description: "从目录导入浏览器版本（自动检测）",
-		Usage:       "bws import <目录> [选项]",
+		Usage:       "bws imp <目录> [选项]",
 		Examples: []string{
-			"import /path/to/browsers",
-			"import /path/to/browsers -f",
+			"imp /path/to/browsers",
+			"imp /path/to/browsers -f",
 		},
 		Flags: []*Flag{
 			{Name: "force", Short: "f", Usage: "已安装时强制重新安装", HasValue: false, Default: "false"},
@@ -764,7 +764,7 @@ func runImport(ctx *Context, args []string) error {
 	}
 
 	if len(positional) == 0 {
-		return fmt.Errorf("请指定要导入的目录，例如 'bws import /path/to/browsers'")
+		return fmt.Errorf("请指定要导入的目录，例如 'bws imp /path/to/browsers'")
 	}
 
 	dir := positional[0]
@@ -837,9 +837,9 @@ func NewUninstallCommand() *Command {
 		Name:        "uninstall",
 		Aliases:     []string{"rm", "remove"},
 		Description: "卸载指定版本的浏览器",
-		Usage:       "bws uninstall <浏览器@版本>",
+		Usage:       "bws rm <浏览器@版本>",
 		Examples: []string{
-			"uninstall chrome@120",
+			"rm chrome@120",
 			"rm firefox@121",
 		},
 		Run: runUninstall,
@@ -874,11 +874,11 @@ func NewUseCommand() *Command {
 		Name:        "use",
 		Aliases:     []string{"u"},
 		Description: "设置默认浏览器版本",
-		Usage:       "bws use <浏览器@版本>",
+		Usage:       "bws u <浏览器@版本>",
 		Examples: []string{
-			"use chrome@120",
-			"use firefox@latest",
-			"use chrome@system",
+			"u chrome@120",
+			"u firefox@latest",
+			"u chrome@system",
 		},
 		Run: runUse,
 	}
@@ -1158,10 +1158,10 @@ func NewInfoCommand() *Command {
 		Name:        "info",
 		Aliases:     []string{"show"},
 		Description: "显示浏览器版本的详细信息",
-		Usage:       "bws info <浏览器@版本>",
+		Usage:       "bws show <浏览器@版本>",
 		Examples: []string{
-			"info chrome@120",
-			"info chrome@latest",
+			"show chrome@120",
+			"show chrome@latest",
 		},
 		Run: runInfo,
 	}
@@ -1169,7 +1169,7 @@ func NewInfoCommand() *Command {
 
 func runInfo(ctx *Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("请指定版本，例如 'bws info chrome@120'")
+		return fmt.Errorf("请指定版本，例如 'bws show chrome@120'")
 	}
 
 	spec := parseBrowserVersion(args[0], ctx.Config.DefaultBrowser())
@@ -1219,7 +1219,7 @@ func runInfo(ctx *Context, args []string) error {
 			if versionInfo.DownloadURL != "" {
 				ctx.Printf("  下载链接:     %s\n", versionInfo.DownloadURL)
 			}
-			ctx.Printf("\n  未安装。使用 'bws install %s@%s' 进行安装。\n", spec.Browser, versionInfo.Version)
+			ctx.Printf("\n  未安装。使用 'bws i %s@%s' 进行安装。\n", spec.Browser, versionInfo.Version)
 			return nil
 		}
 	}
@@ -1340,11 +1340,11 @@ func NewDownloadCommand() *Command {
 		Name:        "download",
 		Aliases:     []string{"dl"},
 		Description: "下载浏览器版本但不安装",
-		Usage:       "bws download <浏览器@版本> [选项]",
+		Usage:       "bws dl <浏览器@版本> [选项]",
 		Examples: []string{
-			"download chrome@120",
-			"download chrome@latest --output ~/downloads",
-			"download chrome@beta --channel beta",
+			"dl chrome@120",
+			"dl chrome@latest --output ~/downloads",
+			"dl chrome@beta --channel beta",
 		},
 		Flags: []*Flag{
 			{Name: "output", Short: "o", Usage: "输出目录", HasValue: true, Default: ""},
@@ -1360,7 +1360,7 @@ func runDownload(ctx *Context, args []string) error {
 	}
 
 	if len(args) == 0 {
-		return fmt.Errorf("请指定要下载的版本，例如 'bws download chrome@120'")
+		return fmt.Errorf("请指定要下载的版本，例如 'bws dl chrome@120'")
 	}
 
 	spec := parseBrowserVersion(args[0], ctx.Config.DefaultBrowser())
@@ -1459,7 +1459,7 @@ func NewConfigCommand() *Command {
 		Name:        "config",
 		Aliases:     []string{"cfg"},
 		Description: "管理 bws 配置",
-		Usage:       "bws config <命令> [选项]",
+		Usage:       "bws cfg <命令> [选项]",
 		SubCommands: []*Command{
 			NewConfigShowCommand(),
 			NewConfigGetCommand(),
@@ -1507,11 +1507,11 @@ func NewConfigGetCommand() *Command {
 	return &Command{
 		Name:        "get",
 		Description: "获取配置项的值",
-		Usage:       "bws config get <键名>",
+		Usage:       "bws cfg get <键名>",
 		Examples: []string{
-			"config get default-browser",
-			"config get log-level",
-			"config get data-dir",
+			"cfg get default-browser",
+			"cfg get log-level",
+			"cfg get data-dir",
 		},
 		Run: runConfigGet,
 	}
@@ -1519,7 +1519,7 @@ func NewConfigGetCommand() *Command {
 
 func runConfigGet(ctx *Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("请指定配置键名。使用 'bws config show' 查看所有配置项。")
+		return fmt.Errorf("请指定配置键名。使用 'bws cfg show' 查看所有配置项。")
 	}
 
 	key := strings.ToLower(args[0])
@@ -1557,7 +1557,7 @@ func runConfigGet(ctx *Context, args []string) error {
 			ctx.Println(alias)
 			return nil
 		}
-		return fmt.Errorf("未知的配置键: %s。使用 'bws config show' 查看可用配置项。", args[0])
+		return fmt.Errorf("未知的配置键: %s。使用 'bws cfg show' 查看可用配置项。", args[0])
 	}
 	return nil
 }
@@ -1566,12 +1566,12 @@ func NewConfigSetCommand() *Command {
 	return &Command{
 		Name:        "set",
 		Description: "设置配置项的值",
-		Usage:       "bws config set <键名> <值>",
+		Usage:       "bws cfg set <键名> <值>",
 		Examples: []string{
-			"config set default-browser firefox",
-			"config set log-level debug",
-			"config set data-dir /path/to/data",
-			"config set repo-path /path/to/repo",
+			"cfg set default-browser firefox",
+			"cfg set log-level debug",
+			"cfg set data-dir /path/to/data",
+			"cfg set repo-path /path/to/repo",
 		},
 		Run: runConfigSet,
 	}
@@ -1579,7 +1579,7 @@ func NewConfigSetCommand() *Command {
 
 func runConfigSet(ctx *Context, args []string) error {
 	if len(args) < 2 {
-		return fmt.Errorf("用法: bws config set <键名> <值>。使用 'bws config show' 查看可用配置项。")
+		return fmt.Errorf("用法: bws cfg set <键名> <值>。使用 'bws cfg show' 查看可用配置项。")
 	}
 
 	key := strings.ToLower(args[0])
@@ -1712,7 +1712,7 @@ func NewDoctorCommand() *Command {
 		Name:        "doctor",
 		Aliases:     []string{"dt"},
 		Description: "检查系统健康状态并诊断问题",
-		Usage:       "bws doctor",
+		Usage:       "bws dt",
 		Run:         runDoctor,
 	}
 }
@@ -1798,7 +1798,7 @@ func NewCacheCommand() *Command {
 		Name:        "cache",
 		Aliases:     []string{"cc"},
 		Description: "管理下载缓存",
-		Usage:       "bws cache <命令>",
+		Usage:       "bws cc <命令>",
 		SubCommands: []*Command{
 			NewCacheClearCommand(),
 			NewCacheInfoCommand(),
@@ -1844,7 +1844,7 @@ func NewProfileCommand() *Command {
 		Name:        "profile",
 		Aliases:     []string{"pf"},
 		Description: "管理浏览器 profile（数据目录）",
-		Usage:       "bws profile <command> [options]",
+		Usage:       "bws pf <command> [options]",
 		SubCommands: []*Command{
 			NewProfileListCommand(),
 			NewProfilePathCommand(),
@@ -1859,11 +1859,11 @@ func NewProfileListCommand() *Command {
 		Name:        "list",
 		Aliases:     []string{"ls"},
 		Description: "列出指定浏览器的所有 profile",
-		Usage:       "bws profile list [browser] [options]",
+		Usage:       "bws pf list [browser] [options]",
 		Examples: []string{
-			"profile list",
-			"profile list chrome",
-			"profile list --browser firefox",
+			"pf list",
+			"pf list chrome",
+			"pf list --browser firefox",
 		},
 		Flags: []*Flag{
 			{Name: "browser", Short: "b", Usage: "指定浏览器", HasValue: true, Default: ""},
@@ -1899,7 +1899,7 @@ func runProfileList(ctx *Context, args []string) error {
 	if len(profiles) == 0 {
 		ctx.Println("  暂无 profile。")
 		ctx.Println()
-		ctx.Printf("  使用 'bws run %s --profile <名称>' 创建命名 profile。\n", browser)
+		ctx.Printf("  使用 'bws r %s --profile <名称>' 创建命名 profile。\n", browser)
 		return nil
 	}
 
@@ -1938,11 +1938,11 @@ func NewProfilePathCommand() *Command {
 	return &Command{
 		Name:        "path",
 		Description: "显示 profile 目录路径",
-		Usage:       "bws profile path [browser] [profileName]",
+		Usage:       "bws pf path [browser] [profileName]",
 		Examples: []string{
-			"profile path",
-			"profile path chrome",
-			"profile path chrome my-profile",
+			"pf path",
+			"pf path chrome",
+			"pf path chrome my-profile",
 		},
 		Run: runProfilePath,
 	}
@@ -1981,11 +1981,11 @@ func NewProfileResetCommand() *Command {
 	return &Command{
 		Name:        "reset",
 		Description: "重置（清除）指定的 profile 数据",
-		Usage:       "bws profile reset <browser@version> [profileName] [options]",
+		Usage:       "bws pf reset <browser@version> [profileName] [options]",
 		Examples: []string{
-			"profile reset chrome@120",
-			"profile reset chrome@latest my-profile",
-			"profile reset chrome@120 --force",
+			"pf reset chrome@120",
+			"pf reset chrome@latest my-profile",
+			"pf reset chrome@120 --force",
 		},
 		Flags: []*Flag{
 			{Name: "force", Short: "f", Usage: "跳过确认直接重置", HasValue: false, Default: "false"},
@@ -2003,7 +2003,7 @@ func runProfileReset(ctx *Context, args []string) error {
 	}
 
 	if len(positional) == 0 {
-		return fmt.Errorf("请指定浏览器版本，例如 'bws profile reset chrome@120'")
+		return fmt.Errorf("请指定浏览器版本，例如 'bws pf reset chrome@120'")
 	}
 
 	spec := parseBrowserVersion(positional[0], ctx.Config.DefaultBrowser())
@@ -2069,11 +2069,11 @@ func NewProfileCleanCommand() *Command {
 	return &Command{
 		Name:        "clean",
 		Description: "清理已卸载版本的孤立 profile",
-		Usage:       "bws profile clean [browser] [options]",
+		Usage:       "bws pf clean [browser] [options]",
 		Examples: []string{
-			"profile clean",
-			"profile clean chrome",
-			"profile clean --force",
+			"pf clean",
+			"pf clean chrome",
+			"pf clean --force",
 		},
 		Flags: []*Flag{
 			{Name: "force", Short: "f", Usage: "直接执行清理，不提示确认", HasValue: false, Default: "false"},
@@ -2166,10 +2166,10 @@ func NewServeCommand() *Command {
 		Name:        "serve",
 		Aliases:     []string{"sv", "server"},
 		Description: "启动 HTTP 服务以提供浏览器版本下载",
-		Usage:       "bws serve [选项]",
+		Usage:       "bws sv [选项]",
 		Examples: []string{
-			"serve",
-			"serve -d /path/to/data",
+			"sv",
+			"sv -d /path/to/data",
 		},
 		Flags: []*Flag{
 			{Name: "dir", Short: "d", Usage: "基础目录（包含 packages/ 和 bin/ 子目录，默认: 程序所在目录）", HasValue: true, Default: ""},
@@ -2200,7 +2200,7 @@ func runServe(ctx *Context, args []string) error {
 
 	if isNew {
 		ctx.Printf("配置文件已创建: %s\n", configPath)
-		ctx.Printf("请编辑配置文件，然后重新运行 bws serve\n\n")
+		ctx.Printf("请编辑配置文件，然后重新运行 bws sv\n\n")
 		ctx.Printf("配置项说明:\n")
 		ctx.Printf("  host          = 监听地址，默认 0.0.0.0\n")
 		ctx.Printf("  port          = 监听端口，默认 8080\n")
@@ -2306,7 +2306,7 @@ func runHelp(ctx *Context, args []string) error {
 			fmt.Printf("  %-10s  %s\n", t.Name, t.Description)
 		}
 		fmt.Println()
-		fmt.Println("Use: bws help <topic> to view detailed help.")
+		fmt.Println("使用: bws help <topic> 查看详细帮助。")
 		return nil
 	}
 

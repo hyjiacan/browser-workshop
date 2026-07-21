@@ -84,7 +84,7 @@ func (m *Manager) Launch(opts Options) (*Process, error) {
 	// Find all matching versions and print the list to stdout
 	matches, err := m.installer.FindMatchingVersions(opts.Browser, opts.Version)
 	if err != nil {
-		return nil, fmt.Errorf("resolving version %s@%s: %w. Install it first with 'bws install %s@%s'", opts.Browser, opts.Version, err, opts.Browser, opts.Version)
+		return nil, fmt.Errorf("resolving version %s@%s: %w. Install it first with 'bws i %s@%s'", opts.Browser, opts.Version, err, opts.Browser, opts.Version)
 	}
 
 	// Print matching versions to stdout (user-visible output)
@@ -110,7 +110,7 @@ func (m *Manager) Launch(opts Options) (*Process, error) {
 	// Check if installed (locally or system)
 	isSystem := m.installer.IsSystemVersion(opts.Browser, resolvedVersion)
 	if !m.installer.IsInstalled(opts.Browser, resolvedVersion) && !isSystem {
-		return nil, fmt.Errorf("%s@%s 未安装。请先执行 'bws install %s@%s'", opts.Browser, resolvedVersion, opts.Browser, opts.Version)
+		return nil, fmt.Errorf("%s@%s 未安装。请先执行 'bws i %s@%s'", opts.Browser, resolvedVersion, opts.Browser, opts.Version)
 	}
 
 	// Get browser descriptor

@@ -1,4 +1,4 @@
-# 运行浏览器
+﻿# 运行浏览器
 
 bws 的 `run` 命令用于启动指定版本的浏览器，支持多种运行模式和参数选项。本章详细介绍运行浏览器的各种用法。
 
@@ -8,10 +8,10 @@ bws 的 `run` 命令用于启动指定版本的浏览器，支持多种运行模
 
 ```bash
 # 运行指定完整版本
-bws run chrome@120.0.6099.109
+bws r chrome@120.0.6099.109
 
 # 运行部分版本号（自动选择最新匹配版本）
-bws run chrome@120
+bws r chrome@120
 ```
 
 ### 运行系统版本
@@ -19,15 +19,15 @@ bws run chrome@120
 运行系统已安装的浏览器版本：
 
 ```bash
-bws run chrome@system
+bws r chrome@system
 ```
 
 ### 运行默认版本
 
-运行通过 `bws use` 设置的默认版本：
+运行通过 `bws u` 设置的默认版本：
 
 ```bash
-bws run chrome
+bws r chrome
 ```
 
 如果没有设置默认版本，会提示错误。
@@ -35,9 +35,9 @@ bws run chrome
 ### 使用短别名
 
 ```bash
-bws run gc@120       # chrome
-bws run ff           # firefox 默认版本
-bws run cm@latest    # chromium 最新版
+bws r gc@120       # chrome
+bws r ff           # firefox 默认版本
+bws r cm@latest    # chromium 最新版
 ```
 
 ### 打开指定 URL
@@ -45,8 +45,8 @@ bws run cm@latest    # chromium 最新版
 在运行浏览器时直接打开指定网址：
 
 ```bash
-bws run chrome@120 https://example.com
-bws run gc https://github.com
+bws r chrome@120 https://example.com
+bws r gc https://github.com
 ```
 
 ## 无头模式
@@ -54,8 +54,8 @@ bws run gc https://github.com
 使用 `-H` 或 `--headless` 参数以无头模式运行浏览器，适用于自动化测试和脚本场景。
 
 ```bash
-bws run chrome@120 -H
-bws run chrome@120 --headless
+bws r chrome@120 -H
+bws r chrome@120 --headless
 ```
 
 无头模式下浏览器不会显示图形界面，所有操作在后台完成。常用于：
@@ -70,8 +70,8 @@ bws run chrome@120 --headless
 使用 `-i` 或 `--incognito` 参数以隐身/无痕模式运行浏览器。
 
 ```bash
-bws run chrome@120 -i
-bws run chrome@120 --incognito
+bws r chrome@120 -i
+bws r chrome@120 --incognito
 ```
 
 隐身模式的特点：
@@ -86,8 +86,8 @@ bws run chrome@120 --incognito
 使用 `-w` 或 `--new-window` 参数强制在新窗口中打开浏览器。
 
 ```bash
-bws run chrome@120 -w
-bws run chrome@120 --new-window
+bws r chrome@120 -w
+bws r chrome@120 --new-window
 ```
 
 即使该版本的浏览器已经在运行，也会打开一个新的窗口。
@@ -97,8 +97,8 @@ bws run chrome@120 --new-window
 使用 `-p` 或 `--profile` 参数指定命名 Profile 运行浏览器。
 
 ```bash
-bws run chrome@120 -p myprofile
-bws run chrome@120 --profile work
+bws r chrome@120 -p myprofile
+bws r chrome@120 --profile work
 ```
 
 ### 命名 Profile 的特点
@@ -111,13 +111,13 @@ bws run chrome@120 --profile work
 
 ```bash
 # 工作用 Profile
-bws run chrome@120 -p work
+bws r chrome@120 -p work
 
 # 同一个 work Profile 也可以在 121 版本上使用
-bws run chrome@121 -p work
+bws r chrome@121 -p work
 
 # 测试用 Profile
-bws run chrome@120 -p test
+bws r chrome@120 -p test
 ```
 
 更多 Profile 管理功能请参考 [Profile 管理](./profile.md) 章节。
@@ -127,7 +127,7 @@ bws run chrome@120 -p test
 使用 `--native` 参数以原生模式运行浏览器，即不使用 bws 管理的 Profile，直接使用系统默认的用户数据目录。
 
 ```bash
-bws run chrome@120 --native
+bws r chrome@120 --native
 ```
 
 原生模式的特点：
@@ -144,8 +144,8 @@ bws run chrome@120 --native
 使用 `-d` 或 `--detach` 参数让浏览器在后台运行，bws 命令立即返回，不等待浏览器进程结束。
 
 ```bash
-bws run chrome@120 -d
-bws run chrome@120 --detach
+bws r chrome@120 -d
+bws r chrome@120 --detach
 ```
 
 ### 使用场景
@@ -154,14 +154,14 @@ bws run chrome@120 --detach
 - 不需要等待浏览器关闭
 - 自动化脚本中的后台服务
 
-默认情况下（不带 `-d`），`bws run` 命令会等待浏览器进程结束后才返回。
+默认情况下（不带 `-d`），`bws r` 命令会等待浏览器进程结束后才返回。
 
 ## 试运行
 
 使用 `--dry-run` 参数进行试运行，只显示将要执行的命令而不实际启动浏览器。
 
 ```bash
-bws run chrome@120 --dry-run
+bws r chrome@120 --dry-run
 ```
 
 ### 输出示例
@@ -183,9 +183,9 @@ C:\bws\bws-data\versions\chrome\120.0.6099.109\chrome.exe --user-data-dir=C:\bws
 使用 `--` 分隔符，可以向浏览器传递原生命令行参数。`--` 之后的所有参数都会原样传递给浏览器。
 
 ```bash
-bws run chrome@120 -- --disable-gpu --no-sandbox
-bws run chrome@120 -i -- --window-size=1920,1080
-bws run ff -- --private-window
+bws r chrome@120 -- --disable-gpu --no-sandbox
+bws r chrome@120 -i -- --window-size=1920,1080
+bws r ff -- --private-window
 ```
 
 ### 常用原生参数示例
@@ -194,32 +194,32 @@ Chrome 常用参数：
 
 ```bash
 # 禁用 GPU 加速
-bws run chrome@120 -- --disable-gpu
+bws r chrome@120 -- --disable-gpu
 
 # 禁用沙箱
-bws run chrome@120 -- --no-sandbox
+bws r chrome@120 -- --no-sandbox
 
 # 指定窗口大小
-bws run chrome@120 -- --window-size=1920,1080
+bws r chrome@120 -- --window-size=1920,1080
 
 # 指定启动位置
-bws run chrome@120 -- --window-position=0,0
+bws r chrome@120 -- --window-position=0,0
 
 # 禁用扩展
-bws run chrome@120 -- --disable-extensions
+bws r chrome@120 -- --disable-extensions
 
 # 启动时最大化
-bws run chrome@120 -- --start-maximized
+bws r chrome@120 -- --start-maximized
 ```
 
 Firefox 常用参数：
 
 ```bash
 # 隐私窗口
-bws run firefox -- --private-window
+bws r firefox -- --private-window
 
 # 安全模式
-bws run firefox -- --safe-mode
+bws r firefox -- --safe-mode
 ```
 
 ## 部分版本号匹配
@@ -256,11 +256,11 @@ bws run firefox -- --safe-mode
 
 ```bash
 # 无头模式 + 命名 Profile + 原生参数
-bws run chrome@120 -H -p test -- --disable-gpu --no-sandbox
+bws r chrome@120 -H -p test -- --disable-gpu --no-sandbox
 
 # 隐身模式 + 新窗口 + 打开 URL
-bws run chrome@120 -i -w https://example.com
+bws r chrome@120 -i -w https://example.com
 
 # 后台运行 + 原生模式
-bws run chrome@system -d --native
+bws r chrome@system -d --native
 ```

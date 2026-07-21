@@ -1,10 +1,10 @@
-# Serve 服务
+﻿# Serve 服务
 
-`bws serve` 命令可以将本地的浏览器安装包通过 HTTP 提供给其他客户端下载，适用于团队内部搭建离线分发服务。
+`bws sv` 命令可以将本地的浏览器安装包通过 HTTP 提供给其他客户端下载，适用于团队内部搭建离线分发服务。
 
 ## 概述
 
-bws serve 是一个轻量级的 HTTP 服务，主要功能包括：
+bws sv 是一个轻量级的 HTTP 服务，主要功能包括：
 
 - **浏览器版本分发**：将本地存储的浏览器安装包提供给局域网内的客户端下载
 - **文件清单管理**：自动扫描目录、识别文件、生成清单和校验和
@@ -22,18 +22,18 @@ bws serve 是一个轻量级的 HTTP 服务，主要功能包括：
 
 ## 快速开始
 
-serve 的配置通过 `bws-serve.ini` 文件管理。首次运行 `bws serve` 时会自动创建默认配置文件，编辑后重新运行即可启动服务。
+serve 的配置通过 `bws-serve.ini` 文件管理。首次运行 `bws sv` 时会自动创建默认配置文件，编辑后重新运行即可启动服务。
 
 ### 基本用法
 
 ```bash
 # 1. 首次运行（自动创建配置文件）
-bws serve
+bws sv
 # 输出: 配置文件已创建: D:\bws\bws-serve.ini
 # 编辑配置文件后重新运行
 
 # 2. 编辑 bws-serve.ini 后启动服务
-bws serve
+bws sv
 ```
 
 启动后，可以在浏览器中访问 `http://localhost:8080` 查看 Web 界面。
@@ -41,7 +41,7 @@ bws serve
 ### 配置文件示例
 
 ```ini
-# bws serve 配置文件
+# bws sv 配置文件
 [serve]
 host = 0.0.0.0
 port = 8080
@@ -55,7 +55,7 @@ sync-channels = stable
 
 ```bash
 # 编辑配置文件后启动服务
-bws serve
+bws sv
 ```
 
 ### 配置项说明
@@ -96,7 +96,7 @@ sync-browsers = chrome,firefox
 sync-channels = stable,beta
 ```
 
-然后重新运行 `bws serve` 即可。
+然后重新运行 `bws sv` 即可。
 
 自动同步的详细说明请参考 [Serve 自动同步](./serve-sync.md) 章节。
 
@@ -161,7 +161,7 @@ MicrosoftEdge_120.0.2210.91_x64.msi
 
 文件名无法识别的文件不会出现在清单中，但仍然可以通过直接下载 URL 访问。
 
-如果文件名无法被自动识别，建议重命名文件使其包含足够的关键词，或者使用 `bws install -f` 手动指定版本安装。
+如果文件名无法被自动识别，建议重命名文件使其包含足够的关键词，或者使用 `bws i -f` 手动指定版本安装。
 
 ## 客户端配置
 
@@ -170,7 +170,7 @@ MicrosoftEdge_120.0.2210.91_x64.msi
 ### 设置离线源
 
 ```bash
-bws config set source http://server:8080
+bws cfg set source http://server:8080
 ```
 
 将 `server:8080` 替换为实际的 serve 服务地址。
@@ -182,14 +182,14 @@ bws config set source http://server:8080
 bws ls --remote chrome
 
 # 从离线源安装浏览器
-bws install chrome@120
+bws i chrome@120
 ```
 
 ### 工作原理
 
 配置离线源后，客户端的工作流程：
 
-1. 执行 `bws install` 或 `bws ls --remote`
+1. 执行 `bws i` 或 `bws ls --remote`
 2. 优先从配置的离线源（serve 服务）获取版本清单
 3. 从离线源下载安装包
 4. 如果离线源没有所需版本，自动回退到内置在线源
@@ -212,7 +212,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/bws serve
+ExecStart=/usr/local/bin/bws sv
 WorkingDirectory=/usr/local/bin
 Restart=on-failure
 RestartSec=5

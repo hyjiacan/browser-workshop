@@ -1,4 +1,4 @@
-# 数据存储
+﻿# 数据存储
 
 bws 将所有数据（配置、版本、缓存、日志、Profile 等）统一存储在数据目录中。本章介绍数据存储的目录结构和各目录的用途。
 
@@ -78,7 +78,7 @@ export BWS_HOME=~/browser-data
 ### 通过配置设置
 
 ```bash
-bws config set data-dir D:\browser-data
+bws cfg set data-dir D:\browser-data
 ```
 
 > **注意**：修改数据目录后，原目录中的数据不会自动迁移，需要手动移动。
@@ -113,7 +113,7 @@ bws config set data-dir D:\browser-data
 }
 ```
 
-通常不需要手动编辑，使用 `bws config` 命令管理。
+通常不需要手动编辑，使用 `bws cfg` 命令管理。
 
 ### logs/
 
@@ -135,7 +135,7 @@ bws config set data-dir D:\browser-data
 
 - 加速 `ls --remote` 等命令的响应
 - 有过期时间，过期后自动重新获取
-- 可以通过 `bws cache clean` 清理
+- 可以通过 `bws cc clean` 清理
 
 #### cache/downloads/
 
@@ -143,8 +143,8 @@ bws config set data-dir D:\browser-data
 
 - 下载的文件会保留在这里，便于后续重复使用
 - 占用空间可能较大，可定期清理
-- 可以通过 `bws cache clean` 清理
-- 可以通过 `bws cache size` 查看占用空间
+- 可以通过 `bws cc clean` 清理
+- 可以通过 `bws cc size` 查看占用空间
 
 ### versions/
 
@@ -215,7 +215,7 @@ runtime/chrome/profiles/personal/
 mv bws-data ~/.bws
 
 # 或者设置 data-dir 配置
-bws config set data-dir /path/to/new/location
+bws cfg set data-dir /path/to/new/location
 ```
 
 **传统模式 → 便携模式：**
@@ -225,7 +225,7 @@ bws config set data-dir /path/to/new/location
 mv ~/.bws ./bws-data
 
 # 清除 data-dir 配置（如果设置了）
-bws config set data-dir ""
+bws cfg set data-dir ""
 ```
 
 ## 磁盘空间管理
@@ -234,7 +234,7 @@ bws config set data-dir ""
 
 ```bash
 # 查看缓存大小
-bws cache size
+bws cc size
 
 # 查看所有数据占用空间（需要手动计算）
 du -sh bws-data/
@@ -244,13 +244,13 @@ du -sh bws-data/
 
 ```bash
 # 清理下载缓存
-bws cache clean
+bws cc clean
 
 # 卸载不需要的版本
-bws uninstall chrome@79
+bws rm chrome@79
 
 # 清理孤立 Profile
-bws profile clean
+bws pf clean
 ```
 
 ### 各部分空间占用估算
@@ -266,7 +266,7 @@ bws profile clean
 ## 注意事项
 
 1. **备份建议**：定期备份 `config.json` 和重要的 Profile 数据
-2. **手动编辑**：不建议手动编辑 `config.json`，使用 `bws config` 命令
+2. **手动编辑**：不建议手动编辑 `config.json`，使用 `bws cfg` 命令
 3. **删除安全**：卸载版本不会删除 Profile，防止误删重要数据
 4. **权限**：确保 bws 对数据目录有读写权限
 5. **防病毒**：某些杀毒软件可能会误报浏览器文件，建议将 `versions/` 目录加入白名单

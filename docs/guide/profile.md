@@ -1,4 +1,4 @@
-# Profile 管理
+﻿# Profile 管理
 
 每个浏览器版本都有独立的用户数据目录（Profile），用于存储书签、历史记录、Cookie、扩展程序等数据。bws 提供了完整的 Profile 管理功能，包括默认 Profile、命名 Profile、重置和清理等。
 
@@ -32,7 +32,7 @@ bws-data/runtime/chrome/120.0.6099.109/profile/
 运行浏览器时如果不指定 Profile，默认使用该版本的默认 Profile：
 
 ```bash
-bws run chrome@120
+bws r chrome@120
 ```
 
 ## 命名 Profile
@@ -58,8 +58,8 @@ bws-data/runtime/chrome/profiles/work/
 使用 `-p` 或 `--profile` 参数指定命名 Profile：
 
 ```bash
-bws run chrome@120 -p work
-bws run chrome@121 -p work
+bws r chrome@120 -p work
+bws r chrome@121 -p work
 ```
 
 ### 命名 Profile 的特点
@@ -73,33 +73,33 @@ bws run chrome@121 -p work
 
 ```bash
 # 工作用 Profile - 保存工作相关的书签和登录状态
-bws run chrome@120 -p work
+bws r chrome@120 -p work
 
 # 个人用 Profile - 保存个人浏览数据
-bws run chrome@120 -p personal
+bws r chrome@120 -p personal
 
 # 测试用 Profile - 干净的测试环境
-bws run chrome@120 -p test
+bws r chrome@120 -p test
 
 # 开发用 Profile - 安装开发扩展
-bws run chrome@120 -p dev
+bws r chrome@120 -p dev
 ```
 
 ## 列出 Profile
 
-使用 `bws profile list` 命令列出所有 Profile。
+使用 `bws pf list` 命令列出所有 Profile。
 
 ### 列出所有 Profile
 
 ```bash
-bws profile list
+bws pf list
 ```
 
 ### 列出指定浏览器的 Profile
 
 ```bash
-bws profile list chrome
-bws profile list gc
+bws pf list chrome
+bws pf list gc
 ```
 
 ### 输出内容
@@ -112,18 +112,18 @@ bws profile list gc
 
 ## 查看 Profile 路径
 
-使用 `bws profile path` 命令查看 Profile 的实际路径。
+使用 `bws pf path` 命令查看 Profile 的实际路径。
 
 ### 查看默认 Profile 路径
 
 ```bash
-bws profile path chrome@120
+bws pf path chrome@120
 ```
 
 ### 查看命名 Profile 路径
 
 ```bash
-bws profile path chrome myprofile
+bws pf path chrome myprofile
 ```
 
 ### 使用场景
@@ -135,18 +135,18 @@ bws profile path chrome myprofile
 
 ## 重置 Profile
 
-使用 `bws profile reset` 命令重置 Profile，清除所有数据恢复初始状态。
+使用 `bws pf reset` 命令重置 Profile，清除所有数据恢复初始状态。
 
 ### 重置默认 Profile
 
 ```bash
-bws profile reset chrome@120
+bws pf reset chrome@120
 ```
 
 ### 重置命名 Profile
 
 ```bash
-bws profile reset chrome@120 myprofile
+bws pf reset chrome@120 myprofile
 ```
 
 ### 跳过确认
@@ -154,8 +154,8 @@ bws profile reset chrome@120 myprofile
 默认情况下，重置前会显示确认提示。使用 `-f` 参数跳过确认：
 
 ```bash
-bws profile reset chrome@120 -f
-bws profile reset chrome@120 myprofile -f
+bws pf reset chrome@120 -f
+bws pf reset chrome@120 myprofile -f
 ```
 
 ### 重置效果
@@ -177,19 +177,19 @@ bws profile reset chrome@120 myprofile -f
 
 ## 清理孤立 Profile
 
-卸载浏览器版本后，对应的 Profile 数据不会自动删除，会成为"孤立 Profile"。使用 `bws profile clean` 命令可以清理这些残留的 Profile 数据。
+卸载浏览器版本后，对应的 Profile 数据不会自动删除，会成为"孤立 Profile"。使用 `bws pf clean` 命令可以清理这些残留的 Profile 数据。
 
 ### 清理所有孤立 Profile
 
 ```bash
-bws profile clean
+bws pf clean
 ```
 
 ### 清理指定浏览器的孤立 Profile
 
 ```bash
-bws profile clean chrome
-bws profile clean gc
+bws pf clean chrome
+bws pf clean gc
 ```
 
 ### 跳过确认
@@ -197,8 +197,8 @@ bws profile clean gc
 使用 `-f` 参数跳过确认提示：
 
 ```bash
-bws profile clean -f
-bws profile clean chrome -f
+bws pf clean -f
+bws pf clean chrome -f
 ```
 
 ### 什么是孤立 Profile
@@ -225,16 +225,16 @@ bws profile clean chrome -f
 
 | 命令 | 说明 |
 |------|------|
-| `bws profile list` | 列出所有 Profile |
-| `bws profile list <browser>` | 列出指定浏览器的 Profile |
-| `bws profile path <browser@version>` | 查看默认 Profile 路径 |
-| `bws profile path <browser> <name>` | 查看命名 Profile 路径 |
-| `bws profile reset <browser@version>` | 重置默认 Profile |
-| `bws profile reset <browser@version> <name>` | 重置命名 Profile |
-| `bws profile reset ... -f` | 跳过确认直接重置 |
-| `bws profile clean` | 清理所有孤立 Profile |
-| `bws profile clean <browser>` | 清理指定浏览器的孤立 Profile |
-| `bws profile clean ... -f` | 跳过确认直接清理 |
+| `bws pf list` | 列出所有 Profile |
+| `bws pf list <browser>` | 列出指定浏览器的 Profile |
+| `bws pf path <browser@version>` | 查看默认 Profile 路径 |
+| `bws pf path <browser> <name>` | 查看命名 Profile 路径 |
+| `bws pf reset <browser@version>` | 重置默认 Profile |
+| `bws pf reset <browser@version> <name>` | 重置命名 Profile |
+| `bws pf reset ... -f` | 跳过确认直接重置 |
+| `bws pf clean` | 清理所有孤立 Profile |
+| `bws pf clean <browser>` | 清理指定浏览器的孤立 Profile |
+| `bws pf clean ... -f` | 跳过确认直接清理 |
 
 ## Profile 目录结构
 

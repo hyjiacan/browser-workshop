@@ -1,4 +1,4 @@
-# 快速上手
+﻿# 快速上手
 
 本章将带你在 5-10 分钟内快速了解 bws 的基本使用方法。
 
@@ -46,10 +46,10 @@ bws ls --no-system
 
 ```bash
 # 自动识别目录下所有浏览器版本
-bws import /path/to/browsers
+bws imp /path/to/browsers
 
 # 强制重新导入已安装的版本
-bws import /path/to/browsers -f
+bws imp /path/to/browsers -f
 ```
 
 导入过程中会实时显示进度，无法识别的文件会即时提示。
@@ -62,16 +62,16 @@ bws import /path/to/browsers -f
 
 ```bash
 # 安装最新稳定版
-bws install chrome@latest
+bws i chrome@latest
 
 # 安装指定渠道
-bws install chrome@beta
+bws i chrome@beta
 
 # 安装指定完整版本
-bws install chrome@120.0.6478.114
+bws i chrome@120.0.6478.114
 
 # 安装部分版本号（自动匹配最新的 85.x）
-bws install chrome@85
+bws i chrome@85
 ```
 
 ### 查看远程可用版本
@@ -104,38 +104,38 @@ chrome 的可用版本：
 
 ```bash
 # 运行指定版本
-bws run chrome@120
+bws r chrome@120
 
 # 运行系统已安装的版本
-bws run chrome@system
+bws r chrome@system
 
-# 运行默认版本（通过 bws use 设置）
-bws run chrome
+# 运行默认版本（通过 bws u 设置）
+bws r chrome
 ```
 
 ### 常用运行选项
 
 ```bash
 # 无痕模式
-bws run chrome@120 -i
+bws r chrome@120 -i
 
 # 新窗口打开
-bws run chrome@120 -w
+bws r chrome@120 -w
 
 # 无头模式
-bws run chrome@120 -H
+bws r chrome@120 -H
 
 # 指定命名 Profile
-bws run chrome@120 -p myprofile
+bws r chrome@120 -p myprofile
 
 # 后台运行（不等待进程）
-bws run chrome@120 -d
+bws r chrome@120 -d
 
 # 打开指定 URL
-bws run chrome@120 https://example.com
+bws r chrome@120 https://example.com
 
 # 传递浏览器原生参数
-bws run chrome@120 -- --disable-gpu --no-sandbox
+bws r chrome@120 -- --disable-gpu --no-sandbox
 ```
 
 > **提示**：部分版本号匹配时，会列出所有匹配版本并自动选择最新版本。更多运行选项请参考 [运行浏览器](./run.md) 章节。
@@ -145,13 +145,13 @@ bws run chrome@120 -- --disable-gpu --no-sandbox
 如果你经常使用某个版本，可以将其设置为默认版本：
 
 ```bash
-bws use chrome@120
+bws u chrome@120
 ```
 
 设置后可以直接用浏览器名运行，无需指定版本：
 
 ```bash
-bws run chrome
+bws r chrome
 ```
 
 ## 下一步

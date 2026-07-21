@@ -1,4 +1,4 @@
-# 浏览器短别名
+﻿# 浏览器短别名
 
 为了方便输入，bws 为常见浏览器提供了简短别名，可在所有命令中使用。使用短别名可以大幅减少命令输入量，提高操作效率。
 
@@ -26,20 +26,20 @@ bws ls gc
 
 ```bash
 # 完整写法
-bws install chrome@latest
+bws i chrome@latest
 
 # 短别名写法
-bws install gc@latest
+bws i gc@latest
 ```
 
 ### 运行浏览器
 
 ```bash
 # 完整写法
-bws run firefox@120
+bws r firefox@120
 
 # 短别名写法
-bws run ff@120
+bws r ff@120
 ```
 
 ### 版本筛选
@@ -66,50 +66,50 @@ bws ls -R gc
 
 ```bash
 # 完整写法
-bws info chrome@120
+bws show chrome@120
 
 # 短别名写法
-bws info gc@120
+bws show gc@120
 ```
 
 ### 设置默认版本
 
 ```bash
 # 完整写法
-bws use chrome@120
+bws u chrome@120
 
 # 短别名写法
-bws use gc@120
+bws u gc@120
 ```
 
 ### 卸载版本
 
 ```bash
 # 完整写法
-bws uninstall chrome@120
+bws rm chrome@120
 
 # 短别名写法
-bws uninstall gc@120
+bws rm gc@120
 ```
 
 ### 仅下载不安装
 
 ```bash
 # 完整写法
-bws download chrome@120
+bws dl chrome@120
 
 # 短别名写法
-bws download gc@120
+bws dl gc@120
 ```
 
 ### Profile 管理
 
 ```bash
 # 完整写法
-bws profile list chrome
+bws pf list chrome
 
 # 短别名写法
-bws profile list gc
+bws pf list gc
 ```
 
 ## 支持的命令范围
@@ -120,14 +120,14 @@ bws profile list gc
 |------|-----------|------|
 | `ls` / `list` | 是 | `bws ls gc` |
 | `ls --remote` / `ls -R` | 是 | `bws ls -R ff` |
-| `info` | 是 | `bws info cm@120` |
-| `run` | 是 | `bws run gc@120` |
-| `install` | 是 | `bws install ff@latest` |
+| `info` | 是 | `bws show cm@120` |
+| `run` | 是 | `bws r gc@120` |
+| `install` | 是 | `bws i ff@latest` |
 | `import` | 否 | 批量导入，无需指定浏览器 |
-| `uninstall` | 是 | `bws uninstall gc@120` |
-| `use` | 是 | `bws use cm@120` |
-| `download` | 是 | `bws download ff@beta` |
-| `profile` | 是 | `bws profile list gc` |
+| `uninstall` | 是 | `bws rm gc@120` |
+| `use` | 是 | `bws u cm@120` |
+| `download` | 是 | `bws dl ff@beta` |
+| `profile` | 是 | `bws pf list gc` |
 | `config` | 否 | 配置管理命令 |
 | `serve` | 否 | 服务端命令 |
 | `repo` | 否 | 仓库管理命令 |
@@ -142,22 +142,22 @@ bws profile list gc
 
 ```bash
 bws ls gc@120          # 列出 chrome 120.x 版本
-bws install ff@beta    # 安装 firefox beta 版
-bws run cm@latest      # 运行最新版 chromium
+bws i ff@beta    # 安装 firefox beta 版
+bws r cm@latest      # 运行最新版 chromium
 ```
 
 ### 与渠道组合使用
 
 ```bash
 bws ls -R gc --channel beta     # 查看 chrome beta 渠道版本
-bws install ff --channel dev    # 安装 firefox dev 版
+bws i ff --channel dev    # 安装 firefox dev 版
 ```
 
 ### 与系统版本组合使用
 
 ```bash
-bws run gc@system       # 运行系统安装的 Chrome
-bws info ff@system      # 查看系统 Firefox 信息
+bws r gc@system       # 运行系统安装的 Chrome
+bws show ff@system      # 查看系统 Firefox 信息
 ```
 
 ## 注意事项

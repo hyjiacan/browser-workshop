@@ -1,4 +1,4 @@
-# 命令参考
+﻿# 命令参考
 
 本文档列出 bws 的所有命令及其详细说明，包括用途、用法、示例和参数。
 
@@ -6,27 +6,27 @@
 
 | 命令 | 说明 |
 |------|------|
-| `bws ls` / `bws list` | 列出已安装的浏览器版本 |
-| `bws info` | 显示版本详细信息 |
-| `bws run` | 运行指定版本的浏览器 |
-| `bws install` | 安装浏览器版本 |
-| `bws import` | 从目录批量导入（自动识别） |
-| `bws uninstall` | 卸载浏览器版本 |
-| `bws use` | 设置默认浏览器版本 |
-| `bws download` | 仅下载不安装 |
-| `bws profile` | 管理浏览器 Profile |
+| `bws ls` / `bws ls` | 列出已安装的浏览器版本 |
+| `bws show` | 显示版本详细信息 |
+| `bws r` | 运行指定版本的浏览器 |
+| `bws i` | 安装浏览器版本 |
+| `bws imp` | 从目录批量导入（自动识别） |
+| `bws rm` | 卸载浏览器版本 |
+| `bws u` | 设置默认浏览器版本 |
+| `bws dl` | 仅下载不安装 |
+| `bws pf` | 管理浏览器 Profile |
 | `bws alias` | 管理版本别名 |
-| `bws serve` | 启动 HTTP 分发服务 |
-| `bws config` | 管理配置 |
+| `bws sv` | 启动 HTTP 分发服务 |
+| `bws cfg` | 管理配置 |
 | `bws repo` | 管理本地二进制仓库 |
-| `bws cache` | 管理下载缓存 |
-| `bws doctor` | 系统健康检查 |
+| `bws cc` | 管理下载缓存 |
+| `bws dt` | 系统健康检查 |
 | `bws help` | 显示帮助信息 |
 | `bws version` | 显示版本信息 |
 
 ---
 
-## bws ls / bws list
+## bws ls / bws ls
 
 列出已安装的浏览器版本。
 
@@ -34,7 +34,7 @@
 
 ```bash
 bws ls [浏览器[@版本]] [选项]
-bws list [浏览器[@版本]] [选项]
+bws ls [浏览器[@版本]] [选项]
 ```
 
 ### 参数
@@ -79,14 +79,14 @@ bws ls -R chrome --channel beta
 
 ---
 
-## bws info
+## bws show
 
 显示指定版本的详细信息。
 
 ### 用法
 
 ```bash
-bws info <浏览器@版本>
+bws show <浏览器@版本>
 ```
 
 ### 参数
@@ -99,16 +99,16 @@ bws info <浏览器@版本>
 
 ```bash
 # 查看指定版本详情
-bws info chrome@120
+bws show chrome@120
 
 # 查看完整版本
-bws info chrome@120.0.6099.109
+bws show chrome@120.0.6099.109
 
 # 查看系统浏览器信息
-bws info chrome@system
+bws show chrome@system
 
 # 使用短别名
-bws info ff@121
+bws show ff@121
 ```
 
 ### 输出内容
@@ -123,14 +123,14 @@ bws info ff@121
 
 ---
 
-## bws run
+## bws r
 
 运行指定版本的浏览器。
 
 ### 用法
 
 ```bash
-bws run [浏览器[@版本]] [URL] [选项] [-- 原生参数]
+bws r [浏览器[@版本]] [URL] [选项] [-- 原生参数]
 ```
 
 ### 参数
@@ -157,48 +157,48 @@ bws run [浏览器[@版本]] [URL] [选项] [-- 原生参数]
 
 ```bash
 # 运行指定版本
-bws run chrome@120
+bws r chrome@120
 
 # 运行默认版本
-bws run chrome
+bws r chrome
 
 # 运行系统版本
-bws run chrome@system
+bws r chrome@system
 
 # 打开指定 URL
-bws run chrome@120 https://example.com
+bws r chrome@120 https://example.com
 
 # 无头模式
-bws run chrome@120 -H
+bws r chrome@120 -H
 
 # 隐身模式
-bws run chrome@120 -i
+bws r chrome@120 -i
 
 # 指定命名 Profile
-bws run chrome@120 -p work
+bws r chrome@120 -p work
 
 # 后台运行
-bws run chrome@120 -d
+bws r chrome@120 -d
 
 # 传递原生参数
-bws run chrome@120 -- --disable-gpu --no-sandbox
+bws r chrome@120 -- --disable-gpu --no-sandbox
 
 # 试运行
-bws run chrome@120 --dry-run
+bws r chrome@120 --dry-run
 ```
 
 ---
 
-## bws install
+## bws i
 
 安装浏览器版本。
 
 ### 用法
 
 ```bash
-bws install <浏览器@版本> [选项]
-bws install -d <目录> [浏览器@版本]
-bws install -f <文件> [浏览器@版本]
+bws i <浏览器@版本> [选项]
+bws i -d <目录> [浏览器@版本]
+bws i -f <文件> [浏览器@版本]
 ```
 
 ### 参数
@@ -220,37 +220,37 @@ bws install -f <文件> [浏览器@版本]
 
 ```bash
 # 安装最新稳定版
-bws install chrome@latest
+bws i chrome@latest
 
 # 安装指定渠道
-bws install chrome@beta
+bws i chrome@beta
 
 # 安装指定完整版本
-bws install chrome@120.0.6478.114
+bws i chrome@120.0.6478.114
 
 # 安装部分版本号
-bws install chrome@85
+bws i chrome@85
 
 # 从目录安装
-bws install -d /path/to/browser-dir
+bws i -d /path/to/browser-dir
 
 # 从目录安装并指定版本
-bws install -d /path/to/browser-dir chrome@120
+bws i -d /path/to/browser-dir chrome@120
 
 # 从文件安装
-bws install -f /path/to/chrome-setup.exe chrome@120
+bws i -f /path/to/chrome-setup.exe chrome@120
 ```
 
 ---
 
-## bws import
+## bws imp
 
 从目录批量导入浏览器版本（自动识别）。
 
 ### 用法
 
 ```bash
-bws import <目录> [选项]
+bws imp <目录> [选项]
 ```
 
 ### 参数
@@ -269,22 +269,22 @@ bws import <目录> [选项]
 
 ```bash
 # 批量导入
-bws import /path/to/browsers
+bws imp /path/to/browsers
 
 # 强制重新导入
-bws import /path/to/browsers -f
+bws imp /path/to/browsers -f
 ```
 
 ---
 
-## bws uninstall
+## bws rm
 
 卸载指定的浏览器版本。
 
 ### 用法
 
 ```bash
-bws uninstall <浏览器@版本> [选项]
+bws rm <浏览器@版本> [选项]
 ```
 
 ### 参数
@@ -303,13 +303,13 @@ bws uninstall <浏览器@版本> [选项]
 
 ```bash
 # 卸载指定版本
-bws uninstall chrome@120
+bws rm chrome@120
 
 # 卸载部分版本号匹配的最新版本
-bws uninstall chrome@85
+bws rm chrome@85
 
 # 跳过确认
-bws uninstall chrome@120 -f
+bws rm chrome@120 -f
 ```
 
 ### 注意事项
@@ -320,14 +320,14 @@ bws uninstall chrome@120 -f
 
 ---
 
-## bws use
+## bws u
 
 设置默认浏览器版本。
 
 ### 用法
 
 ```bash
-bws use <浏览器@版本>
+bws u <浏览器@版本>
 ```
 
 ### 参数
@@ -340,25 +340,25 @@ bws use <浏览器@版本>
 
 ```bash
 # 设置 Chrome 120 为默认版本
-bws use chrome@120
+bws u chrome@120
 
 # 使用短别名
-bws use gc@120
+bws u gc@120
 
 # 设置后直接运行
-bws run chrome
+bws r chrome
 ```
 
 ---
 
-## bws download
+## bws dl
 
 仅下载安装包，不安装。
 
 ### 用法
 
 ```bash
-bws download <浏览器@版本> [选项]
+bws dl <浏览器@版本> [选项]
 ```
 
 ### 参数
@@ -377,25 +377,25 @@ bws download <浏览器@版本> [选项]
 
 ```bash
 # 下载最新稳定版
-bws download chrome@latest
+bws dl chrome@latest
 
 # 下载指定版本
-bws download chrome@120.0.6478.114
+bws dl chrome@120.0.6478.114
 
 # 下载部分版本号
-bws download chrome@85
+bws dl chrome@85
 ```
 
 ---
 
-## bws profile
+## bws pf
 
 管理浏览器 Profile。
 
 ### 用法
 
 ```bash
-bws profile <子命令> [参数] [选项]
+bws pf <子命令> [参数] [选项]
 ```
 
 ### 子命令
@@ -411,46 +411,46 @@ bws profile <子命令> [参数] [选项]
 
 ```bash
 # 列出所有 Profile
-bws profile list
+bws pf list
 
 # 列出指定浏览器的 Profile
-bws profile list chrome
+bws pf list chrome
 ```
 
 ### profile path
 
 ```bash
 # 查看默认 Profile 路径
-bws profile path chrome@120
+bws pf path chrome@120
 
 # 查看命名 Profile 路径
-bws profile path chrome myprofile
+bws pf path chrome myprofile
 ```
 
 ### profile reset
 
 ```bash
 # 重置默认 Profile
-bws profile reset chrome@120
+bws pf reset chrome@120
 
 # 重置命名 Profile
-bws profile reset chrome@120 myprofile
+bws pf reset chrome@120 myprofile
 
 # 跳过确认
-bws profile reset chrome@120 -f
+bws pf reset chrome@120 -f
 ```
 
 ### profile clean
 
 ```bash
 # 清理所有孤立 Profile
-bws profile clean
+bws pf clean
 
 # 清理指定浏览器的孤立 Profile
-bws profile clean chrome
+bws pf clean chrome
 
 # 跳过确认
-bws profile clean -f
+bws pf clean -f
 ```
 
 ---
@@ -488,14 +488,14 @@ bws alias remove mychrome
 
 ---
 
-## bws serve
+## bws sv
 
 启动 HTTP 分发服务。配置通过 `bws-serve.ini` 文件管理，首次运行时会自动创建默认配置文件。
 
 ### 用法
 
 ```bash
-bws serve [-d <目录>]
+bws sv [-d <目录>]
 ```
 
 ### 选项
@@ -506,7 +506,7 @@ bws serve [-d <目录>]
 
 ### 配置文件 (bws-serve.ini)
 
-首次运行 `bws serve` 会自动创建配置文件，编辑后重新运行即可启动服务。
+首次运行 `bws sv` 会自动创建配置文件，编辑后重新运行即可启动服务。
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
@@ -523,15 +523,15 @@ bws serve [-d <目录>]
 
 ```bash
 # 首次运行（自动创建配置文件）
-bws serve
+bws sv
 # 输出: 配置文件已创建: D:\bws\bws-serve.ini
 # 编辑配置文件后重新运行
 
 # 编辑配置后启动服务
-bws serve
+bws sv
 
 # 指定基础目录
-bws serve -d D:\bws-data
+bws sv -d D:\bws-data
 ```
 
 ### 后台运行
@@ -540,14 +540,14 @@ bws serve -d D:\bws-data
 
 ---
 
-## bws config
+## bws cfg
 
 管理配置。
 
 ### 用法
 
 ```bash
-bws config <子命令> [参数]
+bws cfg <子命令> [参数]
 ```
 
 ### 子命令
@@ -573,15 +573,15 @@ bws config <子命令> [参数]
 
 ```bash
 # 查看所有配置
-bws config show
+bws cfg show
 
 # 获取配置项
-bws config get default-browser
+bws cfg get default-browser
 
 # 设置配置项
-bws config set default-browser firefox
-bws config set log-level debug
-bws config set source http://server:8080
+bws cfg set default-browser firefox
+bws cfg set log-level debug
+bws cfg set source http://server:8080
 ```
 
 ---
@@ -607,14 +607,14 @@ bws repo <子命令> [参数]
 
 ---
 
-## bws cache
+## bws cc
 
 管理下载缓存。
 
 ### 用法
 
 ```bash
-bws cache <子命令> [参数]
+bws cc <子命令> [参数]
 ```
 
 ### 子命令
@@ -630,25 +630,25 @@ bws cache <子命令> [参数]
 
 ```bash
 # 列出缓存
-bws cache list
+bws cc list
 
 # 清理缓存
-bws cache clean
+bws cc clean
 
 # 查看缓存大小
-bws cache size
+bws cc size
 ```
 
 ---
 
-## bws doctor
+## bws dt
 
 系统健康检查。
 
 ### 用法
 
 ```bash
-bws doctor
+bws dt
 ```
 
 ### 检查内容
@@ -662,7 +662,7 @@ bws doctor
 ### 示例
 
 ```bash
-bws doctor
+bws dt
 ```
 
 ---
@@ -684,8 +684,8 @@ bws help [命令]
 bws help
 
 # 显示指定命令的帮助
-bws help run
-bws help install
+bws help r
+bws help i
 ```
 
 ---
