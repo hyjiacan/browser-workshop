@@ -8,6 +8,7 @@ const sharedConfig = {
 
   head: [
     ['link', { rel: 'icon', type: 'image/png', href: '/logo.png' }],
+    ['link', { rel: 'icon', type: 'image/x-icon', href: '/logo.ico' }],
     ['script', { src: 'https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js' }],
   ],
 
