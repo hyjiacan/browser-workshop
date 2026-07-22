@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -53,17 +54,66 @@ func (s *FirefoxSource) List(ctx context.Context, filter *Filter) ([]VersionInfo
 		channel = ChannelStable
 	}
 
-	// Collect versions from multiple sources
-	var results []VersionInfo
-
-	// 1. Fetch latest channel versions
-	latestMap, err := s.fetchLatestVersions(ctx)
-	if err != nil {
-		return nil, err
+	// Collect versions from multiple sources (parallel fetch)
+	type fetchResult struct {
+		latestMap         map[Channel]string
+		historyVersions   []string
+		stabilityVersions []string
 	}
 
+	var fr fetchResult
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	var fetchErr error
+
+	// 1. Fetch latest channel versions (required)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		m, err := s.fetchLatestVersions(ctx)
+		mu.Lock()
+		defer mu.Unlock()
+		if err != nil {
+			fetchErr = err
+		} else {
+			fr.latestMap = m
+		}
+	}()
+
+	// 2. Fetch historical major releases (optional)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		v, err := s.fetchHistoryMajorVersions(ctx)
+		mu.Lock()
+		defer mu.Unlock()
+		if err == nil {
+			fr.historyVersions = v
+		}
+	}()
+
+	// 3. Fetch historical stability/patch releases (optional)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		v, err := s.fetchHistoryStabilityVersions(ctx)
+		mu.Lock()
+		defer mu.Unlock()
+		if err == nil {
+			fr.stabilityVersions = v
+		}
+	}()
+
+	wg.Wait()
+
+	if fetchErr != nil {
+		return nil, fetchErr
+	}
+
+	var results []VersionInfo
+
 	// Add latest versions for all channels
-	for ch, ver := range latestMap {
+	for ch, ver := range fr.latestMap {
 		if ver == "" {
 			continue
 		}
@@ -87,24 +137,10 @@ func (s *FirefoxSource) List(ctx context.Context, filter *Filter) ([]VersionInfo
 		})
 	}
 
-	// 2. Fetch historical major releases (all stable versions)
-	historyVersions, err := s.fetchHistoryMajorVersions(ctx)
-	if err != nil {
-		// If history fails, still return latest versions
-		historyVersions = nil
-	}
-
-	// 3. Fetch historical stability/patch releases (includes ESR patches)
-	stabilityVersions, err := s.fetchHistoryStabilityVersions(ctx)
-	if err != nil {
-		stabilityVersions = nil
-	}
-
 	// Build a set of known ESR base versions from latestMap
 	esrBases := make(map[string]bool)
-	for ch, ver := range latestMap {
+	for ch, ver := range fr.latestMap {
 		if ch == ChannelESR && ver != "" {
-			// Extract base version (e.g., "128.8.0esr" -> "128")
 			base := extractMajorVersion(ver)
 			if base != "" {
 				esrBases[base] = true
@@ -122,7 +158,7 @@ func (s *FirefoxSource) List(ctx context.Context, filter *Filter) ([]VersionInfo
 	}
 
 	// Add historical stable major versions
-	for _, ver := range historyVersions {
+	for _, ver := range fr.historyVersions {
 		results = append(results, VersionInfo{
 			Browser:     "firefox",
 			Version:     ver,
@@ -135,7 +171,7 @@ func (s *FirefoxSource) List(ctx context.Context, filter *Filter) ([]VersionInfo
 	}
 
 	// Add stability patch releases, classifying them by channel
-	for _, ver := range stabilityVersions {
+	for _, ver := range fr.stabilityVersions {
 		ch := classifyFirefoxVersion(ver, esrBases)
 		results = append(results, VersionInfo{
 			Browser:     "firefox",

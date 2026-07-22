@@ -4,6 +4,7 @@ package config
 import (
 	"encoding/json"
 	"os"
+	"sort"
 	"time"
 )
 
@@ -303,13 +304,9 @@ func (c *Config) GetSources(browser string) []SourceConfig {
 	}
 
 	// Sort by priority (ascending = lower number first)
-	for i := 0; i < len(result)-1; i++ {
-		for j := i + 1; j < len(result); j++ {
-			if result[j].Priority < result[i].Priority {
-				result[i], result[j] = result[j], result[i]
-			}
-		}
-	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Priority < result[j].Priority
+	})
 
 	return result
 }

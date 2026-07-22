@@ -194,18 +194,19 @@ func ParseSpec(input string, defaultBrowser string) Spec {
 }
 
 // isAlias checks if a version string is a known alias.
+var aliasSet = map[string]bool{
+	"latest":  true,
+	"stable":  true,
+	"beta":    true,
+	"dev":     true,
+	"canary":  true,
+	"esr":     true,
+	"release": true,
+	"nightly": true,
+}
+
 func isAlias(v string) bool {
-	aliases := map[string]bool{
-		"latest":  true,
-		"stable":  true,
-		"beta":    true,
-		"dev":     true,
-		"canary":  true,
-		"esr":     true,
-		"release": true,
-		"nightly": true,
-	}
-	return aliases[strings.ToLower(v)]
+	return aliasSet[strings.ToLower(v)]
 }
 
 // looksLikeVersion checks if a string looks like a version number.
@@ -293,8 +294,13 @@ func (l List) Latest() (Version, bool) {
 		return Version{}, false
 	}
 
-	sorted := l.Sort(true) // descending
-	return sorted[0], true
+	best := l[0]
+	for _, v := range l[1:] {
+		if Greater(v.Version, best.Version) {
+			best = v
+		}
+	}
+	return best, true
 }
 
 // LatestByMajor returns the latest version for each major version.
