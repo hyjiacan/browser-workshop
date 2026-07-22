@@ -12,6 +12,7 @@ This document lists all commands of `bws` with detailed descriptions, including 
 | `bws info` / `bws show` | Show detailed version information |
 | `bws run` / `bws r` / `bws open` | Run a specific browser version |
 | `bws install` / `bws i` | Install a browser version |
+| `bws shortcut` / `bws sc` | Manage desktop shortcuts |
 | `bws import` / `bws imp` | Batch import from a directory (auto-detect) |
 | `bws uninstall` / `bws rm` / `bws remove` | Uninstall a browser version |
 | `bws use` / `bws u` | Set the default browser version |
@@ -257,6 +258,71 @@ bws i --from-file /path/to/chrome-setup.exe chrome@120
 # Force reinstall
 bws i chrome@120 --force
 ```
+
+---
+
+## bws shortcut (alias: sc)
+
+Create, remove, or list desktop shortcuts for installed browsers. Shortcuts point directly to the browser executable and can be launched by double-clicking.
+
+### Usage
+
+```bash
+bws sc <subcommand> [browser[@version]] [options]
+```
+
+### Subcommands
+
+| Subcommand | Aliases | Description |
+|------------|---------|-------------|
+| `create` | `c`, `add` | Create a desktop shortcut |
+| `remove` | `rm`, `del` | Remove a desktop shortcut |
+| `list` | `ls` | List created shortcuts |
+
+### Arguments
+
+| Argument | Description |
+|----------|-------------|
+| `browser[@version]` | Optional, specify browser and version (supports latest, stable, etc.) |
+
+### Options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--profile <name>` | `-p` | Specify profile name |
+| `--native` | `-n` | Native mode (no profile) |
+| `--all` | `-a` | Create/remove for all installed versions |
+| `--name <name>` | - | Custom shortcut name |
+
+### Examples
+
+```bash
+# Create a shortcut for a specific version
+bws sc create chrome@120
+
+# Create with a specific profile
+bws sc create firefox@latest --profile dev
+
+# Create shortcuts for all installed versions
+bws sc create --all
+
+# Remove a shortcut
+bws sc remove chrome@120
+
+# Remove all shortcuts
+bws sc remove --all
+
+# List created shortcuts
+bws sc list
+```
+
+### Cross-platform Notes
+
+| Platform | Shortcut Type | Location |
+|----------|--------------|----------|
+| Windows | `.lnk` | Desktop |
+| Linux | `.desktop` | Desktop + `~/.local/share/applications/` |
+| macOS | `.app` bundle | Desktop |
 
 ---
 

@@ -32,6 +32,7 @@ func RegisterCommands(app *App) {
 	app.AddCommand(NewCacheCommand())
 	app.AddCommand(NewProfileCommand())
 	app.AddCommand(NewDoctorCommand())
+	app.AddCommand(NewShortcutCommand())
 	app.AddCommand(NewServeCommand())
 	app.AddCommand(NewHelpCommand())
 }

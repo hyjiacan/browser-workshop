@@ -12,6 +12,7 @@
 | `bws info` / `bws show` | 显示版本详细信息 |
 | `bws run` / `bws r` / `bws open` | 运行指定版本的浏览器 |
 | `bws install` / `bws i` | 安装浏览器版本 |
+| `bws shortcut` / `bws sc` | 管理桌面快捷方式 |
 | `bws import` / `bws imp` | 从目录批量导入（自动识别） |
 | `bws uninstall` / `bws rm` / `bws remove` | 卸载浏览器版本 |
 | `bws use` / `bws u` | 设置默认浏览器版本 |
@@ -257,6 +258,71 @@ bws i --from-file /path/to/chrome-setup.exe chrome@120
 # 强制重新安装
 bws i chrome@120 --force
 ```
+
+---
+
+## bws shortcut (别名: sc)
+
+为已安装的浏览器创建、移除或列出桌面快捷方式。快捷方式直接指向浏览器可执行文件，双击即可启动浏览器。
+
+### 用法
+
+```bash
+bws sc <子命令> [浏览器[@版本]] [选项]
+```
+
+### 子命令
+
+| 子命令 | 别名 | 说明 |
+|--------|------|------|
+| `create` | `c`, `add` | 创建桌面快捷方式 |
+| `remove` | `rm`, `del` | 移除桌面快捷方式 |
+| `list` | `ls` | 列出已创建的快捷方式 |
+
+### 参数
+
+| 参数 | 说明 |
+|------|------|
+| `浏览器[@版本]` | 可选，指定浏览器和版本（支持 latest、stable 等别名） |
+
+### 选项
+
+| 选项 | 简写 | 说明 |
+|------|------|------|
+| `--profile <名称>` | `-p` | 指定 Profile 名称 |
+| `--native` | `-n` | 原生模式（不使用 Profile） |
+| `--all` | `-a` | 为所有已安装版本创建/移除 |
+| `--name <名称>` | - | 自定义快捷方式名称 |
+
+### 示例
+
+```bash
+# 为指定版本创建快捷方式
+bws sc create chrome@120
+
+# 使用特定 Profile 创建快捷方式
+bws sc create firefox@latest --profile dev
+
+# 为所有已安装版本创建快捷方式
+bws sc create --all
+
+# 移除快捷方式
+bws sc remove chrome@120
+
+# 移除所有快捷方式
+bws sc remove --all
+
+# 列出已创建的快捷方式
+bws sc list
+```
+
+### 跨平台说明
+
+| 平台 | 快捷方式类型 | 位置 |
+|------|-------------|------|
+| Windows | `.lnk` | 桌面 |
+| Linux | `.desktop` | 桌面 + `~/.local/share/applications/` |
+| macOS | `.app` bundle | 桌面 |
 
 ---
 

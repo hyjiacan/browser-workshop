@@ -35,6 +35,9 @@ features:
   - icon: 📱
     title: Portable Mode
     details: Data is stored in the `bws-data/` subdirectory, ready to carry on a USB drive and use plug-and-play.
+  - icon: 🖥️
+    title: Desktop Shortcuts
+    details: One-click creation of desktop shortcuts. Double-click to launch the browser directly. Supports Windows, Linux, and macOS.
   - icon: ⚡
     title: Short Aliases
     details: Supports short aliases such as `gc` (chrome), `ff` (firefox), `cm` (chromium), making input faster.

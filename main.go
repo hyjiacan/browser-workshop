@@ -24,6 +24,7 @@ import (
 	"github.com/bws/bws/internal/paths"
 	"github.com/bws/bws/internal/repo"
 	bmserve "github.com/bws/bws/internal/serve"
+	"github.com/bws/bws/internal/shortcut"
 	"github.com/bws/bws/internal/source"
 	"github.com/bws/bws/internal/system"
 )
@@ -134,6 +135,7 @@ func main() {
 	ctx.Launch = &launchAdapter{mgr: launcher}
 	ctx.Download = &downloadAdapter{mgr: downloadMgr, paths: p}
 	ctx.Source = &sourceAdapter{src: sourceMgr, cfg: cfg}
+	ctx.Shortcut = &shortcutAdapter{}
 	ctx.Serve = &serveAdapter{version: version, source: sourceMgr}
 	ctx.Logger = logger
 	if repoImporter != nil {
@@ -978,6 +980,39 @@ func (s *serveSyncSource) ListVersions(browser string, channel string, platform 
 
 func (s *serveSyncSource) Download(url string, destDir string, onProgress func(downloaded, total int64)) (string, error) {
 	return bmserve.DefaultDownload(url, destDir, onProgress)
+}
+
+// shortcutAdapter adapts shortcut.Manager to cli.ShortcutProvider.
+type shortcutAdapter struct {
+	mgr *shortcut.Manager
+}
+
+func (a *shortcutAdapter) ensureManager() {
+	if a.mgr == nil {
+		a.mgr = shortcut.NewManager()
+	}
+}
+
+func (a *shortcutAdapter) Create(opts cli.ShortcutOptions) error {
+	a.ensureManager()
+	return a.mgr.Create(shortcut.Options{
+		Name:       opts.Name,
+		Target:     opts.Target,
+		Args:       opts.Args,
+		WorkingDir: opts.WorkingDir,
+		IconPath:   opts.IconPath,
+		DesktopDir: opts.DesktopDir,
+	})
+}
+
+func (a *shortcutAdapter) Remove(name string, desktopDir string) error {
+	a.ensureManager()
+	return a.mgr.Remove(name, desktopDir)
+}
+
+func (a *shortcutAdapter) List(desktopDir string) ([]string, error) {
+	a.ensureManager()
+	return a.mgr.List(desktopDir)
 }
 
 // downloadAdapter adapts download.Manager to cli.DownloadProvider.

@@ -35,6 +35,9 @@ features:
   - icon: 📱
     title: 便携模式
     details: 数据存储在 bws-data/ 子目录，U 盘随身携带，即插即用。
+  - icon: 🖥️
+    title: 桌面快捷方式
+    details: 一键创建桌面快捷方式，双击直接启动浏览器，支持 Windows、Linux、macOS。
   - icon: ⚡
     title: 短别名
     details: 支持 gc (chrome)、ff (firefox)、cm (chromium) 等短别名，输入更快捷。

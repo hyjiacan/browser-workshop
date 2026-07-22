@@ -43,6 +43,7 @@ type Context struct {
 	Repo     RepoProvider
 	Download DownloadProvider
 	Source   SourceProvider
+	Shortcut ShortcutProvider
 	Logger   Logger
 	Serve    ServeProvider
 }
@@ -279,6 +280,23 @@ type LaunchOptions struct {
 // DownloadProvider provides file downloading with progress.
 type DownloadProvider interface {
 	Download(url string, destPath string, onProgress func(downloaded, total int64, percent float64)) (string, error)
+}
+
+// ShortcutProvider provides desktop shortcut creation.
+type ShortcutProvider interface {
+	Create(opts ShortcutOptions) error
+	Remove(name string, desktopDir string) error
+	List(desktopDir string) ([]string, error)
+}
+
+// ShortcutOptions configures a desktop shortcut.
+type ShortcutOptions struct {
+	Name       string
+	Target     string
+	Args       []string
+	WorkingDir string
+	IconPath   string
+	DesktopDir string
 }
 
 // SourceProvider provides browser version data sources.

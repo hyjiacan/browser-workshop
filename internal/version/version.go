@@ -209,6 +209,11 @@ func isAlias(v string) bool {
 	return aliasSet[strings.ToLower(v)]
 }
 
+// IsAlias reports whether v is a known version alias (e.g. "latest", "stable").
+func IsAlias(v string) bool {
+	return isAlias(v)
+}
+
 // looksLikeVersion checks if a string looks like a version number.
 func looksLikeVersion(s string) bool {
 	if len(s) == 0 {
