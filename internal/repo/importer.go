@@ -180,13 +180,7 @@ func (imp *Importer) ImportAll(opts ImportOptions, onProgress ProgressCallback) 
 			}
 			// Force: uninstall first
 			if err := imp.installer.Uninstall(match.Browser, match.Version); err != nil {
-				result := ImportResult{
-					SourcePath: match.Path,
-					Browser:    match.Browser,
-					Version:    match.Version,
-					Success:    false,
-					Error:      fmt.Errorf("force uninstall failed: %w", err),
-				}
+				result.Error = fmt.Errorf("force uninstall failed: %w", err)
 				summary.Failed++
 				summary.Results = append(summary.Results, result)
 				if onProgress != nil {

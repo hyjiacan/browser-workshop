@@ -239,7 +239,7 @@ func init() {
 }
 
 // fileIsExecutable checks if a file exists and is executable.
-// On Windows, we just check existence of .exe files.
+// On Windows, we check existence and .exe extension.
 func fileIsExecutable(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil {
@@ -248,6 +248,11 @@ func fileIsExecutable(path string) bool {
 	if info.IsDir() {
 		return false
 	}
+	// On Windows, verify .exe extension
+	if strings.HasSuffix(strings.ToLower(path), ".exe") {
+		return true
+	}
+	// Non-Windows: accept any regular file as executable
 	return true
 }
 
@@ -255,12 +260,22 @@ func fileIsExecutable(path string) bool {
 // Returns the relative path from root if found, empty string otherwise.
 func searchRecursive(root string, target string, maxDepth int) string {
 	var result string
+	visited := make(map[string]bool)
 
 	var walk func(dir string, depth int) bool
 	walk = func(dir string, depth int) bool {
 		if depth > maxDepth {
 			return false
 		}
+
+		absDir, err := filepath.Abs(dir)
+		if err != nil {
+			return false
+		}
+		if visited[absDir] {
+			return false
+		}
+		visited[absDir] = true
 
 		entries, err := os.ReadDir(dir)
 		if err != nil {

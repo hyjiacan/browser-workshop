@@ -434,6 +434,9 @@ func (s *HTTPSource) fetchManifest(ctx context.Context) (*manifestV1Response, *m
 	return nil, nil, fmt.Errorf("unrecognized manifest format")
 }
 
+// maxResponseBodySize is the maximum HTTP response body size (100MB).
+const maxResponseBodySize = 100 << 20
+
 // fetchJSON fetches a URL and returns the response and body bytes.
 func (s *HTTPSource) fetchJSON(ctx context.Context, url string) (*http.Response, []byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -447,7 +450,8 @@ func (s *HTTPSource) fetchJSON(ctx context.Context, url string) (*http.Response,
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	limited := io.LimitReader(resp.Body, maxResponseBodySize)
+	body, err := io.ReadAll(limited)
 	if err != nil {
 		return resp, nil, fmt.Errorf("reading response body: %w", err)
 	}

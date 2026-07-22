@@ -18,6 +18,14 @@ import (
 	"github.com/ulikunitz/xz"
 )
 
+// maxExtractSize is the maximum total size of extracted files (10GB).
+const maxExtractSize = 10 << 30
+
+// safeFileMode masks out setuid/setgid/sticky bits from tar header modes.
+func safeFileMode(mode int64) os.FileMode {
+	return os.FileMode(mode) & 0o777
+}
+
 // supportedFormats lists archive format extensions we can handle (pure Go).
 var supportedFormats = []string{
 	".zip",
@@ -232,6 +240,7 @@ func extractZip(srcPath, destDir string) error {
 	}
 	defer r.Close()
 
+	var totalSize int64
 	for _, f := range r.File {
 		fpath := filepath.Join(destDir, f.Name)
 		cleanDest := filepath.Clean(destDir) + string(os.PathSeparator)
@@ -256,11 +265,15 @@ func extractZip(srcPath, destDir string) error {
 			dstFile.Close()
 			return err
 		}
-		_, err = io.Copy(dstFile, srcFile)
+		n, err := io.Copy(dstFile, srcFile)
 		srcFile.Close()
 		dstFile.Close()
 		if err != nil {
 			return err
+		}
+		totalSize += n
+		if totalSize > maxExtractSize {
+			return fmt.Errorf("解压大小超过限制 (%d > %d)", totalSize, maxExtractSize)
 		}
 	}
 	return nil
@@ -275,6 +288,7 @@ func extract7z(srcPath, destDir string) error {
 	}
 	defer r.Close()
 
+	var totalSize int64
 	for _, f := range r.File {
 		fpath := filepath.Join(destDir, f.Name)
 		cleanDest := filepath.Clean(destDir) + string(os.PathSeparator)
@@ -304,11 +318,15 @@ func extract7z(srcPath, destDir string) error {
 			return err
 		}
 
-		_, err = io.Copy(dstFile, rc)
+		n, err := io.Copy(dstFile, rc)
 		rc.Close()
 		dstFile.Close()
 		if err != nil {
 			return err
+		}
+		totalSize += n
+		if totalSize > maxExtractSize {
+			return fmt.Errorf("解压大小超过限制 (%d > %d)", totalSize, maxExtractSize)
 		}
 	}
 	return nil
@@ -363,6 +381,7 @@ func extractTar(srcPath, destDir string, format string) error {
 	}
 
 	// Extract files
+	var totalSize int64
 	for {
 		header, err := tr.Next()
 		if err == io.EOF {
@@ -380,21 +399,25 @@ func extractTar(srcPath, destDir string, format string) error {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(fpath, os.FileMode(header.Mode)); err != nil {
+			if err := os.MkdirAll(fpath, safeFileMode(header.Mode)); err != nil {
 				return err
 			}
 		case tar.TypeReg, tar.TypeRegA:
 			if err := os.MkdirAll(filepath.Dir(fpath), 0o755); err != nil {
 				return err
 			}
-			dstFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.FileMode(header.Mode))
+			dstFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, safeFileMode(header.Mode))
 			if err != nil {
 				return err
 			}
-			_, err = io.Copy(dstFile, tr)
+			n, err := io.Copy(dstFile, tr)
 			dstFile.Close()
 			if err != nil {
 				return err
+			}
+			totalSize += n
+			if totalSize > maxExtractSize {
+				return fmt.Errorf("解压大小超过限制 (%d > %d)", totalSize, maxExtractSize)
 			}
 		}
 	}

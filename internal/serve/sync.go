@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -9,6 +10,9 @@ import (
 	"sync"
 	"time"
 )
+
+// maxDownloadSize is the maximum allowed download size (2GB).
+const maxDownloadSize = 2 << 30
 
 // SyncVersionInfo describes a version available from an online source.
 type SyncVersionInfo struct {
@@ -83,14 +87,15 @@ type SyncStatus struct {
 
 // syncManager handles scheduled and manual sync operations.
 type syncManager struct {
-	server   *Server
-	source   SyncSource
-	config   SyncConfig
-	status   SyncStatus
-	mu       sync.Mutex
-	stopCh   chan struct{}
-	trigger  chan struct{}
-	running  bool
+	server    *Server
+	source    SyncSource
+	config    SyncConfig
+	status    SyncStatus
+	mu        sync.Mutex
+	stopCh    chan struct{}
+	stopOnce  sync.Once
+	trigger   chan struct{}
+	running   bool
 }
 
 // newSyncManager creates a new sync manager for the server.
@@ -121,7 +126,9 @@ func (sm *syncManager) Start() {
 
 // Stop stops the sync scheduler.
 func (sm *syncManager) Stop() {
-	close(sm.stopCh)
+	sm.stopOnce.Do(func() {
+		close(sm.stopCh)
+	})
 }
 
 // Trigger requests an immediate sync run. Returns immediately.
@@ -330,7 +337,28 @@ func DefaultDownload(url string, destDir string, onProgress func(downloaded, tot
 	// Download to temp file
 	tmpPath := destPath + ".tmp"
 
-	resp, err := http.Get(url)
+	// Clean up temp file on any error
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	// Use a client with timeout
+	client := &http.Client{
+		Timeout: 30 * time.Minute,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("creating request: %w", err)
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("HTTP GET: %w", err)
 	}
@@ -338,6 +366,11 @@ func DefaultDownload(url string, destDir string, onProgress func(downloaded, tot
 
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+
+	// Enforce size limit
+	if resp.ContentLength > maxDownloadSize {
+		return "", fmt.Errorf("文件大小超过限制 (%d > %d)", resp.ContentLength, maxDownloadSize)
 	}
 
 	total := resp.ContentLength
@@ -357,6 +390,10 @@ func DefaultDownload(url string, destDir string, onProgress func(downloaded, tot
 				return "", fmt.Errorf("writing: %w", werr)
 			}
 			downloaded += int64(n)
+			if downloaded > maxDownloadSize {
+				out.Close()
+				return "", fmt.Errorf("下载大小超过限制 (%d > %d)", downloaded, maxDownloadSize)
+			}
 			if onProgress != nil {
 				onProgress(downloaded, total)
 			}
@@ -370,12 +407,15 @@ func DefaultDownload(url string, destDir string, onProgress func(downloaded, tot
 		}
 	}
 
-	out.Close()
+	if err := out.Close(); err != nil {
+		return "", fmt.Errorf("closing temp file: %w", err)
+	}
 
 	// Rename to final
 	if err := os.Rename(tmpPath, destPath); err != nil {
 		return "", fmt.Errorf("renaming: %w", err)
 	}
 
+	cleanup = false // rename succeeded, don't remove
 	return destPath, nil
 }

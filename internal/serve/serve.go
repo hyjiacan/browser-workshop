@@ -214,8 +214,12 @@ func NewServerWithOptions(opts ServerOptions) *Server {
 // Start starts the HTTP server. It blocks until the server stops.
 func (s *Server) Start() error {
 	// Ensure directories exist
-	os.MkdirAll(s.packagesDir, 0o755)
-	os.MkdirAll(s.binDir, 0o755)
+	if err := os.MkdirAll(s.packagesDir, 0o755); err != nil {
+		return fmt.Errorf("creating packages directory: %w", err)
+	}
+	if err := os.MkdirAll(s.binDir, 0o755); err != nil {
+		return fmt.Errorf("creating bin directory: %w", err)
+	}
 
 	// Load cache
 	cache, err := s.loadCache()
@@ -315,6 +319,9 @@ func (s *Server) printStartupInfo() {
 // scanPackages scans the packages directory recursively and builds the file list.
 // Uses a worker pool for parallel checksum computation.
 func (s *Server) scanPackages(cache map[string]cacheEntry) error {
+	if cache == nil {
+		cache = make(map[string]cacheEntry)
+	}
 	fmt.Printf("  正在扫描软件包目录: %s\n", s.packagesDir)
 
 	// Create a scanner for filename parsing
@@ -464,28 +471,32 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 			close(results)
 		}()
 
-		// Collect results
-		for r := range results {
-			if r.err != nil {
-				fmt.Fprintf(os.Stderr, "  警告: 计算 %s 校验和失败: %v\n", r.relPath, r.err)
-				continue
-			}
-			// Find the matching miss entry to get file info
-			for _, m := range misses {
-				if m.idx == r.idx {
-					pkg := s.parsePackageFile(scanner, r.relPath, m.info.Size(), r.checksum)
-					files[r.idx] = pkg
-					totalSize += m.info.Size()
-					// Update cache
-					cache[r.relPath] = cacheEntry{
-						Mtime:    m.info.ModTime(),
-						Checksum: r.checksum,
-						Size:     m.info.Size(),
-					}
-					break
-				}
-			}
+		// Build miss lookup map for O(1) access
+	missMap := make(map[int]missEntry, len(misses))
+	for _, m := range misses {
+		missMap[m.idx] = m
+	}
+
+	// Collect results
+	for r := range results {
+		if r.err != nil {
+			fmt.Fprintf(os.Stderr, "  警告: 计算 %s 校验和失败: %v\n", r.relPath, r.err)
+			continue
 		}
+		m, ok := missMap[r.idx]
+		if !ok {
+			continue
+		}
+		pkg := s.parsePackageFile(scanner, r.relPath, m.info.Size(), r.checksum)
+		files[r.idx] = pkg
+		totalSize += m.info.Size()
+		// Update cache
+		cache[r.relPath] = cacheEntry{
+			Mtime:    m.info.ModTime(),
+			Checksum: r.checksum,
+			Size:     m.info.Size(),
+		}
+	}
 	}
 
 	// Phase 4: remove nil entries (failed checksums) and cleanup
@@ -633,7 +644,7 @@ func (s *Server) saveCache(cache map[string]cacheEntry) error {
 		return err
 	}
 
-	return os.WriteFile(s.cachePath, data, 0o644)
+	return os.WriteFile(s.cachePath, data, 0o600)
 }
 
 // --- HTTP Handlers ---
@@ -666,7 +677,9 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	enc.Encode(resp)
+	if err := enc.Encode(resp); err != nil {
+		fmt.Fprintf(os.Stderr, "警告: 编码 manifest 响应失败: %v\n", err)
+	}
 }
 
 // handleDownload serves a package file for download.
@@ -741,7 +754,9 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	enc.Encode(resp)
+	if err := enc.Encode(resp); err != nil {
+		fmt.Fprintf(os.Stderr, "警告: 编码 status 响应失败: %v\n", err)
+	}
 }
 
 // handleBin serves client binary files from the bin/ directory.

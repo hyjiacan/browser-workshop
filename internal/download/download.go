@@ -14,6 +14,9 @@ import (
 	"time"
 )
 
+// maxDownloadSize is the maximum allowed download size (2GB).
+const maxDownloadSize = 2 << 30
+
 // Progress reports download progress.
 type Progress struct {
 	// Total is the total number of bytes to download (-1 if unknown).
@@ -182,6 +185,14 @@ func (m *Manager) Download(ctx context.Context, opts Options) (*Result, error) {
 		}
 	}
 
+	// Clean up temp file on error (unless resuming)
+	downloadOK := false
+	defer func() {
+		if !downloadOK && !opts.Resume {
+			_ = os.Remove(tempPath)
+		}
+	}()
+
 	// Build the request
 	req, err := http.NewRequestWithContext(downloadCtx, http.MethodGet, opts.URL, nil)
 	if err != nil {
@@ -207,6 +218,11 @@ func (m *Manager) Download(ctx context.Context, opts Options) (*Result, error) {
 	// Check status code
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	// Enforce size limit
+	if resp.ContentLength > maxDownloadSize {
+		return nil, fmt.Errorf("文件大小超过限制 (%d > %d)", resp.ContentLength, maxDownloadSize)
 	}
 
 	// Calculate total size and handle file creation
@@ -289,6 +305,8 @@ func (m *Manager) Download(ctx context.Context, opts Options) (*Result, error) {
 	if err := file.Close(); err != nil {
 		return nil, fmt.Errorf("closing downloaded file: %w", err)
 	}
+
+	downloadOK = true
 
 	// Rename .part to final filename
 	if err := os.Rename(tempPath, opts.DestPath); err != nil {
