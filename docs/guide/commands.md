@@ -821,6 +821,71 @@ bws cc clear
 
 ---
 
+## bws plugin (别名: pl)
+
+管理 bws 插件。插件是 Lua 脚本，可以在浏览器启动时自动修改参数或执行操作。
+
+### 子命令
+
+| 子命令 | 别名 | 说明 |
+|--------|------|------|
+| `list` | `ls`, `l` | 列出已安装的插件 |
+| `install` | `i`, `add` | 安装插件（本地文件或远程 registry） |
+| `uninstall` | `rm`, `remove` | 卸载插件 |
+| `search` | `s`, `find` | 搜索远程插件 |
+
+### 示例
+
+```bash
+# 列出已安装插件
+bws plugin list
+
+# 从本地文件安装
+bws plugin install ./my-plugin.lua
+
+# 从 registry 安装
+bws plugin install fingerprint-enhanced
+
+# 卸载
+bws plugin uninstall fingerprint-enhanced
+
+# 搜索
+bws plugin search fingerprint
+```
+
+### 使用插件运行浏览器
+
+```bash
+# 启动时激活插件
+bws r chrome@120 --plugin auto-arg
+
+# 同时激活多个插件（逗号分隔）
+bws r chrome@120 --plugin auto-arg,fingerprint-enhanced
+```
+
+### 编写插件
+
+插件是 `.lua` 文件，放在 `bws-data/plugins/`（便携模式）或 `~/.bws/plugins/` 目录下。
+
+**可用的 ctx API：**
+
+| 函数/字段 | 说明 |
+|-----------|------|
+| `ctx.browser` | 浏览器名称（如 "chrome"、"firefox"） |
+| `ctx.version` | 版本号 |
+| `ctx.profile` | Profile 名称 |
+| `ctx.profile_dir` | Profile 目录绝对路径 |
+| `ctx.config(key)` | 读取 bws 配置项 |
+| `ctx.add_arg(arg)` | 添加浏览器启动参数 |
+| `ctx.set_env(key, value)` | 设置环境变量 |
+| `ctx.write_file(path, content)` | 写入文件（返回 nil 成功，或错误字符串） |
+| `ctx.read_file(path)` | 读取文件（返回 content, error） |
+| `ctx.log(message)` | 输出日志到 stderr |
+
+**插件可以定义 `pre_run()` 函数，在浏览器启动前被调用。**
+
+---
+
 ## bws doctor (别名: dt)
 
 系统健康检查。

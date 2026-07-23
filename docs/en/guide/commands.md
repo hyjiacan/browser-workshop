@@ -821,6 +821,71 @@ bws cc clear
 
 ---
 
+## bws plugin (alias: pl)
+
+Manage bws plugins. Plugins are Lua scripts that modify browser args or execute actions at launch time.
+
+### Subcommands
+
+| Subcommand | Aliases | Description |
+|------------|---------|-------------|
+| `list` | `ls`, `l` | List installed plugins |
+| `install` | `i`, `add` | Install a plugin (local file or remote registry) |
+| `uninstall` | `rm`, `remove` | Uninstall a plugin |
+| `search` | `s`, `find` | Search remote plugins |
+
+### Examples
+
+```bash
+# List installed plugins
+bws plugin list
+
+# Install from local file
+bws plugin install ./my-plugin.lua
+
+# Install from registry
+bws plugin install fingerprint-enhanced
+
+# Uninstall
+bws plugin uninstall fingerprint-enhanced
+
+# Search
+bws plugin search fingerprint
+```
+
+### Using plugins when launching
+
+```bash
+# Activate a plugin
+bws r chrome@120 --plugin auto-arg
+
+# Multiple plugins (comma-separated)
+bws r chrome@120 --plugin auto-arg,fingerprint-enhanced
+```
+
+### Writing plugins
+
+Plugins are `.lua` files in the `bws-data/plugins/` (portable) or `~/.bws/plugins/` directory.
+
+**Available ctx API:**
+
+| Function/Field | Description |
+|----------------|-------------|
+| `ctx.browser` | Browser name (e.g. "chrome", "firefox") |
+| `ctx.version` | Version number |
+| `ctx.profile` | Profile name |
+| `ctx.profile_dir` | Profile directory absolute path |
+| `ctx.config(key)` | Read bws config value |
+| `ctx.add_arg(arg)` | Add a browser launch argument |
+| `ctx.set_env(key, value)` | Set an environment variable |
+| `ctx.write_file(path, content)` | Write a file (returns nil on success, or error string) |
+| `ctx.read_file(path)` | Read a file (returns content, error) |
+| `ctx.log(message)` | Log message to stderr |
+
+**Plugins can define a `pre_run()` function, called before browser launch.**
+
+---
+
 ## bws doctor (alias: dt)
 
 System health check.
