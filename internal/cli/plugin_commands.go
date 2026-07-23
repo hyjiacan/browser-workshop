@@ -230,6 +230,6 @@ func runPluginSearch(ctx *Context, args []string) error {
 }
 
 func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }

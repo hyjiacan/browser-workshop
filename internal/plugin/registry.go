@@ -72,7 +72,10 @@ func (c *RegistryClient) Fetch() (*Registry, error) {
 	}
 
 	_ = os.MkdirAll(c.CacheDir, 0o755)
-	_ = os.WriteFile(filepath.Join(c.CacheDir, "registry.json"), data, 0o644)
+	if cacheErr := os.WriteFile(filepath.Join(c.CacheDir, "registry.json"), data, 0o644); cacheErr != nil {
+		// Cache write failure is non-fatal, but log it for debugging.
+		fmt.Fprintf(os.Stderr, "警告: 写入注册表缓存失败: %v\n", cacheErr)
+	}
 
 	reg := &Registry{}
 	if err := json.Unmarshal(data, reg); err != nil {

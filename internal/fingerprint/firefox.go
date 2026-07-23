@@ -129,5 +129,7 @@ user_pref("dom.event.clipboardevents.enabled", false);
 user_pref("browser.send_pings", false);
 user_pref("beacon.enabled", false);
 user_pref("network.http.referer.XOriginPolicy", 1);
+// WebAudio enabled: disabled audio context is a distinct fingerprint signal.
+// We intentionally keep it enabled to avoid standing out.
 user_pref("dom.webaudio.enabled", true);
 `

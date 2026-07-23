@@ -9,21 +9,27 @@
 import sys
 import json
 
-# 读取 bws 发送的上下文
-req = json.loads(sys.stdin.read())
-resp = {}
+try:
+    # 读取 bws 发送的上下文
+    req = json.loads(sys.stdin.read())
+    resp = {}
 
-browser = req.get("browser", "")
-version = req.get("version", "")
+    browser = req.get("browser", "")
+    version = req.get("version", "")
 
-# 根据浏览器类型添加固定参数
-if browser in ("chrome", "chromium"):
-    resp["extraArgs"] = [
-        "--disable-background-timer-throttling",
-        "--disable-renderer-backgrounding",
-    ]
-elif browser == "firefox":
-    resp["extraArgs"] = []
+    # 根据浏览器类型添加固定参数
+    if browser in ("chrome", "chromium"):
+        resp["extraArgs"] = [
+            "--disable-background-timer-throttling",
+            "--disable-renderer-backgrounding",
+        ]
+    elif browser == "firefox":
+        resp["extraArgs"] = []
 
-# 输出响应
-print(json.dumps(resp))
+    # 输出响应
+    print(json.dumps(resp))
+except Exception as e:
+    # 输出错误到 stderr，bws 会显示并记录警告
+    print(f"IPC plugin error: {e}", file=sys.stderr)
+    # 输出 error 字段到 stdout，bws 会跳过该插件
+    print(json.dumps({"error": str(e)}))
