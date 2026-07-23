@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 
 	"github.com/bws/bws/internal/browser"
+	"github.com/bws/bws/internal/fingerprint"
 	"github.com/bws/bws/internal/install"
 	"github.com/bws/bws/internal/log"
 	"github.com/bws/bws/internal/paths"
@@ -69,6 +70,10 @@ type Options struct {
 	// Supported: http://host:port, socks5://host:port, etc.
 	// Empty means no proxy.
 	Proxy string
+
+	// Fingerprint is the fingerprint isolation config.
+	// nil means no fingerprint isolation.
+	Fingerprint *fingerprint.Config
 }
 
 // Process represents a launched browser process.
@@ -247,6 +252,12 @@ func (m *Manager) buildArgs(desc *browser.BrowserDescriptor, opts Options, profi
 		args = append(args, proxyArgs...)
 	}
 
+	// Fingerprint isolation
+	if opts.Fingerprint != nil && !opts.Fingerprint.IsEmpty() {
+		fpArgs := buildFingerprintArgs(desc, opts.Fingerprint, profileDir)
+		args = append(args, fpArgs...)
+	}
+
 	// URLs to open
 	for _, url := range opts.URLs {
 		args = append(args, url)
@@ -318,6 +329,24 @@ user_pref("network.proxy.ssl_port", %s);
 	}
 
 	_ = os.WriteFile(prefsPath, []byte(content), 0o644)
+}
+
+// buildFingerprintArgs constructs fingerprint-related arguments for the browser.
+// Chrome: uses command-line flags (--user-agent, --lang, --window-size, etc.)
+// Firefox: writes user.js preferences to the profile directory.
+func buildFingerprintArgs(desc *browser.BrowserDescriptor, cfg *fingerprint.Config, profileDir string) []string {
+	switch desc.Name {
+	case "chrome", "chromium":
+		return cfg.ChromeArgs()
+	case "firefox":
+		// Firefox: write user.js to profile directory
+		if profileDir != "" {
+			_ = cfg.WriteFirefoxUserJS(profileDir)
+		}
+		return nil
+	default:
+		return nil
+	}
 }
 
 // BuildCommandPreview builds and returns the command that would be executed,

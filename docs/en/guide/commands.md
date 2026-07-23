@@ -165,6 +165,7 @@ bws r [browser[@version]] [URL] [options] [-- native arguments]
 | `--dry-run` | - | Dry run (do not actually start) |
 | `--proxy <url>` | - | Proxy URL (e.g. `socks5://127.0.0.1:1080`), empty uses global config |
 | `--no-proxy` | - | Disable proxy (overrides global config) |
+| `--fingerprint <preset>` | `-fp` | Fingerprint isolation preset (`standard`/`random`/`none`), or JSON config/@file path |
 | `--` | - | Arguments after this are passed directly to the browser |
 
 ### Examples
@@ -206,9 +207,67 @@ bws r chrome@120 --proxy socks5://127.0.0.1:1080
 # Disable proxy (overrides global config)
 bws r chrome@120 --no-proxy
 
+# Fingerprint isolation: random fingerprint
+bws r chrome@120 --fingerprint random
+
+# Fingerprint isolation: standard protection
+bws r chrome@120 --fingerprint standard
+
+# Fingerprint isolation: custom JSON
+bws r chrome@120 --fingerprint '{"userAgent":"...","language":"en-US","webrtc":"disabled"}'
+
 # Use the open alias
 bws open chrome@120
 ```
+### Fingerprint Isolation
+
+The `--fingerprint` (short `-fp`) option adds fingerprint masking when launching the browser, reducing the accuracy of website fingerprinting.
+
+**Preset modes:**
+
+| Preset | Description |
+|--------|-------------|
+| `standard` | Basic protection: disables WebRTC, uses fake media devices |
+| `random` | Random fingerprint: generates random UA, language, resolution each time |
+| `none` | No fingerprint isolation (default) |
+
+**Custom configuration:**
+
+```bash
+# Direct JSON
+bws r chrome@120 --fingerprint '{"userAgent":"...","language":"en-US","webrtc":"disabled","disableWebGL":true,"fakeMediaDevices":true,"windowWidth":1280,"windowHeight":720,"devicePixelRatio":1}'
+
+# From file
+bws r chrome@120 --fingerprint @./fingerprint.json
+```
+
+**JSON config fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `preset` | string | Preset identifier (`custom`) |
+| `userAgent` | string | HTTP User-Agent header |
+| `language` | string | Browser language |
+| `windowWidth` | int | Window width |
+| `windowHeight` | int | Window height |
+| `devicePixelRatio` | float | Device pixel ratio |
+| `webrtc` | string | WebRTC policy: `disabled`/`proxied`/`default` |
+| `disableWebGL` | bool | Disable WebGL |
+| `disableCanvasRead` | bool | Disable canvas readback |
+| `fakeMediaDevices` | bool | Use fake media devices |
+
+**Browser implementation differences:**
+
+| Dimension | Chrome/Chromium | Firefox |
+|-----------|:---:|:---:|
+| User-Agent | `--user-agent` CLI flag | `general.useragent.override` pref |
+| Language | `--lang` CLI flag | `intl.accept_languages` pref |
+| Window size | `--window-size` CLI flag | Managed by RFP |
+| DPR | `--force-device-scale-factor` | Managed by RFP |
+| WebRTC | `--force-webrtc-ip-handling-policy` | `media.peerconnection.*` prefs |
+| Comprehensive | Per-flag CLI control | `privacy.resistFingerprinting` one-click |
+
+> **Note**: Chrome's CLI flags only control the HTTP layer and some browser behaviors. They **cannot override JS-side `navigator.userAgent`, `screen` objects, or Canvas/WebGL rendering results**. These require Chrome DevTools Protocol or browser extensions to inject JS scripts. Firefox's `resistFingerprinting` provides more comprehensive built-in protection.
 
 ---
 

@@ -165,6 +165,7 @@ bws r [浏览器[@版本]] [URL] [选项] [-- 原生参数]
 | `--dry-run` | - | 试运行（不实际启动） |
 | `--proxy <url>` | - | 代理地址（如 `socks5://127.0.0.1:1080`），留空使用全局配置 |
 | `--no-proxy` | - | 禁用代理（覆盖全局配置） |
+| `--fingerprint <preset>` | `-fp` | 指纹隔离预设（`standard`/`random`/`none`），或 JSON 配置/@文件路径 |
 | `--` | - | 之后的参数原样传递给浏览器 |
 
 ### 示例
@@ -206,9 +207,67 @@ bws r chrome@120 --proxy socks5://127.0.0.1:1080
 # 禁用代理（覆盖全局配置）
 bws r chrome@120 --no-proxy
 
+# 指纹隔离：随机生成指纹
+bws r chrome@120 --fingerprint random
+
+# 指纹隔离：标准防护
+bws r chrome@120 --fingerprint standard
+
+# 指纹隔离：自定义 JSON
+bws r chrome@120 --fingerprint '{"userAgent":"...","language":"en-US","webrtc":"disabled"}'
+
 # 使用 open 别名
 bws open chrome@120
 ```
+### 指纹隔离
+
+`--fingerprint`（简写 `-fp`）选项为浏览器启动时添加指纹伪装，降低网站指纹识别的准确性。
+
+**预设模式：**
+
+| 预设 | 说明 |
+|------|------|
+| `standard` | 标准防护：禁用 WebRTC、使用虚拟媒体设备 |
+| `random` | 随机指纹：每次生成随机的 User-Agent、语言、分辨率等组合 |
+| `none` | 无指纹隔离（默认） |
+
+**自定义配置：**
+
+```bash
+# 直接传入 JSON
+bws r chrome@120 --fingerprint '{"userAgent":"...","language":"en-US","webrtc":"disabled","disableWebGL":true,"fakeMediaDevices":true,"windowWidth":1280,"windowHeight":720,"devicePixelRatio":1}'
+
+# 从文件读取
+bws r chrome@120 --fingerprint @./fingerprint.json
+```
+
+**JSON 配置字段：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `preset` | string | 预设标识（`custom`） |
+| `userAgent` | string | HTTP User-Agent 头 |
+| `language` | string | 浏览器语言 |
+| `windowWidth` | int | 窗口宽度 |
+| `windowHeight` | int | 窗口高度 |
+| `devicePixelRatio` | float | 设备像素比 |
+| `webrtc` | string | WebRTC 策略：`disabled`/`proxied`/`default` |
+| `disableWebGL` | bool | 禁用 WebGL |
+| `disableCanvasRead` | bool | 禁用 Canvas 读取 |
+| `fakeMediaDevices` | bool | 使用虚拟媒体设备 |
+
+**浏览器实现差异：**
+
+| 维度 | Chrome/Chromium | Firefox |
+|------|:---:|:---:|
+| User-Agent | `--user-agent` 命令行参数 | `general.useragent.override` 配置 |
+| 语言 | `--lang` 命令行参数 | `intl.accept_languages` 配置 |
+| 窗口大小 | `--window-size` 命令行参数 | RFP 自动管理 |
+| DPR | `--force-device-scale-factor` | RFP 自动管理 |
+| WebRTC | `--force-webrtc-ip-handling-policy` | `media.peerconnection.*` 配置 |
+| 综合防护 | 命令行参数逐个控制 | `privacy.resistFingerprinting` 一键开启 |
+
+> **注意**：Chrome 的命令行参数只能控制 HTTP 层和部分浏览器行为，**无法覆盖 JS 侧的 `navigator.userAgent`、`screen` 对象、Canvas/WebGL 渲染结果**。这些需要 Chrome DevTools Protocol 或浏览器扩展来注入 JS 脚本。Firefox 的 `resistFingerprinting` 则提供更全面的内置保护。
 
 ---
 

@@ -280,6 +280,10 @@ type LaunchOptions struct {
 	Detached    bool
 	DryRun      bool
 	Proxy       string // proxy URL for the browser (empty = no proxy)
+
+	// Fingerprint is the fingerprint isolation config string.
+	// Supports: "standard", "random", "none", JSON, or "@filepath".
+	Fingerprint string
 }
 
 // DownloadProvider provides file downloading with progress.

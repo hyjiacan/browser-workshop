@@ -18,6 +18,7 @@ import (
 	"github.com/bws/bws/internal/cli"
 	"github.com/bws/bws/internal/config"
 	"github.com/bws/bws/internal/download"
+	"github.com/bws/bws/internal/fingerprint"
 	bmlog "github.com/bws/bws/internal/log"
 	"github.com/bws/bws/internal/install"
 	"github.com/bws/bws/internal/launch"
@@ -790,6 +791,15 @@ func (a *launchAdapter) Run(opts cli.LaunchOptions) error {
 		Proxy:       opts.Proxy,
 	}
 
+	// Parse fingerprint config
+	if opts.Fingerprint != "" {
+		fp, err := fingerprint.FromString(opts.Fingerprint)
+		if err != nil {
+			return fmt.Errorf("指纹配置解析失败: %w", err)
+		}
+		launchOpts.Fingerprint = fp
+	}
+
 	proc, err := a.mgr.Launch(launchOpts)
 	if err != nil {
 		return err
@@ -817,6 +827,16 @@ func (a *launchAdapter) PreviewCommand(opts cli.LaunchOptions) (string, []string
 		ExtraArgs:   opts.ExtraArgs,
 		Proxy:       opts.Proxy,
 	}
+
+	// Parse fingerprint config
+	if opts.Fingerprint != "" {
+		fp, err := fingerprint.FromString(opts.Fingerprint)
+		if err != nil {
+			return "", nil, fmt.Errorf("指纹配置解析失败: %w", err)
+		}
+		launchOpts.Fingerprint = fp
+	}
+
 	return a.mgr.BuildCommandPreview(launchOpts)
 }
 

@@ -430,6 +430,8 @@ func NewRunCommand() *Command {
 			"r chrome@system",
 			"r chrome --proxy socks5://127.0.0.1:1080",
 			"r chrome --no-proxy",
+			"r chrome --fingerprint random",
+			"r chrome --fingerprint standard",
 		},
 		Flags: []*Flag{
 			{Name: "headless", Short: "H", Usage: "无头模式运行", HasValue: false, Default: "false"},
@@ -441,6 +443,7 @@ func NewRunCommand() *Command {
 			{Name: "dry-run", Short: "", Usage: "仅打印命令，不实际运行", HasValue: false, Default: "false"},
 			{Name: "proxy", Short: "", Usage: "代理地址（如 socks5://127.0.0.1:1080），留空使用全局配置", HasValue: true, Default: ""},
 			{Name: "no-proxy", Short: "", Usage: "禁用代理（覆盖全局配置）", HasValue: false, Default: "false"},
+			{Name: "fingerprint", Short: "fp", Usage: "指纹隔离预设（standard/random/none），或 JSON 配置/@文件路径", HasValue: true, Default: ""},
 		},
 		Run: runRun,
 	}
@@ -457,6 +460,7 @@ func runRun(ctx *Context, args []string) error {
 		{Name: "dry-run", Short: "", Usage: "试运行", HasValue: false, Default: "false"},
 		{Name: "proxy", Short: "", Usage: "代理地址（如 socks5://127.0.0.1:1080），留空使用全局配置", HasValue: true, Default: ""},
 		{Name: "no-proxy", Short: "", Usage: "禁用代理（覆盖全局配置）", HasValue: false, Default: "false"},
+		{Name: "fingerprint", Short: "fp", Usage: "指纹隔离预设（standard/random/none），或 JSON 配置/@文件路径", HasValue: true, Default: ""},
 	}
 
 	// Split args at -- to separate bm args from browser args
@@ -544,6 +548,7 @@ func runRun(ctx *Context, args []string) error {
 		Detached:    flagVals["detached"] == "true",
 		DryRun:      flagVals["dry-run"] == "true",
 		Proxy:       proxyURL,
+		Fingerprint: flagVals["fingerprint"],
 	}
 
 	if opts.DryRun {
