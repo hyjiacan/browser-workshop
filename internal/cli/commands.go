@@ -444,6 +444,7 @@ func NewRunCommand() *Command {
 			{Name: "proxy", Short: "", Usage: "代理地址（如 socks5://127.0.0.1:1080），留空使用全局配置", HasValue: true, Default: ""},
 			{Name: "no-proxy", Short: "", Usage: "禁用代理（覆盖全局配置）", HasValue: false, Default: "false"},
 			{Name: "fingerprint", Short: "fp", Usage: "指纹隔离预设（standard/random/none），或 JSON 配置/@文件路径", HasValue: true, Default: ""},
+			{Name: "plugin", Short: "", Usage: "激活的插件（逗号分隔多个）", HasValue: true, Default: ""},
 		},
 		Run: runRun,
 	}
@@ -461,6 +462,7 @@ func runRun(ctx *Context, args []string) error {
 		{Name: "proxy", Short: "", Usage: "代理地址（如 socks5://127.0.0.1:1080），留空使用全局配置", HasValue: true, Default: ""},
 		{Name: "no-proxy", Short: "", Usage: "禁用代理（覆盖全局配置）", HasValue: false, Default: "false"},
 		{Name: "fingerprint", Short: "fp", Usage: "指纹隔离预设（standard/random/none），或 JSON 配置/@文件路径", HasValue: true, Default: ""},
+		{Name: "plugin", Short: "", Usage: "激活的插件（逗号分隔多个）", HasValue: true, Default: ""},
 	}
 
 	// Split args at -- to separate bm args from browser args
@@ -549,6 +551,7 @@ func runRun(ctx *Context, args []string) error {
 		DryRun:      flagVals["dry-run"] == "true",
 		Proxy:       proxyURL,
 		Fingerprint: flagVals["fingerprint"],
+		Plugins:    parsePluginList(flagVals["plugin"]),
 	}
 
 	if opts.DryRun {
@@ -2479,6 +2482,22 @@ func validateProxyURL(proxyURL string) error {
 		return fmt.Errorf("代理地址缺少主机和端口: %s", proxyURL)
 	}
 	return nil
+}
+
+// parsePluginList parses a comma-separated plugin list into a slice.
+func parsePluginList(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	var result []string
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			result = append(result, p)
+		}
+	}
+	return result
 }
 
 // checkDiskSpace checks if there's enough free disk space at the given path.

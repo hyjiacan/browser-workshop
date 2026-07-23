@@ -23,6 +23,7 @@ import (
 	"github.com/bws/bws/internal/install"
 	"github.com/bws/bws/internal/launch"
 	"github.com/bws/bws/internal/paths"
+	"github.com/bws/bws/internal/plugin"
 	"github.com/bws/bws/internal/repo"
 	bmserve "github.com/bws/bws/internal/serve"
 	"github.com/bws/bws/internal/shortcut"
@@ -82,6 +83,7 @@ func main() {
 	launcher := launch.NewManager(p, browser.DefaultRegistry, inst)
 	proxyURL := cfg.GetProxy()
 	downloadMgr := download.NewManagerWithProxy(proxyURL)
+	pluginMgr, _ := plugin.NewManager(p.PluginsDir)
 
 	// System browser detection
 	sysDetector := system.NewDetector(browser.DefaultRegistry)
@@ -134,11 +136,13 @@ func main() {
 	ctx.Install = &installAdapter{mgr: inst, scanner: sharedScanner}
 	ctx.Profile = &profileAdapter{mgr: inst}
 
-	ctx.Launch = &launchAdapter{mgr: launcher}
+	pluginExec := &pluginExecutor{mgr: pluginMgr}
+	ctx.Launch = &launchAdapter{mgr: launcher, pluginExec: pluginExec}
 	ctx.Download = &downloadAdapter{mgr: downloadMgr, paths: p}
 	ctx.Source = &sourceAdapter{src: sourceMgr, cfg: cfg}
 	ctx.Shortcut = &shortcutAdapter{}
 	ctx.Serve = &serveAdapter{version: version, source: sourceMgr}
+	ctx.Plugin = &pluginAdapter{mgr: pluginMgr}
 	ctx.Logger = logger
 	if repoImporter != nil {
 		ctx.Repo = &repoAdapter{scanner: repoScanner, importer: repoImporter}
@@ -398,6 +402,53 @@ func (a *configAdapter) GetProxy() string { return a.cfg.GetProxy() }
 func (a *configAdapter) SetProxy(proxy string) error {
 	a.cfg.SetProxy(proxy)
 	return config.Save(a.cfg, a.configPath)
+}
+
+type pluginAdapter struct {
+	mgr *plugin.Manager
+}
+
+func (a *pluginAdapter) List() []plugin.ManifestEntry               { return a.mgr.List() }
+func (a *pluginAdapter) Install(entry plugin.ManifestEntry) error  { return a.mgr.Install(entry) }
+func (a *pluginAdapter) Uninstall(name string) error               { return a.mgr.Uninstall(name) }
+func (a *pluginAdapter) PluginsDir() string                        { return a.mgr.PluginsDir() }
+
+type pluginExecutor struct {
+	mgr *plugin.Manager
+}
+
+func (e *pluginExecutor) RunPreRunPlugins(opts *launch.Options) error {
+	if len(opts.Plugins) == 0 {
+		return nil
+	}
+	for _, name := range opts.Plugins {
+		pluginPath := filepath.Join(e.mgr.PluginsDir(), name+".lua")
+		if _, err := os.Stat(pluginPath); err != nil {
+			return fmt.Errorf("plugin %q not found (expected %s)", name, pluginPath)
+		}
+
+		rt := plugin.NewLuaRuntime()
+		defer rt.Close()
+
+		ctx := &plugin.ScriptContext{
+			Browser:    opts.Browser,
+			Version:    opts.Version,
+			Profile:    opts.ProfileName,
+			AddArg: func(arg string) {
+				opts.ExtraArgs = append(opts.ExtraArgs, arg)
+			},
+			SetEnv: func(k, v string) {
+				if opts.Env == nil {
+					opts.Env = make(map[string]string)
+				}
+				opts.Env[k] = v
+			},
+		}
+		if err := rt.RunScript(pluginPath, ctx); err != nil {
+			return fmt.Errorf("plugin %q: %w", name, err)
+		}
+	}
+	return nil
 }
 
 type browserAdapter struct {
@@ -739,7 +790,8 @@ func (a *installAdapter) ImportFromDir(dir string, force bool, onProgress func(c
 }
 
 type launchAdapter struct {
-	mgr *launch.Manager
+	mgr        *launch.Manager
+	pluginExec *pluginExecutor
 }
 
 // profileAdapter adapts install.Manager to cli.ProfileProvider.
@@ -800,6 +852,13 @@ func (a *launchAdapter) Run(opts cli.LaunchOptions) error {
 		launchOpts.Fingerprint = fp
 	}
 
+	// Run pre-run plugins
+	if a.pluginExec != nil {
+		if err := a.pluginExec.RunPreRunPlugins(&launchOpts); err != nil {
+			return err
+		}
+	}
+
 	proc, err := a.mgr.Launch(launchOpts)
 	if err != nil {
 		return err
@@ -835,6 +894,13 @@ func (a *launchAdapter) PreviewCommand(opts cli.LaunchOptions) (string, []string
 			return "", nil, fmt.Errorf("指纹配置解析失败: %w", err)
 		}
 		launchOpts.Fingerprint = fp
+	}
+
+	// Run pre-run plugins
+	if a.pluginExec != nil {
+		if err := a.pluginExec.RunPreRunPlugins(&launchOpts); err != nil {
+			return "", nil, err
+		}
 	}
 
 	return a.mgr.BuildCommandPreview(launchOpts)

@@ -74,6 +74,9 @@ type Options struct {
 	// Fingerprint is the fingerprint isolation config.
 	// nil means no fingerprint isolation.
 	Fingerprint *fingerprint.Config
+
+	// Plugins lists plugin names to activate for this launch.
+	Plugins []string
 }
 
 // Process represents a launched browser process.

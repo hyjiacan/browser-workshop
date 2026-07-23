@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/bws/bws/internal/plugin"
 )
 
 // Command represents a CLI command.
@@ -46,6 +48,7 @@ type Context struct {
 	Shortcut ShortcutProvider
 	Logger   Logger
 	Serve    ServeProvider
+	Plugin   PluginProvider
 }
 
 // Confirm asks the user for confirmation and returns true if they agree.
@@ -109,6 +112,14 @@ type RepoImportSummary struct {
 type PathsProvider interface {
 	VersionDir(browser string, version string) string
 	EnsureAll() error
+}
+
+// PluginProvider manages plugins.
+type PluginProvider interface {
+	List() []plugin.ManifestEntry
+	Install(entry plugin.ManifestEntry) error
+	Uninstall(name string) error
+	PluginsDir() string
 }
 
 // ConfigProvider provides configuration.
@@ -284,6 +295,7 @@ type LaunchOptions struct {
 	// Fingerprint is the fingerprint isolation config string.
 	// Supports: "standard", "random", "none", JSON, or "@filepath".
 	Fingerprint string
+	Plugins     []string // names of plugins to activate for this launch
 }
 
 // DownloadProvider provides file downloading with progress.
