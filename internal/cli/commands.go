@@ -34,6 +34,7 @@ func RegisterCommands(app *App) {
 	app.AddCommand(NewDoctorCommand())
 	app.AddCommand(NewShortcutCommand())
 	app.AddCommand(NewServeCommand())
+	app.AddCommand(NewPluginCommand())
 	app.AddCommand(NewHelpCommand())
 }
 
