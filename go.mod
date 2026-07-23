@@ -17,6 +17,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/pierrec/lz4/v4 v4.1.17 // indirect
+	github.com/yuin/gopher-lua v1.1.1 // indirect
 	go4.org v0.0.0-20200411211856-f5505b9728dd // indirect
 	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
