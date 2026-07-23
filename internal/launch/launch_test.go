@@ -255,7 +255,10 @@ func TestBuildArgs(t *testing.T) {
 	profileDir := "/tmp/test-profile"
 
 	t.Run("standard args", func(t *testing.T) {
-		args := m.buildArgs(desc, Options{Browser: "test", Version: "1.0.0"}, profileDir, false)
+		args, err := m.buildArgs(desc, Options{Browser: "test", Version: "1.0.0"}, profileDir, false)
+		if err != nil {
+			t.Fatal(err)
+		}
 		argStr := strings.Join(args, " ")
 
 		if !strings.Contains(argStr, "--no-default-browser-check") {
@@ -270,7 +273,7 @@ func TestBuildArgs(t *testing.T) {
 	})
 
 	t.Run("all flags combined", func(t *testing.T) {
-		args := m.buildArgs(desc, Options{
+		args, err := m.buildArgs(desc, Options{
 			Browser:   "test",
 			Version:   "1.0.0",
 			Headless:  true,
@@ -279,6 +282,9 @@ func TestBuildArgs(t *testing.T) {
 			URLs:      []string{"https://a.com"},
 			ExtraArgs: []string{"--extra"},
 		}, profileDir, false)
+		if err != nil {
+			t.Fatal(err)
+		}
 		argStr := strings.Join(args, " ")
 
 		checks := []string{
@@ -297,12 +303,15 @@ func TestBuildArgs(t *testing.T) {
 	})
 
 	t.Run("extra args come last", func(t *testing.T) {
-		args := m.buildArgs(desc, Options{
+		args, err := m.buildArgs(desc, Options{
 			Browser:   "test",
 			Version:   "1.0.0",
 			URLs:      []string{"https://example.com"},
 			ExtraArgs: []string{"--last-arg"},
 		}, profileDir, false)
+		if err != nil {
+			t.Fatal(err)
+		}
 
 		lastArg := args[len(args)-1]
 		if lastArg != "--last-arg" {

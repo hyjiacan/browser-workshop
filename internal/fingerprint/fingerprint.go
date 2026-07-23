@@ -4,16 +4,17 @@
 package fingerprint
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"math/rand"
+	"math/big"
 	"os"
 	"strings"
 )
 
 // Config holds fingerprint isolation settings.
 type Config struct {
-	Preset string `json:"preset"` // "standard", "random", "custom", "none"
+	Preset string `json:"preset"` // "standard", "random", "none", "custom"
 
 	// User-Agent
 	UserAgent string `json:"userAgent,omitempty"` // HTTP User-Agent header
@@ -72,7 +73,13 @@ func (c *Config) IsEmpty() bool {
 	if c == nil {
 		return true
 	}
-	return c.Preset == "" || c.Preset == "none"
+	if c.Preset != "" && c.Preset != "none" {
+		return false
+	}
+	// Even if Preset is empty/none, custom fields may be set
+	return c.UserAgent == "" && c.Language == "" && c.WindowWidth == 0 &&
+		c.WindowHeight == 0 && c.DevicePixelRatio == 0 && c.WebRTC == "" &&
+		!c.DisableWebGL && !c.DisableCanvasRead && !c.FakeMediaDevices
 }
 
 // FromString parses a fingerprint config from a string.
@@ -161,19 +168,29 @@ var commonLanguages = []string{
 	"zh-CN", "en-US", "en-GB", "ja-JP", "ko-KR", "de-DE", "fr-FR",
 }
 
+// randInt returns a uniform random int in [0, n) using crypto/rand.
+func randInt(n int) int {
+	if n <= 0 {
+		return 0
+	}
+	v, err := rand.Int(rand.Reader, big.NewInt(int64(n)))
+	if err != nil {
+		return 0
+	}
+	return int(v.Int64())
+}
+
 // RandomPreset returns a config with randomly generated but self-consistent fingerprint values.
 // The generated values are internally consistent (e.g. Windows UA with Windows resolution).
 func RandomPreset() *Config {
-	rng := rand.New(rand.NewSource(rand.Int63()))
-
 	// Pick a platform and its UA
-	ua := commonUserAgents[rng.Intn(len(commonUserAgents))]
+	ua := commonUserAgents[randInt(len(commonUserAgents))]
 
 	// Pick a resolution
-	res := commonResolutions[rng.Intn(len(commonResolutions))]
+	res := commonResolutions[randInt(len(commonResolutions))]
 
 	// Pick a language
-	lang := commonLanguages[rng.Intn(len(commonLanguages))]
+	lang := commonLanguages[randInt(len(commonLanguages))]
 
 	// Pixel ratio (1.0 for most non-Retina, 2.0 for Mac)
 	dpr := 1.0
@@ -183,7 +200,7 @@ func RandomPreset() *Config {
 
 	// WebRTC policy
 	webrtcOptions := []string{"disabled", "proxied"}
-	webrtc := webrtcOptions[rng.Intn(len(webrtcOptions))]
+	webrtc := webrtcOptions[randInt(len(webrtcOptions))]
 
 	return &Config{
 		Preset:           "random",
@@ -194,6 +211,6 @@ func RandomPreset() *Config {
 		DevicePixelRatio: dpr,
 		WebRTC:           webrtc,
 		FakeMediaDevices: true,
-		DisableWebGL:     rng.Float64() < 0.5,
+		DisableWebGL:     randInt(2) == 0,
 	}
 }

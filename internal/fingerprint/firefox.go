@@ -26,12 +26,12 @@ func (c *Config) FirefoxPrefs() string {
 
 	// --- User-Agent ---
 	if c.UserAgent != "" {
-		b.WriteString(fmt.Sprintf("user_pref(\"general.useragent.override\", \"%s\");\n", c.UserAgent))
+		b.WriteString(fmt.Sprintf("user_pref(\"general.useragent.override\", %s);\n", jsString(c.UserAgent)))
 	}
 
 	// --- Language ---
 	if c.Language != "" {
-		b.WriteString(fmt.Sprintf("user_pref(\"intl.accept_languages\", \"%s\");\n", c.Language))
+		b.WriteString(fmt.Sprintf("user_pref(\"intl.accept_languages\", %s);\n", jsString(c.Language)))
 		// Also attempt to spoof English
 		if !strings.HasPrefix(c.Language, "en") {
 			b.WriteString("user_pref(\"privacy.spoof_english\", 2);\n")
@@ -65,6 +65,15 @@ func (c *Config) FirefoxPrefs() string {
 	}
 
 	return b.String()
+}
+
+// jsString escapes a Go string for safe insertion as a JavaScript string literal.
+func jsString(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, "\n", `\n`)
+	s = strings.ReplaceAll(s, "\r", `\r`)
+	return fmt.Sprintf("\"%s\"", s)
 }
 
 // WriteFirefoxUserJS writes the fingerprint prefs to user.js in the profile directory.

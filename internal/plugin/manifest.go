@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -43,12 +44,17 @@ func LoadManifest(path string) (*Manifest, error) {
 	return m, nil
 }
 
-// SaveManifest writes the manifest to disk.
+// SaveManifest writes the manifest to disk atomically using a temp file + rename.
 func SaveManifest(m *Manifest, path string) error {
 	m.Modified = time.Now()
 	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	dir := filepath.Dir(path)
+	tmpPath := filepath.Join(dir, ".manifest.json.tmp")
+	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
+		return fmt.Errorf("writing manifest temp file: %w", err)
+	}
+	return os.Rename(tmpPath, path)
 }

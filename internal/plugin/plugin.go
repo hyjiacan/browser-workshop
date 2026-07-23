@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 )
 
 // Hook defines lifecycle events where plugins can intervene.
@@ -28,6 +30,7 @@ type Manager struct {
 	pluginsDir   string
 	manifest     *Manifest
 	manifestPath string
+	mu           sync.RWMutex
 }
 
 // NewManager creates a plugin manager.
@@ -55,6 +58,9 @@ func (mgr *Manager) Discover() ([]Plugin, error) {
 		return nil, err
 	}
 
+	mgr.mu.RLock()
+	defer mgr.mu.RUnlock()
+
 	var plugins []Plugin
 	for _, entry := range entries {
 		if entry.IsDir() {
@@ -73,12 +79,21 @@ func (mgr *Manager) Discover() ([]Plugin, error) {
 			continue
 		}
 
-		// Binary plugins: check manifest for type info
+		// Binary plugins: check manifest for type info and executable permission
 		pluginName := strings.TrimSuffix(name, filepath.Ext(name))
 		if pluginName == "" {
 			continue
 		}
 		if me, ok := mgr.manifest.Plugins[pluginName]; ok && me.Type == "binary" {
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			if runtime.GOOS != "windows" && info.Mode().Perm()&0o111 == 0 {
+			// Not executable, skip. On Windows, file permissions don't work the same way,
+			// so we rely on the manifest type being "binary".
+			continue
+		}
 			plugins = append(plugins, Plugin{
 				Name:     pluginName,
 				Path:     filepath.Join(mgr.pluginsDir, name),
@@ -92,6 +107,9 @@ func (mgr *Manager) Discover() ([]Plugin, error) {
 
 // GetManifestEntry returns the manifest entry for a plugin by name.
 func (mgr *Manager) GetManifestEntry(name string) (*ManifestEntry, error) {
+	mgr.mu.RLock()
+	defer mgr.mu.RUnlock()
+
 	entry, ok := mgr.manifest.Plugins[name]
 	if !ok {
 		return nil, fmt.Errorf("plugin %q not found in manifest", name)
@@ -101,6 +119,9 @@ func (mgr *Manager) GetManifestEntry(name string) (*ManifestEntry, error) {
 
 // List returns installed plugins from the manifest.
 func (mgr *Manager) List() []ManifestEntry {
+	mgr.mu.RLock()
+	defer mgr.mu.RUnlock()
+
 	var result []ManifestEntry
 	for _, entry := range mgr.manifest.Plugins {
 		result = append(result, entry)
@@ -110,12 +131,18 @@ func (mgr *Manager) List() []ManifestEntry {
 
 // Install records a plugin in the manifest.
 func (mgr *Manager) Install(entry ManifestEntry) error {
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+
 	mgr.manifest.Plugins[entry.Name] = entry
 	return SaveManifest(mgr.manifest, mgr.manifestPath)
 }
 
 // Uninstall removes a plugin from the manifest and disk.
 func (mgr *Manager) Uninstall(name string) error {
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+
 	entry, ok := mgr.manifest.Plugins[name]
 	if !ok {
 		return fmt.Errorf("plugin %q not installed", name)

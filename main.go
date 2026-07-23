@@ -83,7 +83,11 @@ func main() {
 	launcher := launch.NewManager(p, browser.DefaultRegistry, inst)
 	proxyURL := cfg.GetProxy()
 	downloadMgr := download.NewManagerWithProxy(proxyURL)
-	pluginMgr, _ := plugin.NewManager(p.PluginsDir)
+	pluginMgr, err := plugin.NewManager(p.PluginsDir)
+	if err != nil {
+		logger.Error("初始化插件管理器失败: %v", err)
+		pluginMgr = nil
+	}
 
 	// System browser detection
 	sysDetector := system.NewDetector(browser.DefaultRegistry)
@@ -430,7 +434,8 @@ func (e *pluginExecutor) RunPreRunPlugins(opts *launch.Options) error {
 			if _, statErr := os.Stat(pluginPath); statErr == nil {
 				entry = &plugin.ManifestEntry{Name: name, Type: "lua", Path: pluginPath}
 			} else {
-				return fmt.Errorf("plugin %q not found (not in manifest, no .lua file)", name)
+				bmlog.Warn("插件 %q 未找到 (不在清单中，也没有 .lua 文件)，已跳过", name)
+				continue
 			}
 		}
 
@@ -439,6 +444,7 @@ func (e *pluginExecutor) RunPreRunPlugins(opts *launch.Options) error {
 			Browser:    opts.Browser,
 			Version:    opts.Version,
 			Profile:    opts.ProfileName,
+			ProfileDir: opts.ProfileDir,
 			AddArg: func(arg string) {
 				opts.ExtraArgs = append(opts.ExtraArgs, arg)
 			},
@@ -453,12 +459,14 @@ func (e *pluginExecutor) RunPreRunPlugins(opts *launch.Options) error {
 		switch entry.Type {
 		case "lua":
 			if err := e.runLuaPlugin(entry.Path, ctx); err != nil {
-				return fmt.Errorf("plugin %q: %w", name, err)
+				bmlog.Warn("Lua 插件 %q 执行失败: %v，已跳过", name, err)
+				continue
 			}
 		case "binary":
 			resp, err := plugin.RunIPCPlugin(entry.Path, ctx)
 			if err != nil {
-				return fmt.Errorf("plugin %q: %w", name, err)
+				bmlog.Warn("IPC 插件 %q 执行失败: %v，已跳过", name, err)
+				continue
 			}
 			opts.ExtraArgs = append(opts.ExtraArgs, resp.ExtraArgs...)
 			for k, v := range resp.Env {
@@ -468,7 +476,8 @@ func (e *pluginExecutor) RunPreRunPlugins(opts *launch.Options) error {
 				opts.Env[k] = v
 			}
 		default:
-			return fmt.Errorf("plugin %q: unknown type %q", name, entry.Type)
+			bmlog.Warn("插件 %q: 未知类型 %q，已跳过", name, entry.Type)
+			continue
 		}
 	}
 	return nil

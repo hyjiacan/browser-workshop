@@ -138,8 +138,15 @@ func runPluginInstall(ctx *Context, args []string) error {
 		return fmt.Errorf("下载插件失败: %w", err)
 	}
 
-	dest := filepath.Join(ctx.Plugin.PluginsDir(), entry.Name+".lua")
-	if err := os.WriteFile(dest, data, 0o644); err != nil {
+	// Determine destination file name and permissions based on plugin type
+	ext := ".lua"
+	perm := os.FileMode(0o644)
+	if entry.Type == "binary" {
+		ext = "" // binary plugins keep no extension by default
+		perm = 0o755
+	}
+	dest := filepath.Join(ctx.Plugin.PluginsDir(), entry.Name+ext)
+	if err := os.WriteFile(dest, data, perm); err != nil {
 		return err
 	}
 

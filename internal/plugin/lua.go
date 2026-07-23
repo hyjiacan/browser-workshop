@@ -12,17 +12,27 @@ type LuaRuntime struct {
 	L *lua.LState
 }
 
-// NewLuaRuntime creates a new Lua runtime.
+// NewLuaRuntime creates a new Lua runtime with a restricted sandbox.
+// Only safe standard libraries (base, string, table, math) are loaded.
+// Dangerous libraries (os, io, package) are NOT available to plugins.
 func NewLuaRuntime() *LuaRuntime {
 	L := lua.NewState(lua.Options{
-		SkipOpenLibs: false,
+		SkipOpenLibs: true, // Do NOT auto-load any libraries
 	})
+	// Whitelist: only load safe libraries
+	lua.OpenBase(L)
+	lua.OpenString(L)
+	lua.OpenTable(L)
+	lua.OpenMath(L)
+	// NOT loaded: os, io, package, debug, channel, bit32, coroutine, encoding
 	return &LuaRuntime{L: L}
 }
 
 // Close releases the Lua state.
 func (r *LuaRuntime) Close() {
-	r.L.Close()
+	if r != nil && r.L != nil {
+		r.L.Close()
+	}
 }
 
 // RunScript executes a Lua plugin script with the given context.
@@ -56,7 +66,7 @@ func (r *LuaRuntime) callHook(name string) error {
 	return nil
 }
 
-// ScriptContext holds data passed to Lua plugins.
+// ScriptContext holds data passed to plugins (Lua and IPC).
 type ScriptContext struct {
 	Browser    string
 	Version    string

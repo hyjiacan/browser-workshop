@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/bws/bws/internal/browser"
 	"github.com/bws/bws/internal/fingerprint"
@@ -47,6 +48,7 @@ type Options struct {
 
 	// Profile options
 	ProfileName string // named profile (empty = version-default)
+	ProfileDir  string // resolved profile directory (set by Launch)
 	Clean       bool   // start with a clean profile
 
 	// NativeMode launches the browser without bm's isolation flags.
@@ -154,10 +156,14 @@ func (m *Manager) Launch(opts Options) (*Process, error) {
 		if err := os.MkdirAll(profileDir, 0o755); err != nil {
 			return nil, fmt.Errorf("creating profile directory: %w", err)
 		}
+		opts.ProfileDir = profileDir
 	}
 
 	// Build arguments
-	args := m.buildArgs(desc, opts, profileDir, nativeMode)
+	args, err := m.buildArgs(desc, opts, profileDir, nativeMode)
+	if err != nil {
+		return nil, err
+	}
 
 	// Build command
 	cmd := exec.Command(exePath, args...)
@@ -225,7 +231,7 @@ func (m *Manager) getProfileDir(opts Options) string {
 
 // buildArgs constructs the command-line arguments for the browser.
 // In native mode, no isolation flags (profile, multi-instance, etc.) are added.
-func (m *Manager) buildArgs(desc *browser.BrowserDescriptor, opts Options, profileDir string, nativeMode bool) []string {
+func (m *Manager) buildArgs(desc *browser.BrowserDescriptor, opts Options, profileDir string, nativeMode bool) ([]string, error) {
 	var args []string
 
 	if !nativeMode {
@@ -251,13 +257,19 @@ func (m *Manager) buildArgs(desc *browser.BrowserDescriptor, opts Options, profi
 
 	// Proxy
 	if opts.Proxy != "" {
-		proxyArgs := buildProxyArgs(desc, opts.Proxy, profileDir)
+		proxyArgs, err := buildProxyArgs(desc, opts.Proxy, profileDir)
+		if err != nil {
+			return nil, fmt.Errorf("configuring proxy: %w", err)
+		}
 		args = append(args, proxyArgs...)
 	}
 
 	// Fingerprint isolation
 	if opts.Fingerprint != nil && !opts.Fingerprint.IsEmpty() {
-		fpArgs := buildFingerprintArgs(desc, opts.Fingerprint, profileDir)
+		fpArgs, err := buildFingerprintArgs(desc, opts.Fingerprint, profileDir)
+		if err != nil {
+			return nil, fmt.Errorf("configuring fingerprint isolation: %w", err)
+		}
 		args = append(args, fpArgs...)
 	}
 
@@ -269,35 +281,38 @@ func (m *Manager) buildArgs(desc *browser.BrowserDescriptor, opts Options, profi
 	// Extra args (last, so they can override)
 	args = append(args, opts.ExtraArgs...)
 
-	return args
+	return args, nil
 }
 
 // buildProxyArgs constructs proxy-related arguments for the browser.
 // Chrome/Chromium uses --proxy-server command-line flag.
-// Firefox requires a user.js file in the profile directory (handled separately).
-func buildProxyArgs(desc *browser.BrowserDescriptor, proxyURL, profileDir string) []string {
+// Firefox requires a user.js file in the profile directory (handled via side effect).
+func buildProxyArgs(desc *browser.BrowserDescriptor, proxyURL, profileDir string) ([]string, error) {
 	switch desc.Name {
 	case "chrome", "chromium":
-		return []string{"--proxy-server=" + proxyURL}
+		return []string{"--proxy-server=" + proxyURL}, nil
 	case "firefox":
 		// Firefox doesn't support command-line proxy.
 		// Write user.js in profile dir if available.
 		if profileDir != "" {
-			writeFirefoxProxyPrefs(profileDir, proxyURL)
+			if err := writeFirefoxProxyPrefs(profileDir, proxyURL); err != nil {
+				return nil, err
+			}
 		}
-		return nil
+		return nil, nil
 	default:
-		return nil
+		return nil, nil
 	}
 }
 
 // writeFirefoxProxyPrefs writes proxy preferences to user.js in the profile directory.
-func writeFirefoxProxyPrefs(profileDir, proxyURL string) {
+// Uses append mode to avoid overwriting existing content (e.g. from fingerprint settings).
+func writeFirefoxProxyPrefs(profileDir, proxyURL string) error {
 	prefsPath := filepath.Join(profileDir, "user.js")
 
 	parsed, err := url.Parse(proxyURL)
 	if err != nil {
-		return
+		return fmt.Errorf("parsing proxy URL: %w", err)
 	}
 
 	host := parsed.Hostname()
@@ -313,42 +328,54 @@ func writeFirefoxProxyPrefs(profileDir, proxyURL string) {
 
 	var content string
 	if parsed.Scheme == "socks5" || parsed.Scheme == "socks5h" {
-		content = fmt.Sprintf(`// Proxy settings written by bws
-user_pref("network.proxy.type", 1);
-user_pref("network.proxy.socks", "%s");
-user_pref("network.proxy.socks_port", %s);
-user_pref("network.proxy.socks_version", 5);
-user_pref("network.proxy.socks_remote_dns", true);
-`, host, port)
+		content = fmt.Sprintf("// Proxy settings written by bws\n"+
+			"user_pref(\"network.proxy.type\", 1);\n"+
+			"user_pref(\"network.proxy.socks\", \"%s\");\n"+
+			"user_pref(\"network.proxy.socks_port\", %s);\n"+
+			"user_pref(\"network.proxy.socks_version\", 5);\n"+
+			"user_pref(\"network.proxy.socks_remote_dns\", true);\n",
+			host, port)
 	} else {
 		// HTTP/HTTPS proxy
-		content = fmt.Sprintf(`// Proxy settings written by bws
-user_pref("network.proxy.type", 1);
-user_pref("network.proxy.http", "%s");
-user_pref("network.proxy.http_port", %s);
-user_pref("network.proxy.ssl", "%s");
-user_pref("network.proxy.ssl_port", %s);
-`, host, port, host, port)
+		content = fmt.Sprintf("// Proxy settings written by bws\n"+
+			"user_pref(\"network.proxy.type\", 1);\n"+
+			"user_pref(\"network.proxy.http\", \"%s\");\n"+
+			"user_pref(\"network.proxy.http_port\", %s);\n"+
+			"user_pref(\"network.proxy.ssl\", \"%s\");\n"+
+			"user_pref(\"network.proxy.ssl_port\", %s);\n",
+			host, port, host, port)
 	}
 
-	_ = os.WriteFile(prefsPath, []byte(content), 0o644)
+	// Append to existing user.js instead of overwriting
+	var existing string
+	if data, err := os.ReadFile(prefsPath); err == nil {
+		existing = string(data)
+	}
+	if !strings.Contains(existing, "Proxy settings written by bws") {
+		content = existing + "\n" + content
+	} else {
+		content = existing // already written, keep as-is
+	}
+	return os.WriteFile(prefsPath, []byte(content), 0o644)
 }
 
 // buildFingerprintArgs constructs fingerprint-related arguments for the browser.
 // Chrome: uses command-line flags (--user-agent, --lang, --window-size, etc.)
 // Firefox: writes user.js preferences to the profile directory.
-func buildFingerprintArgs(desc *browser.BrowserDescriptor, cfg *fingerprint.Config, profileDir string) []string {
+func buildFingerprintArgs(desc *browser.BrowserDescriptor, cfg *fingerprint.Config, profileDir string) ([]string, error) {
 	switch desc.Name {
 	case "chrome", "chromium":
-		return cfg.ChromeArgs()
+		return cfg.ChromeArgs(), nil
 	case "firefox":
 		// Firefox: write user.js to profile directory
 		if profileDir != "" {
-			_ = cfg.WriteFirefoxUserJS(profileDir)
+			if err := cfg.WriteFirefoxUserJS(profileDir); err != nil {
+				return nil, fmt.Errorf("writing fingerprint user.js: %w", err)
+			}
 		}
-		return nil
+		return nil, nil
 	default:
-		return nil
+		return nil, nil
 	}
 }
 
@@ -384,7 +411,10 @@ func (m *Manager) BuildCommandPreview(opts Options) (string, []string, error) {
 		profileOpts.Version = resolvedVersion
 		profileDir = m.getProfileDir(profileOpts)
 	}
-	args := m.buildArgs(desc, opts, profileDir, nativeMode)
+	args, err := m.buildArgs(desc, opts, profileDir, nativeMode)
+	if err != nil {
+		return "", nil, err
+	}
 
 	return exePath, args, nil
 }

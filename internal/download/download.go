@@ -255,7 +255,9 @@ func (m *Manager) Download(ctx context.Context, opts Options) (*Result, error) {
 		if contentRange != "" {
 			parts := strings.Split(contentRange, "/")
 			if len(parts) == 2 && parts[1] != "*" {
-				fmt.Sscanf(parts[1], "%d", &totalSize)
+				if _, err := fmt.Sscanf(parts[1], "%d", &totalSize); err != nil {
+					totalSize = 0
+				}
 			}
 		}
 		if totalSize == 0 {

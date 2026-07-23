@@ -20,15 +20,20 @@ import (
 func newTransportWithProxy(proxyURL string) *http.Transport {
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: true, // TLS verification skipped for self-signed serve instances
 		},
 	}
+
 	if proxyURL != "" {
 		parsed, err := neturl.Parse(proxyURL)
-		if err == nil {
-			transport.Proxy = http.ProxyURL(parsed)
+		if err != nil {
+			// Should not happen: proxy URL is validated at config time.
+			// Panic with a clear message instead of silently falling back to no proxy.
+			panic(fmt.Sprintf("invalid proxy URL %q (should have been validated): %v", proxyURL, err))
 		}
+		transport.Proxy = http.ProxyURL(parsed)
 	}
+
 	return transport
 }
 

@@ -3,7 +3,7 @@ package plugin
 import (
 	"encoding/json"
 	"fmt"
-	"io"
+	"os"
 	"os/exec"
 	"time"
 )
@@ -26,6 +26,7 @@ type IPCResponse struct {
 
 // RunIPCPlugin launches an external process plugin and communicates via stdin/stdout JSON.
 // The plugin receives an IPCRequest on stdin and must write an IPCResponse to stdout.
+// The plugin may output log lines before/after the JSON response; only the first JSON object is parsed.
 // If the plugin writes an error field, it is returned as a Go error.
 func RunIPCPlugin(execPath string, ctx *ScriptContext) (*IPCResponse, error) {
 	// Build request
@@ -38,7 +39,7 @@ func RunIPCPlugin(execPath string, ctx *ScriptContext) (*IPCResponse, error) {
 	}
 
 	cmd := exec.Command(execPath)
-	cmd.Stderr = exec.Command("").Stderr // inherit stderr for plugin logging
+	cmd.Stderr = os.Stderr // inherit stderr for plugin logging
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -67,13 +68,8 @@ func RunIPCPlugin(execPath string, ctx *ScriptContext) (*IPCResponse, error) {
 	var readErr error
 
 	go func() {
-		data, err := io.ReadAll(stdout)
-		if err != nil {
-			readErr = fmt.Errorf("ipc plugin: read response: %w", err)
-			close(done)
-			return
-		}
-		if err := json.Unmarshal(data, &resp); err != nil {
+		decoder := json.NewDecoder(stdout)
+		if err := decoder.Decode(&resp); err != nil {
 			readErr = fmt.Errorf("ipc plugin: parse response: %w", err)
 		}
 		close(done)
@@ -83,13 +79,15 @@ func RunIPCPlugin(execPath string, ctx *ScriptContext) (*IPCResponse, error) {
 	case <-done:
 		// response received
 	case <-time.After(10 * time.Second):
-		cmd.Process.Kill()
-		cmd.Wait()
+		if cmd.Process != nil {
+			_ = cmd.Process.Kill()
+		}
+		_ = cmd.Wait()
 		return nil, fmt.Errorf("ipc plugin: timeout after 10s")
 	}
 
 	// Wait for process to exit
-	cmd.Wait()
+	_ = cmd.Wait()
 
 	if readErr != nil {
 		return nil, readErr
