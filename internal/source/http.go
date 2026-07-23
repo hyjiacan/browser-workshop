@@ -2,7 +2,6 @@ package source
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -142,19 +141,18 @@ func normalizeArch(a string) Arch {
 
 // NewHTTPSource creates a new HTTP source from a bm serve base URL.
 func NewHTTPSource(baseURL string) *HTTPSource {
+	return NewHTTPSourceWithProxy(baseURL, "")
+}
+
+// NewHTTPSourceWithProxy creates an HTTPSource that uses the given proxy.
+// proxyURL can be empty (direct), "http://host:port", "socks5://host:port", etc.
+func NewHTTPSourceWithProxy(baseURL string, proxyURL string) *HTTPSource {
 	// Normalize base URL - remove trailing slash
 	baseURL = strings.TrimRight(baseURL, "/")
 	return &HTTPSource{
-		baseURL: baseURL,
-		name:    "http:" + baseURL,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				},
-			},
-		},
+		baseURL:    baseURL,
+		name:       "http:" + baseURL,
+		httpClient: &http.Client{Timeout: 30 * time.Second, Transport: newTransportWithProxy(proxyURL)},
 	}
 }
 

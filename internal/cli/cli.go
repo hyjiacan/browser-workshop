@@ -154,6 +154,10 @@ type ConfigProvider interface {
 	GetDiskSpaceThresholdGB() int
 	SetDiskSpaceThresholdGB(v int) error
 
+	// Proxy
+	GetProxy() string
+	SetProxy(proxy string) error
+
 	// File path
 	ConfigPath() string
 }
@@ -275,6 +279,7 @@ type LaunchOptions struct {
 	NativeMode  bool
 	Detached    bool
 	DryRun      bool
+	Proxy       string // proxy URL for the browser (empty = no proxy)
 }
 
 // DownloadProvider provides file downloading with progress.

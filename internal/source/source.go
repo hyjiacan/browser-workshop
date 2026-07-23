@@ -5,11 +5,32 @@ package source
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
+	"net/http"
+	neturl "net/url"
 	"runtime"
 	"sort"
 	"strings"
 )
+
+// newTransportWithProxy creates an http.Transport with the given proxy.
+// If proxyURL is empty, no proxy is configured.
+// TLS verification is skipped for compatibility with self-signed serve instances.
+func newTransportWithProxy(proxyURL string) *http.Transport {
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	if proxyURL != "" {
+		parsed, err := neturl.Parse(proxyURL)
+		if err == nil {
+			transport.Proxy = http.ProxyURL(parsed)
+		}
+	}
+	return transport
+}
 
 // Channel represents a browser release channel.
 type Channel string

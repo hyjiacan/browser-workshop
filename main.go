@@ -79,7 +79,8 @@ func main() {
 	// Create managers
 	inst := install.NewManager(p, browser.DefaultRegistry)
 	launcher := launch.NewManager(p, browser.DefaultRegistry, inst)
-	downloadMgr := download.NewManager()
+	proxyURL := cfg.GetProxy()
+	downloadMgr := download.NewManagerWithProxy(proxyURL)
 
 	// System browser detection
 	sysDetector := system.NewDetector(browser.DefaultRegistry)
@@ -90,18 +91,18 @@ func main() {
 
 	// 1. 离线源（如果配置了且启用）
 	if cfg.IsServeSourceEnabled() && cfg.RemoteSource != "" {
-		sources = append(sources, source.NewHTTPSource(cfg.RemoteSource))
+		sources = append(sources, source.NewHTTPSourceWithProxy(cfg.RemoteSource, proxyURL))
 	}
 
 	// 2. Chrome 在线源（根据开关）
 	if cfg.IsOmahaSourceEnabled() {
-		sources = append(sources, source.NewChromeOmahaSource())
-		sources = append(sources, source.NewChromeSource())
+		sources = append(sources, source.NewChromeOmahaSourceWithProxy(proxyURL))
+		sources = append(sources, source.NewChromeSourceWithProxy(proxyURL))
 	}
 
 	// 3. Firefox 在线源（根据开关）
 	if cfg.IsFirefoxFTPEnabled() {
-		sources = append(sources, source.NewFirefoxSource())
+		sources = append(sources, source.NewFirefoxSourceWithProxy(proxyURL))
 	}
 
 	sourceMgr := source.NewMultiSource(sources...)
@@ -389,6 +390,12 @@ func (a *configAdapter) SetFirefoxFTPEnabled(v bool) error {
 func (a *configAdapter) GetDiskSpaceThresholdGB() int    { return a.cfg.GetDiskSpaceThresholdGB() }
 func (a *configAdapter) SetDiskSpaceThresholdGB(v int) error {
 	a.cfg.SetDiskSpaceThresholdGB(v)
+	return config.Save(a.cfg, a.configPath)
+}
+
+func (a *configAdapter) GetProxy() string { return a.cfg.GetProxy() }
+func (a *configAdapter) SetProxy(proxy string) error {
+	a.cfg.SetProxy(proxy)
 	return config.Save(a.cfg, a.configPath)
 }
 
@@ -780,6 +787,7 @@ func (a *launchAdapter) Run(opts cli.LaunchOptions) error {
 		NativeMode:  opts.NativeMode,
 		ExtraArgs:   opts.ExtraArgs,
 		Detached:    opts.Detached,
+		Proxy:       opts.Proxy,
 	}
 
 	proc, err := a.mgr.Launch(launchOpts)
@@ -807,6 +815,7 @@ func (a *launchAdapter) PreviewCommand(opts cli.LaunchOptions) (string, []string
 		ProfileName: opts.ProfileName,
 		NativeMode:  opts.NativeMode,
 		ExtraArgs:   opts.ExtraArgs,
+		Proxy:       opts.Proxy,
 	}
 	return a.mgr.BuildCommandPreview(launchOpts)
 }

@@ -26,8 +26,13 @@ type FirefoxSource struct {
 
 // NewFirefoxSource creates a new FirefoxSource.
 func NewFirefoxSource() *FirefoxSource {
+	return NewFirefoxSourceWithProxy("")
+}
+
+// NewFirefoxSourceWithProxy creates a new FirefoxSource that uses the given proxy.
+func NewFirefoxSourceWithProxy(proxyURL string) *FirefoxSource {
 	return &FirefoxSource{
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient: &http.Client{Timeout: 30 * time.Second, Transport: newTransportWithProxy(proxyURL)},
 	}
 }
 

@@ -163,6 +163,8 @@ bws r [browser[@version]] [URL] [options] [-- native arguments]
 | `--native` | - | Native mode (use system profile) |
 | `--detach` | `-d` | Run in the background (do not wait for the process) |
 | `--dry-run` | - | Dry run (do not actually start) |
+| `--proxy <url>` | - | Proxy URL (e.g. `socks5://127.0.0.1:1080`), empty uses global config |
+| `--no-proxy` | - | Disable proxy (overrides global config) |
 | `--` | - | Arguments after this are passed directly to the browser |
 
 ### Examples
@@ -197,6 +199,12 @@ bws r chrome@120 -- --disable-gpu --no-sandbox
 
 # Dry run
 bws r chrome@120 --dry-run
+
+# Use a proxy
+bws r chrome@120 --proxy socks5://127.0.0.1:1080
+
+# Disable proxy (overrides global config)
+bws r chrome@120 --no-proxy
 
 # Use the open alias
 bws open chrome@120
@@ -656,6 +664,7 @@ bws cfg <subcommand> [arguments]
 | `source-omaha` | Omaha source switch | `true` |
 | `source-firefox-ftp` | Firefox FTP source switch | `true` |
 | `disk-threshold` | Disk space alert threshold (GB) | `5` |
+| `proxy` | Proxy URL (for downloads and browser launching) | empty |
 
 ### Examples
 
@@ -670,6 +679,13 @@ bws cfg get default-browser
 bws cfg set default-browser firefox
 bws cfg set log-level debug
 bws cfg set source http://server:8080
+
+# Set a proxy
+bws cfg set proxy socks5://127.0.0.1:1080
+bws cfg set proxy http://proxy.example.com:8080
+
+# Clear proxy
+bws cfg set proxy none
 
 # Display the configuration file path
 bws cfg path

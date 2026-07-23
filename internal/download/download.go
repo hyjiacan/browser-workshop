@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -104,17 +105,30 @@ type downloadState struct {
 	speedEMA  float64
 }
 
-// NewManager creates a new download manager.
+// NewManager creates a new download manager with the default HTTP client.
 func NewManager() *Manager {
+	return NewManagerWithProxy("")
+}
+
+// NewManagerWithProxy creates a new download manager that uses the given proxy.
+// proxyURL can be empty (direct), "http://host:port", "socks5://host:port", etc.
+func NewManagerWithProxy(proxyURL string) *Manager {
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: true,
+		},
+	}
+	if proxyURL != "" {
+		proxyURLParsed, err := url.Parse(proxyURL)
+		if err == nil {
+			transport.Proxy = http.ProxyURL(proxyURLParsed)
+		}
+	}
 	return &Manager{
 		activeDownloads: make(map[string]*downloadState),
 		defaultClient: &http.Client{
-			Timeout: 0, // no timeout per-request; overall timeout handled by context
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				},
-			},
+			Timeout:   0,
+			Transport: transport,
 		},
 	}
 }

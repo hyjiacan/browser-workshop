@@ -4,8 +4,10 @@ package launch
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/bws/bws/internal/browser"
 	"github.com/bws/bws/internal/install"
@@ -62,6 +64,11 @@ type Options struct {
 
 	// Detached: don't wait for the process to exit
 	Detached bool
+
+	// Proxy is the proxy URL to pass to the browser.
+	// Supported: http://host:port, socks5://host:port, etc.
+	// Empty means no proxy.
+	Proxy string
 }
 
 // Process represents a launched browser process.
@@ -234,6 +241,12 @@ func (m *Manager) buildArgs(desc *browser.BrowserDescriptor, opts Options, profi
 		args = append(args, "--new-window")
 	}
 
+	// Proxy
+	if opts.Proxy != "" {
+		proxyArgs := buildProxyArgs(desc, opts.Proxy, profileDir)
+		args = append(args, proxyArgs...)
+	}
+
 	// URLs to open
 	for _, url := range opts.URLs {
 		args = append(args, url)
@@ -243,6 +256,68 @@ func (m *Manager) buildArgs(desc *browser.BrowserDescriptor, opts Options, profi
 	args = append(args, opts.ExtraArgs...)
 
 	return args
+}
+
+// buildProxyArgs constructs proxy-related arguments for the browser.
+// Chrome/Chromium uses --proxy-server command-line flag.
+// Firefox requires a user.js file in the profile directory (handled separately).
+func buildProxyArgs(desc *browser.BrowserDescriptor, proxyURL, profileDir string) []string {
+	switch desc.Name {
+	case "chrome", "chromium":
+		return []string{"--proxy-server=" + proxyURL}
+	case "firefox":
+		// Firefox doesn't support command-line proxy.
+		// Write user.js in profile dir if available.
+		if profileDir != "" {
+			writeFirefoxProxyPrefs(profileDir, proxyURL)
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
+// writeFirefoxProxyPrefs writes proxy preferences to user.js in the profile directory.
+func writeFirefoxProxyPrefs(profileDir, proxyURL string) {
+	prefsPath := filepath.Join(profileDir, "user.js")
+
+	parsed, err := url.Parse(proxyURL)
+	if err != nil {
+		return
+	}
+
+	host := parsed.Hostname()
+	port := parsed.Port()
+	if port == "" {
+		switch parsed.Scheme {
+		case "http", "https":
+			port = "80"
+		case "socks5", "socks5h":
+			port = "1080"
+		}
+	}
+
+	var content string
+	if parsed.Scheme == "socks5" || parsed.Scheme == "socks5h" {
+		content = fmt.Sprintf(`// Proxy settings written by bws
+user_pref("network.proxy.type", 1);
+user_pref("network.proxy.socks", "%s");
+user_pref("network.proxy.socks_port", %s);
+user_pref("network.proxy.socks_version", 5);
+user_pref("network.proxy.socks_remote_dns", true);
+`, host, port)
+	} else {
+		// HTTP/HTTPS proxy
+		content = fmt.Sprintf(`// Proxy settings written by bws
+user_pref("network.proxy.type", 1);
+user_pref("network.proxy.http", "%s");
+user_pref("network.proxy.http_port", %s);
+user_pref("network.proxy.ssl", "%s");
+user_pref("network.proxy.ssl_port", %s);
+`, host, port, host, port)
+	}
+
+	_ = os.WriteFile(prefsPath, []byte(content), 0o644)
 }
 
 // BuildCommandPreview builds and returns the command that would be executed,

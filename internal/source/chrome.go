@@ -2,7 +2,6 @@ package source
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -20,16 +19,14 @@ type ChromeSource struct {
 
 // NewChromeSource creates a new Chrome version source.
 func NewChromeSource() *ChromeSource {
+	return NewChromeSourceWithProxy("")
+}
+
+// NewChromeSourceWithProxy creates a new Chrome version source that uses the given proxy.
+func NewChromeSourceWithProxy(proxyURL string) *ChromeSource {
 	return &ChromeSource{
-		baseURL: "https://omahaproxy.appspot.com",
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				},
-			},
-		},
+		baseURL:    "https://omahaproxy.appspot.com",
+		httpClient: &http.Client{Timeout: 30 * time.Second, Transport: newTransportWithProxy(proxyURL)},
 	}
 }
 

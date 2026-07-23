@@ -428,6 +428,8 @@ func NewRunCommand() *Command {
 			"r chrome@latest --headless",
 			"r chrome --native",
 			"r chrome@system",
+			"r chrome --proxy socks5://127.0.0.1:1080",
+			"r chrome --no-proxy",
 		},
 		Flags: []*Flag{
 			{Name: "headless", Short: "H", Usage: "无头模式运行", HasValue: false, Default: "false"},
@@ -437,6 +439,8 @@ func NewRunCommand() *Command {
 			{Name: "native", Short: "n", Usage: "原生模式启动（无 bws 隔离）", HasValue: false, Default: "false"},
 			{Name: "detached", Short: "d", Usage: "后台运行（不等待进程结束）", HasValue: false, Default: "false"},
 			{Name: "dry-run", Short: "", Usage: "仅打印命令，不实际运行", HasValue: false, Default: "false"},
+			{Name: "proxy", Short: "", Usage: "代理地址（如 socks5://127.0.0.1:1080），留空使用全局配置", HasValue: true, Default: ""},
+			{Name: "no-proxy", Short: "", Usage: "禁用代理（覆盖全局配置）", HasValue: false, Default: "false"},
 		},
 		Run: runRun,
 	}
@@ -451,6 +455,8 @@ func runRun(ctx *Context, args []string) error {
 		{Name: "native", Short: "n", Usage: "原生模式（无隔离）", HasValue: false, Default: "false"},
 		{Name: "detached", Short: "d", Usage: "后台运行", HasValue: false, Default: "false"},
 		{Name: "dry-run", Short: "", Usage: "试运行", HasValue: false, Default: "false"},
+		{Name: "proxy", Short: "", Usage: "代理地址（如 socks5://127.0.0.1:1080），留空使用全局配置", HasValue: true, Default: ""},
+		{Name: "no-proxy", Short: "", Usage: "禁用代理（覆盖全局配置）", HasValue: false, Default: "false"},
 	}
 
 	// Split args at -- to separate bm args from browser args
@@ -515,6 +521,16 @@ func runRun(ctx *Context, args []string) error {
 	// Also add browser args as extra args
 	extraArgs := browserArgs
 
+	// Resolve proxy: --no-proxy takes precedence, then --proxy, then config
+	proxyURL := ""
+	if flagVals["no-proxy"] != "true" {
+		if p := flagVals["proxy"]; p != "" {
+			proxyURL = p
+		} else if ctx.Config != nil {
+			proxyURL = ctx.Config.GetProxy()
+		}
+	}
+
 	opts := LaunchOptions{
 		Browser:     spec.Browser,
 		Version:     spec.Version,
@@ -527,6 +543,7 @@ func runRun(ctx *Context, args []string) error {
 		ExtraArgs:   extraArgs,
 		Detached:    flagVals["detached"] == "true",
 		DryRun:      flagVals["dry-run"] == "true",
+		Proxy:       proxyURL,
 	}
 
 	if opts.DryRun {
@@ -1494,6 +1511,13 @@ func runConfigShow(ctx *Context, args []string) error {
 	ctx.Printf("    Firefox FTP:  %s\n", boolStr(ctx.Config.IsFirefoxFTPEnabled()))
 	ctx.Printf("\n  磁盘空间阈值:   %d GB (低于此值会提示)\n", ctx.Config.GetDiskSpaceThresholdGB())
 
+	proxy := ctx.Config.GetProxy()
+	if proxy == "" {
+		ctx.Printf("  代理:           (未设置，直连)\n")
+	} else {
+		ctx.Printf("  代理:           %s\n", proxy)
+	}
+
 	aliases := ctx.Config.ListAliases()
 	if len(aliases) > 0 {
 		ctx.Printf("\n  别名:\n")
@@ -1550,6 +1574,13 @@ func runConfigGet(ctx *Context, args []string) error {
 		ctx.Println(boolStr(ctx.Config.IsFirefoxFTPEnabled()))
 	case "disk-threshold", "disk-space-threshold", "space-threshold":
 		ctx.Printf("%d GB\n", ctx.Config.GetDiskSpaceThresholdGB())
+	case "proxy":
+		p := ctx.Config.GetProxy()
+		if p == "" {
+			ctx.Println("(未设置)")
+		} else {
+			ctx.Println(p)
+		}
 	case "path", "config-path", "config":
 		ctx.Println(ctx.Config.ConfigPath())
 	default:
@@ -1679,6 +1710,24 @@ func runConfigSet(ctx *Context, args []string) error {
 			return fmt.Errorf("设置磁盘空间阈值失败: %w", err)
 		}
 		ctx.Printf("磁盘空间阈值已设置为: %d GB\n", gb)
+
+	case "proxy":
+		// Allow "none", "direct", "" to clear proxy
+		if value == "none" || value == "direct" || value == "" {
+			if err := ctx.Config.SetProxy(""); err != nil {
+				return fmt.Errorf("清除代理设置失败: %w", err)
+			}
+			ctx.Println("代理已清除（直连模式）")
+		} else {
+			// Validate proxy URL format
+			if err := validateProxyURL(value); err != nil {
+				return err
+			}
+			if err := ctx.Config.SetProxy(value); err != nil {
+				return fmt.Errorf("设置代理失败: %w", err)
+			}
+			ctx.Printf("代理已设置为: %s\n", value)
+		}
 
 	default:
 		// Treat as alias
@@ -2405,6 +2454,26 @@ func parseBool(s string) bool {
 	default:
 		return false
 	}
+}
+
+// validateProxyURL validates a proxy URL.
+// Supported schemes: http, https, socks5, socks5h.
+func validateProxyURL(proxyURL string) error {
+	parsed, err := url.Parse(proxyURL)
+	if err != nil {
+		return fmt.Errorf("无效的代理地址: %w", err)
+	}
+	scheme := strings.ToLower(parsed.Scheme)
+	switch scheme {
+	case "http", "https", "socks5", "socks5h":
+		// valid
+	default:
+		return fmt.Errorf("不支持的代理协议: %s（支持 http, https, socks5, socks5h）", scheme)
+	}
+	if parsed.Host == "" {
+		return fmt.Errorf("代理地址缺少主机和端口: %s", proxyURL)
+	}
+	return nil
 }
 
 // checkDiskSpace checks if there's enough free disk space at the given path.

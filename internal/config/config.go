@@ -51,6 +51,12 @@ type Config struct {
 	// DiskSpaceThresholdGB is the minimum free space (in GB) required before
 	// warning the user. Default is 5 GB.
 	DiskSpaceThresholdGB int `json:"diskSpaceThresholdGB"`
+
+	// Proxy is the proxy URL used for both bws downloads and browser launching.
+	// Supported schemes: http, https, socks5, socks5h.
+	// Empty means no proxy (direct connection).
+	// Can be overridden per-launch with --proxy flag.
+	Proxy string `json:"proxy"`
 }
 
 // SourceConfig describes a remote data source for a browser.
@@ -288,6 +294,18 @@ func (c *Config) GetDiskSpaceThresholdGB() int {
 	return c.DiskSpaceThresholdGB
 }
 func (c *Config) SetDiskSpaceThresholdGB(v int) { c.DiskSpaceThresholdGB = v }
+
+// GetProxy returns the configured proxy URL.
+// Returns empty string if no proxy is configured.
+func (c *Config) GetProxy() string {
+	return c.Proxy
+}
+
+// SetProxy sets the proxy URL.
+// Pass empty string to clear the proxy.
+func (c *Config) SetProxy(proxy string) {
+	c.Proxy = proxy
+}
 
 // GetSources returns enabled source configs for the given browser, sorted by priority.
 func (c *Config) GetSources(browser string) []SourceConfig {

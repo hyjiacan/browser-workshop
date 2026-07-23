@@ -159,6 +159,7 @@ func createOneShortcut(ctx *Context, browser, version, profileName string, nativ
 		Version:     version,
 		ProfileName: profileName,
 		NativeMode:  native,
+		Proxy:       ctx.Config.GetProxy(),
 	}
 
 	exePath, args, err := ctx.Launch.PreviewCommand(opts)

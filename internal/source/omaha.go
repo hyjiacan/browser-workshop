@@ -3,7 +3,6 @@ package source
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/xml"
 	"fmt"
 	"net/http"
@@ -23,16 +22,14 @@ type ChromeOmahaSource struct {
 
 // NewChromeOmahaSource creates a new Chrome Omaha source.
 func NewChromeOmahaSource() *ChromeOmahaSource {
+	return NewChromeOmahaSourceWithProxy("")
+}
+
+// NewChromeOmahaSourceWithProxy creates a new Chrome Omaha source that uses the given proxy.
+func NewChromeOmahaSourceWithProxy(proxyURL string) *ChromeOmahaSource {
 	return &ChromeOmahaSource{
-		updateURL: "https://tools.google.com/service/update2",
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				},
-			},
-		},
+		updateURL:  "https://tools.google.com/service/update2",
+		httpClient: &http.Client{Timeout: 30 * time.Second, Transport: newTransportWithProxy(proxyURL)},
 	}
 }
 

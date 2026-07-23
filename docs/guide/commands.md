@@ -163,6 +163,8 @@ bws r [浏览器[@版本]] [URL] [选项] [-- 原生参数]
 | `--native` | - | 原生模式（使用系统 Profile） |
 | `--detach` | `-d` | 后台运行（不等待进程） |
 | `--dry-run` | - | 试运行（不实际启动） |
+| `--proxy <url>` | - | 代理地址（如 `socks5://127.0.0.1:1080`），留空使用全局配置 |
+| `--no-proxy` | - | 禁用代理（覆盖全局配置） |
 | `--` | - | 之后的参数原样传递给浏览器 |
 
 ### 示例
@@ -197,6 +199,12 @@ bws r chrome@120 -- --disable-gpu --no-sandbox
 
 # 试运行
 bws r chrome@120 --dry-run
+
+# 使用代理
+bws r chrome@120 --proxy socks5://127.0.0.1:1080
+
+# 禁用代理（覆盖全局配置）
+bws r chrome@120 --no-proxy
 
 # 使用 open 别名
 bws open chrome@120
@@ -656,6 +664,7 @@ bws cfg <子命令> [参数]
 | `source-omaha` | Omaha 源开关 | `true` |
 | `source-firefox-ftp` | Firefox FTP 源开关 | `true` |
 | `disk-threshold` | 磁盘空间告警阈值（GB） | `5` |
+| `proxy` | 代理地址（用于下载和浏览器启动） | 空 |
 
 ### 示例
 
@@ -670,6 +679,13 @@ bws cfg get default-browser
 bws cfg set default-browser firefox
 bws cfg set log-level debug
 bws cfg set source http://server:8080
+
+# 设置代理
+bws cfg set proxy socks5://127.0.0.1:1080
+bws cfg set proxy http://proxy.example.com:8080
+
+# 清除代理
+bws cfg set proxy none
 
 # 显示配置文件路径
 bws cfg path
