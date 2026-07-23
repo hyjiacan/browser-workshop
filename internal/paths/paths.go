@@ -38,6 +38,9 @@ type Paths struct {
 
 	// RuntimeDir stores runtime data like browser profiles
 	RuntimeDir string
+
+	// Plugin scripts directory
+	PluginsDir string
 }
 
 var (
@@ -67,8 +70,14 @@ func New(root string) *Paths {
 		ManifestCacheDir: filepath.Join(root, "cache", "manifests"),
 		DownloadCacheDir: filepath.Join(root, "cache", "downloads"),
 		RuntimeDir:       filepath.Join(root, "runtime"),
+		PluginsDir:       filepath.Join(root, "plugins"),
 	}
 	return p
+}
+
+// EnsurePluginsDir creates the plugins directory if it doesn't exist.
+func (p *Paths) EnsurePluginsDir() error {
+	return os.MkdirAll(p.PluginsDir, 0o755)
 }
 
 // EnsureAll creates all required directories if they don't exist.
