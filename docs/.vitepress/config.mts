@@ -39,6 +39,7 @@ const zhThemeConfig = {
   nav: [
     { text: '指南', link: '/guide/getting-started' },
     { text: '命令参考', link: '/guide/commands' },
+    { text: '插件系统', link: '/guide/plugin' },
     { text: 'Serve 服务', link: '/guide/serve' },
     { text: 'GitHub', link: 'https://github.com/hyjiacan/browser-workshop' },
     { text: 'Gitee', link: 'https://gitee.com/hyjiacan/browser-workshop' },
@@ -63,6 +64,7 @@ const zhThemeConfig = {
           { text: '远程下载', link: '/guide/download' },
           { text: '运行浏览器', link: '/guide/run' },
           { text: 'Profile 管理', link: '/guide/profile' },
+          { text: '插件系统', link: '/guide/plugin' },
           { text: '配置管理', link: '/guide/config' },
         ],
       },
@@ -130,6 +132,7 @@ const enThemeConfig = {
   nav: [
     { text: 'Guide', link: '/en/guide/getting-started' },
     { text: 'Commands', link: '/en/guide/commands' },
+    { text: 'Plugin', link: '/en/guide/plugin' },
     { text: 'Serve', link: '/en/guide/serve' },
     { text: 'GitHub', link: 'https://github.com/hyjiacan/browser-workshop' },
     { text: 'Gitee', link: 'https://gitee.com/hyjiacan/browser-workshop' },
@@ -154,6 +157,7 @@ const enThemeConfig = {
           { text: 'Remote Download', link: '/en/guide/download' },
           { text: 'Run Browser', link: '/en/guide/run' },
           { text: 'Profile Management', link: '/en/guide/profile' },
+          { text: 'Plugin System', link: '/en/guide/plugin' },
           { text: 'Configuration', link: '/en/guide/config' },
         ],
       },
