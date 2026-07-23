@@ -15,6 +15,9 @@
 - **远程下载**：从官方源（Firefox FTP、Chromium GCS）下载指定版本
 - **离线分发**：内置 `serve` 命令，支持自动同步，搭建局域网分发服务
 - **隔离运行**：每个版本独立 Profile，支持命名 Profile
+- **插件系统**：Lua 脚本插件，可在启动时自动修改参数、注入配置、执行自定义逻辑
+- **代理支持**：全局代理配置，覆盖下载和浏览器启动
+- **指纹隔离**：`--fingerprint` 预设（standard/random），降低浏览器指纹被追踪的风险
 - **便携模式**：数据存储在 `bws-data/` 子目录，U 盘随身携带
 - **浏览器短别名**：`gc` (chrome)、`ff` (firefox)、`cm` (chromium)
 - **HTTPS 兼容**：默认跳过证书验证，适配内网/自签名证书环境
@@ -76,6 +79,7 @@ go install gitee.com/hyjiacan/browser-workshop/cmd/bws@latest
 | `bws serve` | 启动 HTTP 分发服务 |
 | `bws config` | 管理配置 |
 | `bws profile` | 管理 Profile |
+| `bws plugin` | 管理插件（安装/卸载/搜索） |
 
 完整命令说明请查看 [命令参考](https://hyjiacan.github.io/browser-workshop/guide/commands)。
 
@@ -88,6 +92,48 @@ go install gitee.com/hyjiacan/browser-workshop/cmd/bws@latest
 | `cm` | chromium |
 
 所有命令都支持短别名。详见 [浏览器短别名](https://hyjiacan.github.io/browser-workshop/guide/short-aliases)。
+
+## 代理与指纹隔离
+
+```bash
+# 设置全局代理（下载和浏览器启动均生效）
+bws cfg set proxy socks5://127.0.0.1:1080
+
+# 运行时使用指纹隔离
+bws r chrome@120 --fingerprint random
+bws r chrome@120 --fingerprint standard
+```
+
+## 插件系统
+
+bws 支持 Lua 脚本插件，在浏览器启动时自动执行自定义逻辑。
+
+```bash
+# 安装插件
+bws plugin install ./my-plugin.lua
+
+# 使用插件运行浏览器
+bws r chrome@120 --plugin my-plugin
+
+# 同时激活多个插件
+bws r chrome@120 --plugin plugin-a,plugin-b
+
+# 搜索远程插件
+bws plugin search fingerprint
+```
+
+编写插件非常简单，创建一个 `.lua` 文件即可：
+
+```lua
+-- ~/.bws/plugins/my-plugin.lua
+function pre_run()
+    if ctx.browser == "chrome" then
+        ctx.add_arg("--disable-background-timer-throttling")
+    end
+end
+```
+
+更多示例见 [plugins/examples](plugins/examples/)。
 
 ## Serve 服务
 
