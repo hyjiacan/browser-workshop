@@ -823,7 +823,10 @@ bws cc clear
 
 ## bws plugin (别名: pl)
 
-管理 bws 插件。插件是 Lua 脚本，可以在浏览器启动时自动修改参数或执行操作。
+管理 bws 插件。插件可以修改浏览器启动参数或执行操作，支持两种类型：
+
+- **Lua 脚本**（`.lua`）：简单逻辑，如修改启动参数、写配置文件
+- **IPC 插件**（可执行文件）：通过 stdin/stdout JSON-RPC 通信，可用任何语言编写
 
 ### 子命令
 
@@ -840,8 +843,11 @@ bws cc clear
 # 列出已安装插件
 bws plugin list
 
-# 从本地文件安装
+# 从本地 Lua 文件安装
 bws plugin install ./my-plugin.lua
+
+# 从本地 IPC 插件安装（任意可执行文件）
+bws plugin install ./my-plugin.py
 
 # 从 registry 安装
 bws plugin install fingerprint-enhanced
@@ -865,7 +871,7 @@ bws r chrome@120 --plugin auto-arg,fingerprint-enhanced
 
 ### 编写插件
 
-插件是 `.lua` 文件，放在 `bws-data/plugins/`（便携模式）或 `~/.bws/plugins/` 目录下。
+**Lua 插件**是 `.lua` 文件，放在 `bws-data/plugins/`（便携模式）或 `~/.bws/plugins/` 目录下。
 
 **可用的 ctx API：**
 
@@ -881,6 +887,13 @@ bws r chrome@120 --plugin auto-arg,fingerprint-enhanced
 | `ctx.write_file(path, content)` | 写入文件（返回 nil 成功，或错误字符串） |
 | `ctx.read_file(path)` | 读取文件（返回 content, error） |
 | `ctx.log(message)` | 输出日志到 stderr |
+
+**IPC 插件**是任意可执行文件，通过 stdin/stdout JSON-RPC 通信：
+
+- **请求**（stdin）：`{"event":"pre_run","browser":"chrome","version":"120","profile":"default","profileDir":"..."}`
+- **响应**（stdout）：`{"extraArgs":["--flag"],"env":{"KEY":"val"},"error":""}`
+- 超时：10 秒后自动终止进程
+- 详见 `plugins/README.md` 和 `plugins/examples/browser-alias.py`
 
 **插件可以定义 `pre_run()` 函数，在浏览器启动前被调用。**
 

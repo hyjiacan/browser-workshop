@@ -80,27 +80,41 @@ func runPluginInstall(ctx *Context, args []string) error {
 	source := args[0]
 
 	// Local file path
-	if strings.HasSuffix(source, ".lua") && fileExists(source) {
-		name := strings.TrimSuffix(filepath.Base(source), ".lua")
-		dest := filepath.Join(ctx.Plugin.PluginsDir(), name+".lua")
+	if fileExists(source) {
+		name := filepath.Base(source)
+		ext := filepath.Ext(name)
+		pluginType := "lua"
+		if ext != ".lua" {
+			pluginType = "binary"
+			// For binary plugins, keep the original filename (including extension)
+		} else {
+			name = strings.TrimSuffix(name, ".lua")
+		}
+
+		dest := filepath.Join(ctx.Plugin.PluginsDir(), filepath.Base(source))
 		data, err := os.ReadFile(source)
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(dest, data, 0o644); err != nil {
+		// Binary plugins need execute permission; Lua just needs read
+		perm := os.FileMode(0o644)
+		if pluginType == "binary" {
+			perm = 0o755
+		}
+		if err := os.WriteFile(dest, data, perm); err != nil {
 			return err
 		}
 		if err := ctx.Plugin.Install(plugin.ManifestEntry{
 			Name:        name,
 			Version:     "local",
 			Source:      source,
-			Type:        "lua",
+			Type:        pluginType,
 			InstalledAt: time.Now(),
 			Path:        dest,
 		}); err != nil {
 			return err
 		}
-		ctx.Printf("插件 %q 已安装 (来源: %s)\n", name, source)
+		ctx.Printf("插件 %q 已安装 (类型: %s, 来源: %s)\n", name, pluginType, source)
 		return nil
 	}
 

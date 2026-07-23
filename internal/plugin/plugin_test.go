@@ -2,6 +2,7 @@ package plugin
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -307,4 +308,201 @@ func TestManager_PluginsDir(t *testing.T) {
 	if mgr.PluginsDir() != dir {
 		t.Errorf("expected %s, got %s", dir, mgr.PluginsDir())
 	}
+}
+
+func TestManager_DiscoverBinary(t *testing.T) {
+	dir := t.TempDir()
+	mgr, err := NewManager(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a binary plugin file
+	binPath := filepath.Join(dir, "my-plugin.exe")
+	_ = os.WriteFile(binPath, []byte("fake binary"), 0o755)
+
+	// Install it in manifest as binary type
+	if err := mgr.Install(ManifestEntry{
+		Name:    "my-plugin",
+		Version: "1.0",
+		Type:    "binary",
+		Path:    binPath,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	plugins, err := mgr.Discover()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Should find the binary plugin
+	found := false
+	for _, p := range plugins {
+		if p.Name == "my-plugin" && p.Type == "binary" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected binary plugin my-plugin, got %+v", plugins)
+	}
+}
+
+func TestManager_GetManifestEntry(t *testing.T) {
+	dir := t.TempDir()
+	mgr, err := NewManager(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := mgr.Install(ManifestEntry{
+		Name:    "ipc-test",
+		Version: "2.0",
+		Type:    "binary",
+		Path:    filepath.Join(dir, "ipc-test.exe"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	entry, err := mgr.GetManifestEntry("ipc-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entry.Type != "binary" || entry.Version != "2.0" {
+		t.Errorf("expected binary v2.0, got type=%s version=%s", entry.Type, entry.Version)
+	}
+
+	// Non-existent entry
+	_, err = mgr.GetManifestEntry("no-such-plugin")
+	if err == nil {
+		t.Error("expected error for non-existent plugin")
+	}
+}
+
+func TestRunIPCPlugin(t *testing.T) {
+	// Build a simple IPC plugin test helper in Go
+	dir := t.TempDir()
+	helperSrc := filepath.Join(dir, "helper.go")
+	helperBin := filepath.Join(dir, "helper.exe")
+
+	_ = os.WriteFile(helperSrc, []byte(`package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+)
+
+func main() {
+	data, _ := io.ReadAll(os.Stdin)
+	var req map[string]interface{}
+	json.Unmarshal(data, &req)
+
+	resp := map[string]interface{}{
+		"extraArgs": []string{"--from-" + req["browser"].(string)},
+		"env":       map[string]string{"PLUGIN_RAN": "1"},
+	}
+	out, _ := json.Marshal(resp)
+	fmt.Print(string(out))
+}
+`), 0o644)
+
+	// Compile the helper
+	cmd := execCmd("go", "build", "-o", helperBin, helperSrc)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Skipf("skipping IPC test: cannot compile helper: %v\n%s", err, out)
+	}
+
+	ctx := &ScriptContext{
+		Browser:    "chrome",
+		Version:    "120",
+		Profile:    "test-profile",
+		ProfileDir: "/tmp/profiles/test",
+	}
+
+	resp, err := RunIPCPlugin(helperBin, ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.ExtraArgs) != 1 || resp.ExtraArgs[0] != "--from-chrome" {
+		t.Errorf("expected --from-chrome, got %v", resp.ExtraArgs)
+	}
+	if resp.Env["PLUGIN_RAN"] != "1" {
+		t.Errorf("expected PLUGIN_RAN=1, got %v", resp.Env)
+	}
+}
+
+func TestRunIPCPlugin_Error(t *testing.T) {
+	dir := t.TempDir()
+	helperSrc := filepath.Join(dir, "helper_err.go")
+	helperBin := filepath.Join(dir, "helper_err.exe")
+
+	_ = os.WriteFile(helperSrc, []byte(`package main
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+)
+
+func main() {
+	data, _ := io.ReadAll(os.Stdin)
+	var req map[string]interface{}
+	json.Unmarshal(data, &req)
+
+	resp := map[string]interface{}{
+		"error": "plugin failed intentionally",
+	}
+	out, _ := json.Marshal(resp)
+	fmt.Print(string(out))
+}
+`), 0o644)
+
+	cmd := execCmd("go", "build", "-o", helperBin, helperSrc)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Skipf("skipping IPC error test: cannot compile helper: %v\n%s", err, out)
+	}
+
+	ctx := &ScriptContext{Browser: "firefox"}
+	_, err := RunIPCPlugin(helperBin, ctx)
+	if err == nil {
+		t.Error("expected error from plugin that returns error field")
+	}
+}
+
+func TestRunIPCPlugin_Timeout(t *testing.T) {
+	dir := t.TempDir()
+	helperSrc := filepath.Join(dir, "helper_slow.go")
+	helperBin := filepath.Join(dir, "helper_slow.exe")
+
+	_ = os.WriteFile(helperSrc, []byte(`package main
+
+import (
+	"time"
+)
+
+func main() {
+	time.Sleep(30 * time.Second)
+}
+`), 0o644)
+
+	cmd := execCmd("go", "build", "-o", helperBin, helperSrc)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Skipf("skipping IPC timeout test: cannot compile helper: %v\n%s", err, out)
+	}
+
+	ctx := &ScriptContext{Browser: "chrome"}
+	_, err := RunIPCPlugin(helperBin, ctx)
+	if err == nil {
+		t.Error("expected timeout error from slow plugin")
+	}
+}
+
+// execCmd is a test helper that runs a command.
+func execCmd(name string, args ...string) *exec.Cmd {
+	cmd := exec.Command(name, args...)
+	return cmd
 }

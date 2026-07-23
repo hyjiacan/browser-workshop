@@ -823,7 +823,10 @@ bws cc clear
 
 ## bws plugin (alias: pl)
 
-Manage bws plugins. Plugins are Lua scripts that modify browser args or execute actions at launch time.
+Manage bws plugins. Plugins can modify browser launch args or execute actions, with two types:
+
+- **Lua scripts** (`.lua`): Simple logic like modifying args, writing config files
+- **IPC plugins** (executable files): Communicate via stdin/stdout JSON-RPC, can be written in any language
 
 ### Subcommands
 
@@ -840,8 +843,11 @@ Manage bws plugins. Plugins are Lua scripts that modify browser args or execute 
 # List installed plugins
 bws plugin list
 
-# Install from local file
+# Install from local Lua file
 bws plugin install ./my-plugin.lua
+
+# Install from local IPC plugin (any executable)
+bws plugin install ./my-plugin.py
 
 # Install from registry
 bws plugin install fingerprint-enhanced
@@ -865,7 +871,7 @@ bws r chrome@120 --plugin auto-arg,fingerprint-enhanced
 
 ### Writing plugins
 
-Plugins are `.lua` files in the `bws-data/plugins/` (portable) or `~/.bws/plugins/` directory.
+**Lua plugins** are `.lua` files in the `bws-data/plugins/` (portable) or `~/.bws/plugins/` directory.
 
 **Available ctx API:**
 
@@ -881,6 +887,13 @@ Plugins are `.lua` files in the `bws-data/plugins/` (portable) or `~/.bws/plugin
 | `ctx.write_file(path, content)` | Write a file (returns nil on success, or error string) |
 | `ctx.read_file(path)` | Read a file (returns content, error) |
 | `ctx.log(message)` | Log message to stderr |
+
+**IPC plugins** are any executable files that communicate via stdin/stdout JSON-RPC:
+
+- **Request** (stdin): `{"event":"pre_run","browser":"chrome","version":"120","profile":"default","profileDir":"..."}`
+- **Response** (stdout): `{"extraArgs":["--flag"],"env":{"KEY":"val"},"error":""}`
+- Timeout: 10 seconds, process is killed after timeout
+- See `plugins/README.md` and `plugins/examples/browser-alias.py` for details
 
 **Plugins can define a `pre_run()` function, called before browser launch.**
 

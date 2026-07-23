@@ -48,6 +48,7 @@ func NewManager(pluginsDir string) (*Manager, error) {
 }
 
 // Discover scans the plugins directory and returns all valid plugins.
+// It searches for .lua files and also checks the manifest for binary plugins.
 func (mgr *Manager) Discover() ([]Plugin, error) {
 	entries, err := os.ReadDir(mgr.pluginsDir)
 	if err != nil {
@@ -60,6 +61,8 @@ func (mgr *Manager) Discover() ([]Plugin, error) {
 			continue
 		}
 		name := entry.Name()
+
+		// Lua plugins
 		if strings.HasSuffix(name, ".lua") {
 			pluginName := strings.TrimSuffix(name, ".lua")
 			plugins = append(plugins, Plugin{
@@ -67,9 +70,33 @@ func (mgr *Manager) Discover() ([]Plugin, error) {
 				Path: filepath.Join(mgr.pluginsDir, name),
 				Type: "lua",
 			})
+			continue
+		}
+
+		// Binary plugins: check manifest for type info
+		pluginName := strings.TrimSuffix(name, filepath.Ext(name))
+		if pluginName == "" {
+			continue
+		}
+		if me, ok := mgr.manifest.Plugins[pluginName]; ok && me.Type == "binary" {
+			plugins = append(plugins, Plugin{
+				Name:     pluginName,
+				Path:     filepath.Join(mgr.pluginsDir, name),
+				Type:     "binary",
+				Manifest: &me,
+			})
 		}
 	}
 	return plugins, nil
+}
+
+// GetManifestEntry returns the manifest entry for a plugin by name.
+func (mgr *Manager) GetManifestEntry(name string) (*ManifestEntry, error) {
+	entry, ok := mgr.manifest.Plugins[name]
+	if !ok {
+		return nil, fmt.Errorf("plugin %q not found in manifest", name)
+	}
+	return &entry, nil
 }
 
 // List returns installed plugins from the manifest.

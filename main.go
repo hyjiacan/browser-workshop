@@ -422,14 +422,19 @@ func (e *pluginExecutor) RunPreRunPlugins(opts *launch.Options) error {
 		return nil
 	}
 	for _, name := range opts.Plugins {
-		pluginPath := filepath.Join(e.mgr.PluginsDir(), name+".lua")
-		if _, err := os.Stat(pluginPath); err != nil {
-			return fmt.Errorf("plugin %q not found (expected %s)", name, pluginPath)
+		// Look up plugin type from manifest
+		entry, err := e.mgr.GetManifestEntry(name)
+		if err != nil {
+			// Fallback: try as .lua plugin
+			pluginPath := filepath.Join(e.mgr.PluginsDir(), name+".lua")
+			if _, statErr := os.Stat(pluginPath); statErr == nil {
+				entry = &plugin.ManifestEntry{Name: name, Type: "lua", Path: pluginPath}
+			} else {
+				return fmt.Errorf("plugin %q not found (not in manifest, no .lua file)", name)
+			}
 		}
 
-		rt := plugin.NewLuaRuntime()
-		defer rt.Close()
-
+		// Build shared context
 		ctx := &plugin.ScriptContext{
 			Browser:    opts.Browser,
 			Version:    opts.Version,
@@ -444,11 +449,35 @@ func (e *pluginExecutor) RunPreRunPlugins(opts *launch.Options) error {
 				opts.Env[k] = v
 			},
 		}
-		if err := rt.RunScript(pluginPath, ctx); err != nil {
-			return fmt.Errorf("plugin %q: %w", name, err)
+
+		switch entry.Type {
+		case "lua":
+			if err := e.runLuaPlugin(entry.Path, ctx); err != nil {
+				return fmt.Errorf("plugin %q: %w", name, err)
+			}
+		case "binary":
+			resp, err := plugin.RunIPCPlugin(entry.Path, ctx)
+			if err != nil {
+				return fmt.Errorf("plugin %q: %w", name, err)
+			}
+			opts.ExtraArgs = append(opts.ExtraArgs, resp.ExtraArgs...)
+			for k, v := range resp.Env {
+				if opts.Env == nil {
+					opts.Env = make(map[string]string)
+				}
+				opts.Env[k] = v
+			}
+		default:
+			return fmt.Errorf("plugin %q: unknown type %q", name, entry.Type)
 		}
 	}
 	return nil
+}
+
+func (e *pluginExecutor) runLuaPlugin(pluginPath string, ctx *plugin.ScriptContext) error {
+	rt := plugin.NewLuaRuntime()
+	defer rt.Close()
+	return rt.RunScript(pluginPath, ctx)
 }
 
 type browserAdapter struct {
