@@ -123,7 +123,6 @@ Short aliases can be used in all bws commands, including but not limited to:
 | `info` | Yes | `bws show cm@120` |
 | `run` | Yes | `bws r gc@120` |
 | `install` | Yes | `bws i ff@latest` |
-| `import` | No | Batch import, no browser needs to be specified |
 | `uninstall` | Yes | `bws rm gc@120` |
 | `use` | Yes | `bws u cm@120` |
 | `download` | Yes | `bws dl ff@beta` |

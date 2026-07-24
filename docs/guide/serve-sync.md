@@ -191,14 +191,15 @@ GET /api/v1/sync/status
 
 ```json
 {
-  "running": false,
-  "lastSync": "2024-01-15T10:30:00Z",
-  "nextSync": "2024-01-16T10:30:00Z",
-  "lastResult": {
-    "success": 5,
-    "failed": 0,
-    "skipped": 10,
-    "total": 15
+  "status": "ok",
+  "data": {
+    "running": false,
+    "last_sync": "2024-01-15T10:30:00Z",
+    "next_sync": "2024-01-16T10:30:00Z",
+    "last_error": "",
+    "progress": "同步完成",
+    "total_files": 15,
+    "synced_files": 15
   }
 }
 ```
@@ -208,12 +209,12 @@ GET /api/v1/sync/status
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `running` | boolean | 当前是否正在同步 |
-| `lastSync` | string | 上次同步时间（ISO 8601 格式） |
-| `nextSync` | string | 下次计划同步时间（ISO 8601 格式） |
-| `lastResult.success` | number | 上次同步成功下载的文件数 |
-| `lastResult.failed` | number | 上次同步失败的文件数 |
-| `lastResult.skipped` | number | 上次同步跳过的文件数（已存在） |
-| `lastResult.total` | number | 上次同步处理的总文件数 |
+| `last_sync` | string | 上次同步完成时间（ISO 8601） |
+| `next_sync` | string | 下次计划同步时间（ISO 8601） |
+| `last_error` | string | 上次同步错误信息 |
+| `progress` | string | 同步进度描述 |
+| `total_files` | number | 同步任务总文件数 |
+| `synced_files` | number | 已同步文件数 |
 
 ### 手动触发同步 API
 

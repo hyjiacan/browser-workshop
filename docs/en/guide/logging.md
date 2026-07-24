@@ -265,4 +265,4 @@ If you need to submit a bug report, it is recommended to include the following i
 2. **Logs are automatically rotated**: No need to worry about log files growing infinitely; the system will automatically rotate and clean up
 3. **Logs may contain sensitive information**: Logs may contain file paths and other information; pay attention to sanitization before sharing logs
 4. **Performance impact**: Increasing the log level (e.g. trace) may slightly affect performance; it is recommended to change back to info after debugging
-5. **Log directory location**: Can be found via `bws cc path` or by checking the data directory to locate the logs folder
+5. **Log directory location**: Logs are in the `logs/` folder under the data directory. Use `bws cfg get data-dir` to find the data directory path.

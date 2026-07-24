@@ -66,7 +66,7 @@ bws sv
 |-----------|--------------|---------|-------------|
 | `--dir` | `-d` | Program directory | Specify the base directory (parent of packages/ and bin/) |
 
-Command line parameters override the corresponding settings in the configuration file.
+The `-d` parameter specifies the base directory (parent of packages/ and bin/), where the configuration file will be located and created.
 
 ### Configuration Items
 

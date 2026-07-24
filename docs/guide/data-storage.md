@@ -164,8 +164,8 @@ runtime/chrome/profiles/personal/
 ### 查看占用空间
 
 ```bash
-# 查看缓存大小
-bws cc size
+# 查看缓存状态
+bws cc info
 
 # 查看所有数据占用空间（需要手动计算）
 du -sh bws-data/

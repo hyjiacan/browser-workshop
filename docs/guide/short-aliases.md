@@ -123,7 +123,6 @@ bws pf list gc
 | `info` | 是 | `bws show cm@120` |
 | `run` | 是 | `bws r gc@120` |
 | `install` | 是 | `bws i ff@latest` |
-| `import` | 否 | 批量导入，无需指定浏览器 |
 | `uninstall` | 是 | `bws rm gc@120` |
 | `use` | 是 | `bws u cm@120` |
 | `download` | 是 | `bws dl ff@beta` |

@@ -164,8 +164,8 @@ If you need to move data to another location:
 ### Checking Occupied Space
 
 ```bash
-# Check cache size
-bws cc size
+# Check cache status
+bws cc info
 
 # Check total data occupied space (manual calculation required)
 du -sh bws-data/

@@ -216,7 +216,7 @@ bws dl chrome@85
 
 ### Download File Location
 
-Downloaded files are saved in the current working directory by default. You can specify another save path via `bws dl --output`.
+Downloaded files are saved in the current working directory by default. You can specify another save path via `bws dl --output` (short form `-o`).
 
 ### Difference from install
 

@@ -191,14 +191,15 @@ GET /api/v1/sync/status
 
 ```json
 {
-  "running": false,
-  "lastSync": "2024-01-15T10:30:00Z",
-  "nextSync": "2024-01-16T10:30:00Z",
-  "lastResult": {
-    "success": 5,
-    "failed": 0,
-    "skipped": 10,
-    "total": 15
+  "status": "ok",
+  "data": {
+    "running": false,
+    "last_sync": "2024-01-15T10:30:00Z",
+    "next_sync": "2024-01-16T10:30:00Z",
+    "last_error": "",
+    "progress": "Sync complete",
+    "total_files": 15,
+    "synced_files": 15
   }
 }
 ```
@@ -208,12 +209,12 @@ GET /api/v1/sync/status
 | Field | Type | Description |
 |-------|------|-------------|
 | `running` | boolean | Whether sync is currently in progress |
-| `lastSync` | string | Last sync time (ISO 8601 format) |
-| `nextSync` | string | Next scheduled sync time (ISO 8601 format) |
-| `lastResult.success` | number | Number of files successfully downloaded in last sync |
-| `lastResult.failed` | number | Number of files that failed in last sync |
-| `lastResult.skipped` | number | Number of files skipped in last sync (already exist) |
-| `lastResult.total` | number | Total number of files processed in last sync |
+| `last_sync` | string | Last sync completion time (ISO 8601) |
+| `next_sync` | string | Next scheduled sync time (ISO 8601) |
+| `last_error` | string | Last sync error message |
+| `progress` | string | Sync progress description |
+| `total_files` | number | Total number of files to sync |
+| `synced_files` | number | Number of files already synced |
 
 ### Manual Trigger Sync API
 
