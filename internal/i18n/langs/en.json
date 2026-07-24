@@ -4,6 +4,7 @@
   "root.commands": "Available commands:",
   "root.flags": "Flags:",
   "root.flag_help": "Show help",
+  "root.flag_verbose": "Show verbose debug output",
   "root.flag_version": "Show version",
   "root.help_line1": "Use '%s <command> --help' for more information about a command.",
   "root.help_line2": "Use '%s help <topic>' for detailed help.",

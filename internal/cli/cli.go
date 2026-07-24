@@ -363,6 +363,11 @@ func NewApp(name, version string, ctx *Context) *App {
 		RootCmd: &Command{
 			Name:        name,
 			Description: "浏览器版本管理工具",
+			Flags: []*Flag{
+				{Name: "help", Short: "h", Usage: "显示帮助"},
+				{Name: "version", Short: "v", Usage: "显示版本"},
+				{Name: "verbose", Short: "V", Usage: "输出详细调试信息"},
+			},
 		},
 	}
 }
@@ -498,6 +503,7 @@ func (a *App) printRootHelp() {
 
 	fmt.Fprintf(w, "\n%s\n", i18n.T("root.flags"))
 	fmt.Fprintf(w, "  -h, --help     %s\n", i18n.T("root.flag_help"))
+	fmt.Fprintf(w, "  -V, --verbose  %s\n", i18n.T("root.flag_verbose"))
 	fmt.Fprintf(w, "  -v, --version  %s\n", i18n.T("root.flag_version"))
 	fmt.Fprintf(w, "\n%s\n", i18n.Tfmt("root.help_line1", a.Name))
 	fmt.Fprintf(w, "%s\n", i18n.Tfmt("root.help_line2", a.Name))

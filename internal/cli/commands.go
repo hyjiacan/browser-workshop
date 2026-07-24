@@ -103,6 +103,10 @@ func runLs(ctx *Context, args []string) error {
 	}
 
 	includeSystem := flags["no-system"] != "true"
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[list] 本地模式: browser=%s version=%s includeSystem=%v",
+			spec.Browser, spec.Version, includeSystem)
+	}
 
 	var versions []InstalledVersion
 
@@ -262,6 +266,11 @@ func runRemoteQuery(ctx *Context, args []string) error {
 		if spec.Browser == "firefox" {
 			activeSources = append(activeSources, "Mozilla Product Details")
 		}
+	}
+
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[list] 远程模式: browser=%s version=%s channels=%v activeSources=%v",
+			spec.Browser, spec.Version, channels, activeSources)
 	}
 
 	if len(activeSources) == 0 {
@@ -492,6 +501,9 @@ func runRun(ctx *Context, args []string) error {
 	// Parse browser@version
 	spec := parseBrowserVersion(positional[0], ctx.Config.DefaultBrowser())
 	spec = resolveBrowserSpec(ctx, spec)
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[run] 解析规格: %s@%s (别名=%v)", spec.Browser, spec.Version, spec.IsAlias)
+	}
 
 	// Handle "system" alias → resolve to system browser version
 	if spec.Version == "system" {
@@ -552,6 +564,11 @@ func runRun(ctx *Context, args []string) error {
 		Proxy:       proxyURL,
 		Fingerprint: flagVals["fingerprint"],
 		Plugins:    parsePluginList(flagVals["plugin"]),
+	}
+
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[run] headless=%v incognito=%v newWindow=%v native=%v detached=%v dryRun=%v proxy=%q plugins=%v",
+			opts.Headless, opts.Incognito, opts.NewWindow, opts.NativeMode, opts.Detached, opts.DryRun, proxyURL, opts.Plugins)
 	}
 
 	if opts.DryRun {
@@ -626,6 +643,16 @@ func runInstall(ctx *Context, args []string) error {
 	}
 	if err := checkDiskSpace(ctx, dataDir); err != nil {
 		return err
+	}
+
+	if ctx.Logger != nil {
+		if fromDir != "" {
+			ctx.Logger.Debug("[install] 从本地目录安装: dir=%s spec=%s@%s force=%v", fromDir, spec.Browser, spec.Version, force)
+		} else if fromFile != "" {
+			ctx.Logger.Debug("[install] 从本地文件安装: file=%s spec=%s@%s force=%v", fromFile, spec.Browser, spec.Version, force)
+		} else {
+			ctx.Logger.Debug("[install] 远程安装: spec=%s@%s channel=%s force=%v", spec.Browser, spec.Version, channel, force)
+		}
 	}
 
 	// 本地目录安装
@@ -704,6 +731,11 @@ func runInstall(ctx *Context, args []string) error {
 		return fmt.Errorf("%s@%s 没有可用的下载链接", spec.Browser, versionInfo.Version)
 	}
 
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[install] 版本已解析: %s@%s channel=%s platform=%s arch=%s url=%s",
+			spec.Browser, versionInfo.Version, versionInfo.Channel, versionInfo.Platform, versionInfo.Arch, versionInfo.DownloadURL)
+	}
+
 	// 检查是否已安装（使用解析后的完整版本号）
 	if !force && ctx.Install.IsInstalled(spec.Browser, versionInfo.Version) {
 		ctx.Printf("%s@%s 已安装\n", spec.Browser, versionInfo.Version)
@@ -727,9 +759,16 @@ func runInstall(ctx *Context, args []string) error {
 	}
 	defer os.RemoveAll(tempDir)
 
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[install] 临时目录: %s", tempDir)
+	}
+
 	// Determine filename from URL
 	fileName := getDownloadFilename(spec.Browser, versionInfo.Version, versionInfo.DownloadURL, versionInfo.Platform)
 	downloadDest := filepath.Join(tempDir, fileName)
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[install] 下载目标: %s", downloadDest)
+	}
 
 	var downloadedPath string
 	downloadedPath, err = ctx.Download.Download(versionInfo.DownloadURL, downloadDest, func(downloaded, total int64, percent float64) {
@@ -780,6 +819,9 @@ func runUninstall(ctx *Context, args []string) error {
 
 	spec := parseBrowserVersion(args[0], ctx.Config.DefaultBrowser())
 	spec = resolveBrowserSpec(ctx, spec)
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[uninstall] 解析规格: %s@%s", spec.Browser, spec.Version)
+	}
 
 	if !ctx.Install.IsInstalled(spec.Browser, spec.Version) {
 		ctx.Printf("%s@%s 未安装\n", spec.Browser, spec.Version)
@@ -818,6 +860,9 @@ func runUse(ctx *Context, args []string) error {
 
 	spec := parseBrowserVersion(args[0], ctx.Config.DefaultBrowser())
 	spec = resolveBrowserSpec(ctx, spec)
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[use] 设置默认: %s@%s", spec.Browser, spec.Version)
+	}
 
 	// Handle "system" alias
 	if spec.Version == "system" {
@@ -877,6 +922,9 @@ func NewAliasCommand() *Command {
 
 func runAliasList(ctx *Context, args []string) error {
 	aliases := ctx.Config.ListAliases()
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[alias] 列出别名: %d 个", len(aliases))
+	}
 	if len(aliases) == 0 {
 		ctx.Println("暂无别名。")
 		return nil
@@ -984,6 +1032,10 @@ func runRepoScan(ctx *Context, args []string) error {
 	path := ctx.Config.GetRepoPath()
 	if path == "" {
 		return fmt.Errorf("未配置仓库路径。请先使用 'bws repo set <路径>' 配置")
+	}
+
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[repo] 扫描仓库: path=%s", path)
 	}
 
 	ctx.Printf("正在扫描仓库: %s ...\n", path)
@@ -1101,6 +1153,9 @@ func runInfo(ctx *Context, args []string) error {
 
 	spec := parseBrowserVersion(args[0], ctx.Config.DefaultBrowser())
 	spec = resolveBrowserSpec(ctx, spec)
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[info] 查询: %s@%s", spec.Browser, spec.Version)
+	}
 
 	// Check if it's installed
 	if ctx.Install.IsInstalled(spec.Browser, spec.Version) {
@@ -1336,6 +1391,11 @@ func runDownload(ctx *Context, args []string) error {
 		return fmt.Errorf("%s@%s 没有可用的下载链接", spec.Browser, versionInfo.Version)
 	}
 
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[download] 版本已解析: %s@%s channel=%s url=%s",
+			spec.Browser, versionInfo.Version, versionInfo.Channel, versionInfo.DownloadURL)
+	}
+
 	// Determine output path
 	if outputDir == "" {
 		// Use current directory
@@ -1354,6 +1414,9 @@ func runDownload(ctx *Context, args []string) error {
 	// Determine filename from URL
 	fileName := getDownloadFilename(spec.Browser, versionInfo.Version, versionInfo.DownloadURL, versionInfo.Platform)
 	destPath := filepath.Join(outputDir, fileName)
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[download] 目标文件: %s", destPath)
+	}
 
 	ctx.Printf("正在下载 %s@%s 到 %s...\n", spec.Browser, versionInfo.Version, outputDir)
 
@@ -1402,6 +1465,9 @@ func NewConfigShowCommand() *Command {
 }
 
 func runConfigShow(ctx *Context, args []string) error {
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[config] 显示配置: path=%s", ctx.Config.ConfigPath())
+	}
 	ctx.Printf("配置信息：\n\n")
 	ctx.Printf("  配置文件:       %s\n", ctx.Config.ConfigPath())
 	ctx.Printf("  数据目录:       %s\n", ctx.Config.GetDataDir())
@@ -1785,6 +1851,10 @@ func runDoctor(ctx *Context, args []string) error {
 
 	ctx.Printf("正在运行健康检查...\n\n")
 
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[doctor] 开始健康检查")
+	}
+
 	// Check paths
 	pathsOk := true
 	if err := ctx.Paths.EnsureAll(); err != nil {
@@ -1883,6 +1953,9 @@ func NewCacheInfoCommand() *Command {
 }
 
 func runCacheInfo(ctx *Context, args []string) error {
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[cache] 缓存信息: 类型=临时（自动清理）")
+	}
 	ctx.Printf("缓存状态:\n")
 	ctx.Printf("  类型: 临时（自动清理）\n")
 	ctx.Printf("  说明: 下载文件存储在临时目录中，安装后会自动清理。\n")
@@ -1946,6 +2019,9 @@ func runProfileList(ctx *Context, args []string) error {
 		return fmt.Errorf("获取 profile 列表失败: %w", err)
 	}
 
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[profile] 列出 %s 的 profile: %d 个", browser, len(profiles))
+	}
 	ctx.Printf("浏览器 %s 的 profile 列表:\n\n", browser)
 
 	if len(profiles) == 0 {
@@ -2078,6 +2154,10 @@ func runProfileReset(ctx *Context, args []string) error {
 
 	force := flags["force"] == "true"
 	profileDir := ctx.Profile.ProfileDir(spec.Browser, spec.Version, profileName)
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[profile] 重置: browser=%s version=%s profile=%s dir=%s force=%v",
+			spec.Browser, spec.Version, profileName, profileDir, force)
+	}
 
 	// 显示将要重置的信息
 	if profileName != "" {
@@ -2242,6 +2322,10 @@ func runServe(ctx *Context, args []string) error {
 
 	if ctx.Serve == nil {
 		return fmt.Errorf("当前构建不支持 serve 功能")
+	}
+
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[serve] 启动服务: baseDir=%q", baseDir)
 	}
 
 	// 确保配置文件存在

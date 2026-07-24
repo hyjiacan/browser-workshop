@@ -85,6 +85,11 @@ func runShortcutCreate(ctx *Context, args []string) error {
 	native := flags["native"] == "true"
 	customName := flags["name"]
 
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[shortcut] 创建: all=%v profile=%s native=%v name=%s",
+			all, profileName, native, customName)
+	}
+
 	// Resolve version if needed
 	resolveVersion := func(browser, ver string) (string, error) {
 		if isVersionAlias(ver) {
@@ -153,6 +158,10 @@ func runShortcutCreate(ctx *Context, args []string) error {
 }
 
 func createOneShortcut(ctx *Context, browser, version, profileName string, native bool, name string) error {
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[shortcut] 创建快捷方式: browser=%s version=%s profile=%s native=%v name=%s",
+			browser, version, profileName, native, name)
+	}
 	// Get the executable path and args via launch preview
 	opts := LaunchOptions{
 		Browser:     browser,
@@ -251,6 +260,10 @@ func runShortcutList(ctx *Context, args []string) error {
 	names, err := ctx.Shortcut.List("")
 	if err != nil {
 		return fmt.Errorf("获取快捷方式列表失败: %w", err)
+	}
+
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[shortcut] 列出快捷方式: %d 个", len(names))
 	}
 
 	if len(names) == 0 {

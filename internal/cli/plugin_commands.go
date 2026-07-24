@@ -44,6 +44,9 @@ func runPluginList(ctx *Context, args []string) error {
 		return fmt.Errorf("plugin manager not available")
 	}
 	plugins := ctx.Plugin.List()
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[plugin] 列出插件: %d 个, dir=%s", len(plugins), ctx.Plugin.PluginsDir())
+	}
 	if len(plugins) == 0 {
 		ctx.Println("没有已安装的插件")
 		return nil
@@ -84,6 +87,10 @@ func runPluginInstall(ctx *Context, args []string) error {
 
 	if ctx.Plugin == nil {
 		return fmt.Errorf("plugin manager not available")
+	}
+
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[plugin] 安装插件: source=%q", source)
 	}
 
 	// 1. Local file path

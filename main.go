@@ -35,6 +35,9 @@ import (
 const version = "1.0.0-beta"
 
 func main() {
+	// Parse global flags before command processing
+	verbose := parseGlobalVerbose()
+
 	// Determine config path (portable mode: config in exe directory)
 	configPath, dataRoot, isNewConfig := resolvePaths()
 
@@ -68,6 +71,9 @@ func main() {
 
 	// Initialize logger (dual output: file at DEBUG level, console at config level)
 	consoleLevel := bmlog.ParseLevel(cfg.LogLevel)
+	if verbose {
+		consoleLevel = bmlog.LevelDebug
+	}
 	logger, err := bmlog.NewDualLogger(p.LogFile, bmlog.LevelDebug, consoleLevel, true)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "警告: 初始化日志系统失败: %v\n", err)
@@ -80,6 +86,9 @@ func main() {
 	bmlog.SetDefault(logger)
 
 	fmt.Printf("bws starting (version %s)\n", version)
+	if verbose {
+		fmt.Fprintln(os.Stderr, "[verbose] 调试输出已开启")
+	}
 	fmt.Println("------------------------------")
 
 	// Create managers
@@ -162,7 +171,6 @@ func main() {
 
 	if err := app.Execute(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "错误: %v\n", err)
-		logger.Debug("命令执行失败: %v", err)
 		os.Exit(1)
 	}
 }
@@ -207,6 +215,18 @@ func resolvePaths() (configPath string, dataRoot string, isNew bool) {
 	}
 
 	return configPath, dataRoot, true
+}
+
+// parseGlobalVerbose checks os.Args for --verbose / -V and removes them.
+// Returns true if verbose mode is enabled.
+func parseGlobalVerbose() bool {
+	for i, arg := range os.Args {
+		if arg == "--verbose" || arg == "-V" {
+			os.Args = append(os.Args[:i], os.Args[i+1:]...)
+			return true
+		}
+	}
+	return false
 }
 
 // firstTimeSetup runs the first-time setup wizard.

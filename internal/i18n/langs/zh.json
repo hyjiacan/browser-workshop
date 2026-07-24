@@ -4,6 +4,7 @@
   "root.commands": "可用命令:",
   "root.flags": "选项:",
   "root.flag_help": "显示帮助",
+  "root.flag_verbose": "输出详细调试信息",
   "root.flag_version": "显示版本",
   "root.help_line1": "使用 '%s <命令> --help' 查看命令详情。",
   "root.help_line2": "使用 '%s help <主题>' 查看详细帮助。",
