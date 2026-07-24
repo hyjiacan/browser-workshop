@@ -117,7 +117,11 @@ Use the `bws pf path` command to view the actual path of a Profile.
 ### View Default Profile Path
 
 ```bash
-bws pf path chrome@120
+# View default browser profile path
+bws pf path
+
+# View a specific browser's profile path
+bws pf path chrome
 ```
 
 ### View Named Profile Path
@@ -227,7 +231,7 @@ An orphaned Profile refers to:
 |------|------|
 | `bws pf list` | List all Profiles |
 | `bws pf list <browser>` | List Profiles for a specified browser |
-| `bws pf path <browser@version>` | View default Profile path |
+| `bws pf path [browser]` | View default Profile path |
 | `bws pf path <browser> <name>` | View named Profile path |
 | `bws pf reset <browser@version>` | Reset default Profile |
 | `bws pf reset <browser@version> <name>` | Reset named Profile |

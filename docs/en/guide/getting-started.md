@@ -40,21 +40,21 @@ bws ls chrome@79
 bws ls --no-system
 ```
 
-## 2. Import from Local Directory
+## 2. Install from Local Directory
 
-If you already have some browser installers or portable directories, you can use the `import` command to batch import them:
+If you already have some browser installers or portable directories, you can use the `install -d` command to install from local:
 
 ```bash
-# Automatically identify all browser versions in the directory
-bws imp /path/to/browsers
+# Automatically identify and install from a directory
+bws i -d /path/to/browser-dir
 
-# Force re-import of already installed versions
-bws imp /path/to/browsers -f
+# Install from a directory and specify the version
+bws i -d /path/to/browser-dir chrome@120
 ```
 
-The import process will display progress in real time, and unrecognizable files will be prompted immediately.
+The installation process will display progress in real time, and unrecognizable files can be manually specified with a version identifier.
 
-> **Tip**: Supported file formats include zip, 7z, tar.gz, tar.bz2, tar.xz, .exe, and more. Filenames are automatically recognized. For detailed rules, please refer to the [Local Import](./import.md) chapter.
+> **Tip**: Supported file formats include zip, 7z, tar.gz, tar.bz2, tar.xz, .exe, and more. Filenames are automatically recognized. For detailed rules, please refer to the [Local Installation](./import.md) chapter.
 
 ## 3. Remote Download and Install
 

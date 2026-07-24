@@ -141,11 +141,11 @@ bws r chrome@120 --native
 
 ## 后台运行
 
-使用 `-d` 或 `--detach` 参数让浏览器在后台运行，bws 命令立即返回，不等待浏览器进程结束。
+使用 `-d` 或 `--detached` 参数让浏览器在后台运行，bws 命令立即返回，不等待浏览器进程结束。
 
 ```bash
 bws r chrome@120 -d
-bws r chrome@120 --detach
+bws r chrome@120 --detached
 ```
 
 ### 使用场景
@@ -245,8 +245,8 @@ bws r firefox -- --safe-mode
 | `--incognito` | `-i` | 隐身/无痕模式 |
 | `--new-window` | `-w` | 新窗口打开 |
 | `--profile <name>` | `-p` | 指定命名 Profile |
-| `--native` | - | 原生模式（使用系统 Profile） |
-| `--detach` | `-d` | 后台运行（不等待进程） |
+| `--native` | `-n` | 原生模式（使用系统 Profile） |
+| `--detached` | `-d` | 后台运行（不等待进程） |
 | `--dry-run` | - | 试运行（不实际启动） |
 | `--` | - | 传递浏览器原生参数 |
 

@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Browser Workshop
   text: ''
-  tagline: 多版本浏览器管理工具，支持本地导入、远程下载、版本切换、隔离运行。
+  tagline: 多版本浏览器管理工具，支持本地安装、远程下载、版本切换、隔离运行。
   image:
     src: /logo.png
     alt: Browser Workshop logo
@@ -21,8 +21,8 @@ features:
     title: 多版本管理
     details: 同时安装和管理多个浏览器版本，支持版本前缀快速筛选。
   - icon: 📥
-    title: 本地导入
-    details: 从目录或压缩包自动识别并导入浏览器版本，支持 zip、7z、tar.gz 等多种格式。
+    title: 本地安装
+    details: 从目录或压缩包自动识别并安装浏览器版本，支持 zip、7z、tar.gz 等多种格式。
   - icon: 🌐
     title: 远程下载
     details: 从官方源（Chrome Omaha 协议）下载指定版本的浏览器。

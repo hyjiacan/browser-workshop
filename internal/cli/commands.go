@@ -21,7 +21,6 @@ func RegisterCommands(app *App) {
 	app.AddCommand(NewInfoCommand())
 	app.AddCommand(NewRunCommand())
 	app.AddCommand(NewInstallCommand())
-	app.AddCommand(NewImportCommand())
 	app.AddCommand(NewUninstallCommand())
 	app.AddCommand(NewUseCommand())
 	// list-remote 已合并到 ls --remote，不再单独注册
@@ -729,12 +728,7 @@ func runInstall(ctx *Context, args []string) error {
 	defer os.RemoveAll(tempDir)
 
 	// Determine filename from URL
-	fileName := fmt.Sprintf("%s-%s-package", spec.Browser, versionInfo.Version)
-	if u, err := url.Parse(versionInfo.DownloadURL); err == nil {
-		if base := filepath.Base(u.Path); base != "" && base != "/" && base != "\\" && base != "." {
-			fileName = base
-		}
-	}
+	fileName := getDownloadFilename(spec.Browser, versionInfo.Version, versionInfo.DownloadURL, versionInfo.Platform)
 	downloadDest := filepath.Join(tempDir, fileName)
 
 	var downloadedPath string
@@ -760,100 +754,6 @@ func runInstall(ctx *Context, args []string) error {
 	}
 
 	ctx.Printf("✓ %s@%s 安装成功\n", record.Browser, record.Version)
-	return nil
-}
-
-// --- import command ---
-
-func NewImportCommand() *Command {
-	return &Command{
-		Name:        "import",
-		Aliases:     []string{"imp"},
-		Description: "从目录导入浏览器版本（自动检测）",
-		Usage:       "bws imp <目录> [选项]",
-		Examples: []string{
-			"imp /path/to/browsers",
-			"imp /path/to/browsers -f",
-		},
-		Flags: []*Flag{
-			{Name: "force", Short: "f", Usage: "已安装时强制重新安装", HasValue: false, Default: "false"},
-		},
-		Run: runImport,
-	}
-}
-
-func runImport(ctx *Context, args []string) error {
-	flagVals, positional, err := ParseFlags(args, []*Flag{
-		{Name: "force", Short: "f", Usage: "强制重新安装", HasValue: false, Default: "false"},
-	})
-	if err != nil {
-		return err
-	}
-
-	if len(positional) == 0 {
-		return fmt.Errorf("请指定要导入的目录，例如 'bws imp /path/to/browsers'")
-	}
-
-	dir := positional[0]
-	force := flagVals["force"] == "true"
-
-	// Check that directory exists
-	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		return fmt.Errorf("目录不存在: %s", dir)
-	}
-
-	// Check disk space
-	dataDir := "."
-	if ctx.Config != nil {
-		dataDir = ctx.Config.GetDataDir()
-	}
-	if err := checkDiskSpace(ctx, dataDir); err != nil {
-		return err
-	}
-
-	ctx.Printf("正在扫描 %s...\n", dir)
-
-	lastMsg := ""
-	summary, err := ctx.Install.ImportFromDir(dir, force, func(current int, total int, message string) {
-		// Stream output: print each new message on its own line
-		if message != lastMsg {
-			fmt.Fprintf(ctx.Stdout, "  %s\n", message)
-			lastMsg = message
-		}
-	})
-	if err != nil {
-		return err
-	}
-
-	ctx.Printf("\n导入完成：\n")
-	ctx.Printf("  总计:    %d\n", summary.Total)
-	ctx.Printf("  成功:    %d\n", summary.Success)
-	ctx.Printf("  跳过:    %d\n", summary.Skipped)
-	if summary.SkippedAlreadyInstalled > 0 {
-		ctx.Printf("    - 已安装: %d\n", summary.SkippedAlreadyInstalled)
-	}
-	if summary.SkippedIncompatible > 0 {
-		ctx.Printf("    - 不兼容: %d\n", summary.SkippedIncompatible)
-	}
-	ctx.Printf("  失败:    %d\n", summary.Failed)
-	if summary.FailedUnrecognized > 0 {
-		ctx.Printf("    - 无法识别: %d\n", summary.FailedUnrecognized)
-	}
-
-	if len(summary.Errors) > 0 {
-		ctx.Printf("\n失败列表：\n")
-		for _, e := range summary.Errors {
-			name := e.Path
-			if e.Browser != "" && e.Version != "" {
-				name = fmt.Sprintf("%s@%s", e.Browser, e.Version)
-			}
-			ctx.Printf("  ✗ %s: %s\n", name, e.Error)
-		}
-	}
-
-	if summary.Failed > 0 {
-		return fmt.Errorf("%d 个导入失败", summary.Failed)
-	}
 	return nil
 }
 
@@ -1452,12 +1352,7 @@ func runDownload(ctx *Context, args []string) error {
 	}
 
 	// Determine filename from URL
-	fileName := fmt.Sprintf("%s-%s-package", spec.Browser, versionInfo.Version)
-	if u, err := url.Parse(versionInfo.DownloadURL); err == nil {
-		if base := filepath.Base(u.Path); base != "" && base != "/" && base != "\\" && base != "." {
-			fileName = base
-		}
-	}
+	fileName := getDownloadFilename(spec.Browser, versionInfo.Version, versionInfo.DownloadURL, versionInfo.Platform)
 	destPath := filepath.Join(outputDir, fileName)
 
 	ctx.Printf("正在下载 %s@%s 到 %s...\n", spec.Browser, versionInfo.Version, outputDir)
@@ -1527,6 +1422,13 @@ func runConfigShow(ctx *Context, args []string) error {
 		ctx.Printf("  代理:           %s\n", proxy)
 	}
 
+	lang := ctx.Config.GetLanguage()
+	if lang == "" {
+		ctx.Printf("  界面语言:       (自动检测)\n")
+	} else {
+		ctx.Printf("  界面语言:       %s\n", lang)
+	}
+
 	aliases := ctx.Config.ListAliases()
 	if len(aliases) > 0 {
 		ctx.Printf("\n  别名:\n")
@@ -1535,6 +1437,79 @@ func runConfigShow(ctx *Context, args []string) error {
 		}
 	}
 	return nil
+}
+
+// configKeyInfo describes a configuration key for display.
+type configKeyInfo struct {
+	Keys        []string
+	Description string
+	Example     string
+}
+
+// readableConfigKeys returns all readable config keys with descriptions.
+func readableConfigKeys() []configKeyInfo {
+	return []configKeyInfo{
+		{[]string{"default-browser", "default", "browser"}, "默认浏览器", "chrome"},
+		{[]string{"default-channel", "channel"}, "默认渠道", "stable"},
+		{[]string{"log-level", "log"}, "日志级别", "debug / info / warn / error"},
+		{[]string{"data-dir", "datadir", "data"}, "数据目录", "/path/to/data"},
+		{[]string{"repo-path", "repo"}, "仓库路径", "/path/to/repo"},
+		{[]string{"source", "remote-source", "remote"}, "离线源 URL", "http://192.168.1.1:8080"},
+		{[]string{"source-serve", "serve-source"}, "Serve 源开关", "true / false"},
+		{[]string{"source-omaha", "omaha-source"}, "Omaha 源开关", "true / false"},
+		{[]string{"source-firefox-ftp", "firefox-ftp"}, "Firefox FTP 源开关", "true / false"},
+		{[]string{"disk-threshold", "disk-space-threshold", "space-threshold"}, "磁盘空间阈值 (GB)", "5"},
+		{[]string{"proxy"}, "代理服务器", "http://proxy:8080 或 none"},
+		{[]string{"language", "lang"}, "界面语言", "zh / en"},
+		{[]string{"path", "config-path", "config"}, "配置文件路径", "(只读)"},
+	}
+}
+
+// writableConfigKeys returns all writable config keys with descriptions.
+func writableConfigKeys() []configKeyInfo {
+	return []configKeyInfo{
+		{[]string{"default-browser", "default", "browser"}, "默认浏览器", "chrome"},
+		{[]string{"default-channel", "channel"}, "默认渠道", "stable / beta / dev / canary"},
+		{[]string{"log-level", "log"}, "日志级别", "debug / info / warn / error"},
+		{[]string{"data-dir", "datadir", "data"}, "数据目录", "/path/to/data"},
+		{[]string{"repo-path", "repo"}, "仓库路径", "/path/to/repo"},
+		{[]string{"source", "remote-source", "remote"}, "离线源 URL", "http://192.168.1.1:8080"},
+		{[]string{"source-serve", "serve-source"}, "Serve 源开关", "true / false"},
+		{[]string{"source-omaha", "omaha-source"}, "Omaha 源开关", "true / false"},
+		{[]string{"source-firefox-ftp", "firefox-ftp"}, "Firefox FTP 源开关", "true / false"},
+		{[]string{"disk-threshold", "disk-space-threshold", "space-threshold"}, "磁盘空间阈值 (GB)", "5"},
+		{[]string{"proxy"}, "代理服务器", "http://proxy:8080 或 none 清除"},
+		{[]string{"language", "lang"}, "界面语言", "zh / en"},
+	}
+}
+
+func printConfigKeyList(w io.Writer, keys []configKeyInfo, forSet bool) {
+	fmt.Fprintln(w, "可用配置项:")
+	fmt.Fprintln(w)
+	maxLen := 0
+	for _, k := range keys {
+		name := k.Keys[0]
+		if len(name) > maxLen {
+			maxLen = len(name)
+		}
+	}
+	for _, k := range keys {
+		primary := k.Keys[0]
+		aliases := ""
+		if len(k.Keys) > 1 {
+			aliases = fmt.Sprintf(" (别名: %s)", strings.Join(k.Keys[1:], ", "))
+		}
+		fmt.Fprintf(w, "  %-*s  %s%s\n", maxLen, primary, k.Description, aliases)
+		if forSet && k.Example != "" && k.Example != "(只读)" {
+			fmt.Fprintf(w, "  %s  示例: %s\n", strings.Repeat(" ", maxLen), k.Example)
+		}
+	}
+	fmt.Fprintln(w)
+	if forSet {
+		fmt.Fprintln(w, "用法: bws cfg set <键名> <值>")
+	} else {
+		fmt.Fprintln(w, "用法: bws cfg get <键名>")
+	}
 }
 
 func NewConfigGetCommand() *Command {
@@ -1553,7 +1528,8 @@ func NewConfigGetCommand() *Command {
 
 func runConfigGet(ctx *Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("请指定配置键名。使用 'bws cfg show' 查看所有配置项。")
+		printConfigKeyList(ctx.Stdout, readableConfigKeys(), false)
+		return nil
 	}
 
 	key := strings.ToLower(args[0])
@@ -1590,6 +1566,13 @@ func runConfigGet(ctx *Context, args []string) error {
 		} else {
 			ctx.Println(p)
 		}
+	case "language", "lang":
+		lang := ctx.Config.GetLanguage()
+		if lang == "" {
+			ctx.Println("(自动检测)")
+		} else {
+			ctx.Println(lang)
+		}
 	case "path", "config-path", "config":
 		ctx.Println(ctx.Config.ConfigPath())
 	default:
@@ -1598,7 +1581,7 @@ func runConfigGet(ctx *Context, args []string) error {
 			ctx.Println(alias)
 			return nil
 		}
-		return fmt.Errorf("未知的配置键: %s。使用 'bws cfg show' 查看可用配置项。", args[0])
+		return fmt.Errorf("未知的配置键: %s。使用 'bws cfg get' 查看可用配置项。", args[0])
 	}
 	return nil
 }
@@ -1619,8 +1602,13 @@ func NewConfigSetCommand() *Command {
 }
 
 func runConfigSet(ctx *Context, args []string) error {
+	if len(args) == 0 {
+		printConfigKeyList(ctx.Stdout, writableConfigKeys(), true)
+		return nil
+	}
 	if len(args) < 2 {
-		return fmt.Errorf("用法: bws cfg set <键名> <值>。使用 'bws cfg show' 查看可用配置项。")
+		printConfigKeyList(ctx.Stdout, writableConfigKeys(), true)
+		return fmt.Errorf("请提供配置值")
 	}
 
 	key := strings.ToLower(args[0])
@@ -1637,9 +1625,9 @@ func runConfigSet(ctx *Context, args []string) error {
 		ctx.Printf("默认浏览器已设置为: %s\n", value)
 
 	case "default-channel", "channel":
-		validChannels := map[string]bool{"stable": true, "beta": true, "dev": true, "canary": true}
+		validChannels := map[string]bool{"stable": true, "beta": true, "dev": true, "canary": true, "esr": true}
 		if !validChannels[strings.ToLower(value)] {
-			return fmt.Errorf("无效的渠道: %s（必须是 stable、beta、dev 或 canary）", value)
+			return fmt.Errorf("无效的渠道: %s（必须是 stable、beta、dev、canary 或 esr）", value)
 		}
 		if err := ctx.Config.SetDefaultChannel(value); err != nil {
 			return fmt.Errorf("设置默认渠道失败: %w", err)
@@ -1738,12 +1726,17 @@ func runConfigSet(ctx *Context, args []string) error {
 			ctx.Printf("代理已设置为: %s\n", value)
 		}
 
-	default:
-		// Treat as alias
-		if err := ctx.Config.AddAlias(key, value); err != nil {
-			return fmt.Errorf("设置别名失败: %w", err)
+	case "language", "lang":
+		lang := strings.ToLower(value)
+		if lang != "zh" && lang != "en" {
+			return fmt.Errorf("不支持的语言: %s（支持: zh、en）", value)
 		}
-		ctx.Printf("别名已设置: %s -> %s\n", key, value)
+		ctx.Config.SetLanguage(lang)
+		ctx.Printf("界面语言已设置为: %s\n", lang)
+		ctx.Println("注意: 重启 bws 后生效。")
+
+	default:
+		return fmt.Errorf("未知的配置键: %s。使用 'bws cfg set' 查看可用配置项。", args[0])
 	}
 
 	if ctx.Logger != nil {
@@ -2528,4 +2521,44 @@ func checkDiskSpace(ctx *Context, path string) error {
 		}
 	}
 	return nil
+}
+
+// getDownloadFilename generates a proper filename for a download.
+// It first tries to extract the filename from the URL path.
+// If the URL path doesn't contain a meaningful filename (e.g., query-based URLs),
+// it generates a filename based on browser, version, and platform.
+func getDownloadFilename(browser, version, downloadURL, platform string) string {
+	// Try to extract filename from URL path first
+	if u, err := url.Parse(downloadURL); err == nil {
+		if base := filepath.Base(u.Path); base != "" && base != "/" && base != "\\" && base != "." {
+			return base
+		}
+	}
+
+	// Fallback: generate filename with proper extension based on platform
+	base := fmt.Sprintf("%s-%s", browser, version)
+
+	switch strings.ToLower(browser) {
+	case "firefox":
+		switch strings.ToLower(platform) {
+		case "windows":
+			return base + ".exe"
+		case "darwin", "macos", "mac":
+			return base + ".dmg"
+		case "linux":
+			return base + ".tar.bz2"
+		}
+	case "chrome", "chromium":
+		switch strings.ToLower(platform) {
+		case "windows":
+			return base + ".exe"
+		case "darwin", "macos", "mac":
+			return base + ".dmg"
+		case "linux":
+			return base + ".zip"
+		}
+	}
+
+	// Generic fallback with .zip extension (most common archive format)
+	return base + ".zip"
 }

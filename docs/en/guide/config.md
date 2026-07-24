@@ -29,6 +29,9 @@ Configuration information:
 
   Disk space threshold:   5 GB (prompts when below this value)
 
+  Proxy:           (not set, direct)
+  Language:       zh
+
   Aliases:
     stable -> chrome@latest
     beta -> chrome@beta
@@ -50,6 +53,12 @@ Example output:
 chrome
 ```
 
+Without specifying a key name, all readable configuration items and their aliases will be listed:
+
+```bash
+bws cfg get
+```
+
 ## Set a Configuration Item
 
 Use the `bws cfg set` command to set the value of a configuration item.
@@ -63,7 +72,33 @@ bws cfg set source http://server:8080
 
 A confirmation message will be displayed after successful setting.
 
+Without specifying a key name or value, all writable configuration items, aliases, and example values will be listed:
+
+```bash
+bws cfg set
+```
+
 ## Configuration Item Descriptions
+
+Each configuration item supports multiple equivalent key names that can be used interchangeably:
+
+| Primary key | Aliases |
+|-------------|---------|
+| `default-browser` | `default`, `browser` |
+| `default-channel` | `channel` |
+| `log-level` | `log` |
+| `data-dir` | `datadir`, `data` |
+| `repo-path` | `repo` |
+| `source` | `remote-source`, `remote` |
+| `source-serve` | `serve-source` |
+| `source-omaha` | `omaha-source` |
+| `source-firefox-ftp` | `firefox-ftp` |
+| `disk-threshold` | `disk-space-threshold`, `space-threshold` |
+| `proxy` | — |
+| `language` | `lang` |
+| `path` | `config-path`, `config` |
+
+For example, `bws cfg get log` is equivalent to `bws cfg get log-level`, and `bws cfg set browser firefox` is equivalent to `bws cfg set default-browser firefox`.
 
 ### default-browser
 
@@ -112,7 +147,7 @@ Console log level.
 | Attribute | Value |
 |------|-----|
 | Default value | `info` |
-| Optional values | `trace`, `debug`, `info`, `warn`, `error`, `fatal` |
+| Optional values | `debug`, `info`, `warn`, `warning`, `error` |
 | Description | Controls the verbosity of console output |
 
 Example:
@@ -215,18 +250,18 @@ bws cfg set source-omaha true
 
 ### source-firefox-ftp
 
-Firefox FTP data source switch.
+Firefox data source switch (reserved, not currently used).
 
 | Attribute | Value |
 |------|-----|
 | Default value | `true` |
 | Optional values | `true`, `false` |
-| Description | Whether to enable the Firefox FTP release data source |
+| Description | Whether to enable the Firefox data source (reserved; Firefox currently uses the Mozilla Product Details API instead of FTP) |
 
 Example:
 
 ```bash
-# Disable Firefox FTP source
+# Disable Firefox data source
 bws cfg set source-firefox-ftp false
 ```
 
@@ -247,108 +282,6 @@ Example:
 bws cfg set source-serve false
 ```
 
-### download.max-concurrency
-
-Maximum download concurrency.
-
-| Attribute | Value |
-|------|-----|
-| Default value | `3` |
-| Optional values | Positive integer |
-| Description | The maximum number of files to download simultaneously; larger values mean faster downloads but more bandwidth and system resource usage |
-
-Example:
-
-```bash
-# Set to 5 concurrent downloads
-bws cfg set download.max-concurrency 5
-```
-
-### download.retry-count
-
-Download retry count.
-
-| Attribute | Value |
-|------|-----|
-| Default value | `3` |
-| Optional values | Non-negative integer |
-| Description | Maximum number of retries after a download failure |
-
-Example:
-
-```bash
-# Set to 5 retries
-bws cfg set download.retry-count 5
-```
-
-### download.retry-delay
-
-Download retry interval.
-
-| Attribute | Value |
-|------|-----|
-| Default value | `2s` |
-| Optional values | Go duration format string (e.g., `1s`, `500ms`, `1m`) |
-| Description | Waiting time between each download retry |
-
-Example:
-
-```bash
-# Set to 5 second interval
-bws cfg set download.retry-delay 5s
-```
-
-### download.timeout
-
-Download timeout.
-
-| Attribute | Value |
-|------|-----|
-| Default value | `30m` |
-| Optional values | Go duration format string (e.g., `10m`, `1h`) |
-| Description | Maximum timeout for a single download task; after timeout, the download will be cancelled and retried or an error will be reported |
-
-Example:
-
-```bash
-# Set to 1 hour timeout
-bws cfg set download.timeout 1h
-```
-
-### cache.manifest-ttl
-
-Version manifest cache validity period.
-
-| Attribute | Value |
-|------|-----|
-| Default value | `24h` |
-| Optional values | Go duration format string (e.g., `12h`, `48h`) |
-| Description | The local cache validity duration for version manifests (version lists) obtained from remote sources; after expiration, they will be re-fetched |
-
-Example:
-
-```bash
-# Set to 12 hours
-bws cfg set cache.manifest-ttl 12h
-```
-
-### cache.download-ttl
-
-Downloaded file cache validity period.
-
-| Attribute | Value |
-|------|-----|
-| Default value | `168h` (7 days) |
-| Optional values | Go duration format string (e.g., `72h`, `336h`) |
-| Description | The retention duration for downloaded installation packages in the local cache; after expiration, they will be automatically cleaned up |
-
-Example:
-
-```bash
-# Set to 3 days (72 hours)
-bws cfg set cache.download-ttl 72h
-```
-
 ### disk-threshold
 
 Disk space alert threshold.
@@ -365,6 +298,34 @@ Example:
 # Set to 10 GB
 bws cfg set disk-threshold 10
 ```
+
+### language / lang
+
+Interface language setting.
+
+| Attribute | Value |
+|------|-----|
+| Default value | Auto-detected (reads `LANG`/`LANGUAGE` environment variables first, defaults to Chinese if not set) |
+| Optional values | `zh` (Chinese), `en` (English) |
+| Description | Sets the interface display language for bws, supporting Chinese and English |
+
+Example:
+
+```bash
+# Set to English
+bws cfg set language en
+
+# Use short alias
+bws cfg set lang en
+
+# Set to Chinese
+bws cfg set language zh
+
+# View the current language
+bws cfg get language
+```
+
+> **Note**: The language configuration takes effect after restart. External translation file overrides are supported: create a JSON file at `<dataDir>/i18n/<lang>.json` to override built-in translations, allowing custom terminology.
 
 ## Data Sources and Priority
 

@@ -311,6 +311,31 @@ func create7z(archivePath, sourceDir string) error {
 	return cmd.Run()
 }
 
+// Has7z checks if the 7z command is available on the system.
+func Has7z() bool {
+	return find7z() != ""
+}
+
+// find7z locates the 7z executable.
+func find7z() string {
+	names := []string{"7z", "7za", "7zr"}
+	if runtime.GOOS == "windows" {
+		names = []string{"7z.exe", "7za.exe", "7zr.exe"}
+	}
+	for _, name := range names {
+		path, err := exec.LookPath(name)
+		if err == nil {
+			return path
+		}
+	}
+	return ""
+}
+
+// extractZipNative extracts a zip archive using the native Go zip implementation.
+func extractZipNative(zipPath, destDir string) error {
+	return extractZip(zipPath, destDir)
+}
+
 func TestDeriveExtractDir(t *testing.T) {
 	tests := []struct {
 		path     string
@@ -346,9 +371,9 @@ func TestIsSupportedFormat(t *testing.T) {
 		{"test.zip", true},
 		{"test.7z", true},
 		{"test.tar.gz", true},
-		{"test.rar", true},
+		{"test.rar", false},
 		{"test.exe", true},
-		{"test.msi", true},
+		{"test.msi", false},
 		{"test.txt", false},
 		{"test.doc", false},
 		{"test.ZIP", true}, // case insensitive

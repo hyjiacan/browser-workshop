@@ -93,6 +93,7 @@ func hasSupportedFormat(path string, formats []string) bool {
 }
 
 // detectFormat returns the archive format extension from a file path.
+// It first checks the file extension, then falls back to magic byte detection.
 func detectFormat(path string) string {
 	lower := strings.ToLower(path)
 	for _, ext := range supportedFormats {
@@ -103,6 +104,54 @@ func detectFormat(path string) string {
 	ext := filepath.Ext(lower)
 	if ext != "" {
 		return ext
+	}
+
+	// Fallback to magic byte detection
+	return detectFormatByMagic(path)
+}
+
+// magicBytes maps file format signatures to their extensions.
+var magicBytes = []struct {
+	magic []byte
+	ext   string
+}{
+	{[]byte("PK\x03\x04"), ".zip"},
+	{[]byte("7z\xBC\xAF\x27\x1C"), ".7z"},
+	{[]byte{0x1F, 0x8B, 0x08}, ".gz"},
+	{[]byte("BZh"), ".bz2"},
+	{[]byte{0xFD, '7', 'z', 'X', 'Z', 0x00}, ".xz"},
+	{[]byte{0x28, 0xB5, 0x2F, 0xFD}, ".zst"},
+	{[]byte("MSCF"), ".cab"},
+	{[]byte("MZ"), ".exe"},
+}
+
+// detectFormatByMagic reads the file header to detect the archive format.
+func detectFormatByMagic(path string) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	header := make([]byte, 16)
+	n, err := f.Read(header)
+	if err != nil || n < 4 {
+		return ""
+	}
+
+	for _, m := range magicBytes {
+		if n >= len(m.magic) {
+			match := true
+			for i, b := range m.magic {
+				if header[i] != b {
+					match = false
+					break
+				}
+			}
+			if match {
+				return m.ext
+			}
+		}
 	}
 	return ""
 }

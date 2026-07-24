@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Browser Workshop
   text: ''
-  tagline: Multi-version browser management tool, supporting local import, remote download, version switching, and isolated execution.
+  tagline: Multi-version browser management tool, supporting local installation, remote download, version switching, and isolated execution.
   image:
     src: /logo.png
     alt: Browser Workshop logo
@@ -21,8 +21,8 @@ features:
     title: Multi-version Management
     details: Install and manage multiple browser versions simultaneously, with quick filtering by version prefix.
   - icon: 📥
-    title: Local Import
-    details: Automatically identify and import browser versions from directories or archives. Supports zip, 7z, tar.gz, tar.bz2, tar.xz, and more. Intelligent filename recognition eliminates the need to manually specify version information.
+    title: Local Installation
+    details: Automatically identify and install browser versions from directories or archives. Supports zip, 7z, tar.gz, tar.bz2, tar.xz, and more. Intelligent filename recognition eliminates the need to manually specify version information.
   - icon: 🌐
     title: Remote Download
     details: Download specified browser versions from official sources (Chrome Omaha protocol).

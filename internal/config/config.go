@@ -57,6 +57,10 @@ type Config struct {
 	// Empty means no proxy (direct connection).
 	// Can be overridden per-launch with --proxy flag.
 	Proxy string `json:"proxy"`
+
+	// Language is the UI language. Supported: "zh" (default), "en".
+	// Empty means auto-detect from environment.
+	Language string `json:"language"`
 }
 
 // SourceConfig describes a remote data source for a browser.
@@ -305,6 +309,16 @@ func (c *Config) GetProxy() string {
 // Pass empty string to clear the proxy.
 func (c *Config) SetProxy(proxy string) {
 	c.Proxy = proxy
+}
+
+// GetLanguage returns the configured UI language.
+func (c *Config) GetLanguage() string {
+	return c.Language
+}
+
+// SetLanguage sets the UI language. Supported: "zh", "en".
+func (c *Config) SetLanguage(lang string) {
+	c.Language = lang
 }
 
 // GetSources returns enabled source configs for the given browser, sorted by priority.

@@ -29,6 +29,9 @@ bws cfg show
 
   磁盘空间阈值:   5 GB (低于此值会提示)
 
+  代理:           (未设置，直连)
+  界面语言:       zh
+
   别名:
     stable -> chrome@latest
     beta -> chrome@beta
@@ -50,6 +53,12 @@ bws cfg get source
 chrome
 ```
 
+不指定键名时，会列出所有可读配置项及其别名：
+
+```bash
+bws cfg get
+```
+
 ## 设置配置项
 
 使用 `bws cfg set` 命令设置配置项的值。
@@ -63,7 +72,33 @@ bws cfg set source http://server:8080
 
 设置成功后会显示确认信息。
 
+不指定键名或值时，会列出所有可写配置项、别名及示例值：
+
+```bash
+bws cfg set
+```
+
 ## 配置项说明
+
+每个配置项支持多个等效键名，使用时可以互相替换：
+
+| 主键名 | 可用别名 |
+|--------|----------|
+| `default-browser` | `default`, `browser` |
+| `default-channel` | `channel` |
+| `log-level` | `log` |
+| `data-dir` | `datadir`, `data` |
+| `repo-path` | `repo` |
+| `source` | `remote-source`, `remote` |
+| `source-serve` | `serve-source` |
+| `source-omaha` | `omaha-source` |
+| `source-firefox-ftp` | `firefox-ftp` |
+| `disk-threshold` | `disk-space-threshold`, `space-threshold` |
+| `proxy` | — |
+| `language` | `lang` |
+| `path` | `config-path`, `config` |
+
+例如 `bws cfg get log` 等同于 `bws cfg get log-level`，`bws cfg set browser firefox` 等同于 `bws cfg set default-browser firefox`。
 
 ### default-browser
 
@@ -112,7 +147,7 @@ bws i chrome@latest
 | 属性 | 值 |
 |------|-----|
 | 默认值 | `info` |
-| 可选值 | `trace`, `debug`, `info`, `warn`, `error`, `fatal` |
+| 可选值 | `debug`, `info`, `warn`, `warning`, `error` |
 | 说明 | 控制控制台输出的日志详细程度 |
 
 示例：
@@ -215,18 +250,18 @@ bws cfg set source-omaha true
 
 ### source-firefox-ftp
 
-Firefox FTP 数据源开关。
+Firefox 数据源开关（已保留，当前未使用）。
 
 | 属性 | 值 |
 |------|-----|
 | 默认值 | `true` |
 | 可选值 | `true`, `false` |
-| 说明 | 是否启用 Firefox FTP 发布数据源 |
+| 说明 | 是否启用 Firefox 数据源（已保留，当前 Firefox 已改用 Mozilla Product Details API，不再使用 FTP） |
 
 示例：
 
 ```bash
-# 禁用 Firefox FTP 源
+# 禁用 Firefox 数据源
 bws cfg set source-firefox-ftp false
 ```
 
@@ -247,108 +282,6 @@ Serve HTTP 数据源开关。
 bws cfg set source-serve false
 ```
 
-### download.max-concurrency
-
-下载最大并发数。
-
-| 属性 | 值 |
-|------|-----|
-| 默认值 | `3` |
-| 可选值 | 正整数 |
-| 说明 | 同时下载文件的最大数量，值越大下载越快，但占用带宽和系统资源越多 |
-
-示例：
-
-```bash
-# 设置为 5 个并发
-bws cfg set download.max-concurrency 5
-```
-
-### download.retry-count
-
-下载重试次数。
-
-| 属性 | 值 |
-|------|-----|
-| 默认值 | `3` |
-| 可选值 | 非负整数 |
-| 说明 | 下载失败后的最大重试次数 |
-
-示例：
-
-```bash
-# 设置为 5 次重试
-bws cfg set download.retry-count 5
-```
-
-### download.retry-delay
-
-下载重试间隔。
-
-| 属性 | 值 |
-|------|-----|
-| 默认值 | `2s` |
-| 可选值 | Go duration 格式字符串（如 `1s`、`500ms`、`1m`） |
-| 说明 | 每次下载重试之间的等待时间 |
-
-示例：
-
-```bash
-# 设置为 5 秒间隔
-bws cfg set download.retry-delay 5s
-```
-
-### download.timeout
-
-下载超时时间。
-
-| 属性 | 值 |
-|------|-----|
-| 默认值 | `30m` |
-| 可选值 | Go duration 格式字符串（如 `10m`、`1h`） |
-| 说明 | 单个下载任务的最大超时时间，超时后将取消下载并重试或报错 |
-
-示例：
-
-```bash
-# 设置为 1 小时超时
-bws cfg set download.timeout 1h
-```
-
-### cache.manifest-ttl
-
-版本清单缓存有效期。
-
-| 属性 | 值 |
-|------|-----|
-| 默认值 | `24h` |
-| 可选值 | Go duration 格式字符串（如 `12h`、`48h`） |
-| 说明 | 从远程获取的版本清单（版本列表）在本地的缓存有效时长，过期后会重新拉取 |
-
-示例：
-
-```bash
-# 设置为 12 小时
-bws cfg set cache.manifest-ttl 12h
-```
-
-### cache.download-ttl
-
-已下载文件缓存有效期。
-
-| 属性 | 值 |
-|------|-----|
-| 默认值 | `168h`（7 天） |
-| 可选值 | Go duration 格式字符串（如 `72h`、`336h`） |
-| 说明 | 已下载的安装包在本地缓存中的保留时长，过期后会被自动清理 |
-
-示例：
-
-```bash
-# 设置为 3 天（72 小时）
-bws cfg set cache.download-ttl 72h
-```
-
 ### disk-threshold
 
 磁盘空间告警阈值。
@@ -365,6 +298,34 @@ bws cfg set cache.download-ttl 72h
 # 设置为 10 GB
 bws cfg set disk-threshold 10
 ```
+
+### language / lang
+
+界面语言设置。
+
+| 属性 | 值 |
+|------|-----|
+| 默认值 | 自动检测（优先读取 `LANG`/`LANGUAGE` 环境变量，未设置时默认为中文） |
+| 可选值 | `zh`（中文），`en`（English） |
+| 说明 | 设置 bws 的界面显示语言，支持中文和英文 |
+
+示例：
+
+```bash
+# 设置为英文
+bws cfg set language en
+
+# 使用简写别名
+bws cfg set lang en
+
+# 设置为中文
+bws cfg set language zh
+
+# 查看当前语言
+bws cfg get language
+```
+
+> **注意**：语言配置在重启后生效。支持外部翻译文件覆盖：在 `<dataDir>/i18n/<lang>.json` 中创建对应语言的 JSON 文件即可覆盖内置翻译，方便自定义术语。
 
 ## 数据源与优先级
 

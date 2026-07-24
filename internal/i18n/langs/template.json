@@ -1,0 +1,24 @@
+{
+  "root.description": "",
+  "root.usage": "",
+  "root.commands": "",
+  "root.flags": "",
+  "root.flag_help": "",
+  "root.flag_version": "",
+  "root.help_line1": "",
+  "root.help_line2": "",
+
+  "cmd.usage": "",
+  "cmd.examples": "",
+  "cmd.subcommands": "",
+  "cmd.flags": "",
+  "cmd.default": "",
+  "cmd.help_line": "",
+
+  "error.unknown_command": "",
+  "error.unknown_subcommand": "",
+  "error.typo_suggestion": "",
+  "error.unknown_option": "",
+
+  "confirm.prompt": ""
+}

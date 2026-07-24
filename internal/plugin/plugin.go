@@ -13,8 +13,11 @@ import (
 type Hook string
 
 const (
-	HookPreRun  Hook = "pre_run"
-	HookPostRun Hook = "post_run"
+	HookPreRun     Hook = "pre_run"
+	HookPostRun    Hook = "post_run"
+	HookPreInstall  Hook = "pre_install"
+	HookPostInstall Hook = "post_install"
+	HookOnExit     Hook = "on_exit"
 )
 
 // Plugin represents a discovered plugin on disk.

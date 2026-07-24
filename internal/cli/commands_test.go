@@ -104,6 +104,8 @@ func (m *mockConfig) SetRepoPath(path string) error {
 	m.repoPath = path
 	return nil
 }
+func (m *mockConfig) GetLanguage() string         { return "zh" }
+func (m *mockConfig) SetLanguage(lang string) error { return nil }
 
 type mockBrowsers struct {
 	list []BrowserDescriptor

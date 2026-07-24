@@ -141,11 +141,11 @@ Characteristics of native mode:
 
 ## Background Run
 
-Use the `-d` or `--detach` parameter to let the browser run in the background, the bws command returns immediately without waiting for the browser process to end.
+Use the `-d` or `--detached` parameter to let the browser run in the background, the bws command returns immediately without waiting for the browser process to end.
 
 ```bash
 bws r chrome@120 -d
-bws r chrome@120 --detach
+bws r chrome@120 --detached
 ```
 
 ### Usage Scenarios
@@ -245,8 +245,8 @@ The `>` marker indicates the currently selected version (the latest one).
 | `--incognito` | `-i` | Incognito/private mode |
 | `--new-window` | `-w` | Open in new window |
 | `--profile <name>` | `-p` | Specify named Profile |
-| `--native` | - | Native mode (use system Profile) |
-| `--detach` | `-d` | Run in background (do not wait for process) |
+| `--native` | `-n` | Native mode (use system Profile) |
+| `--detached` | `-d` | Run in background (do not wait for process) |
 | `--dry-run` | - | Dry run (do not actually start) |
 | `--` | - | Pass native browser parameters |
 

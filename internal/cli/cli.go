@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/bws/bws/internal/i18n"
 	"github.com/bws/bws/internal/plugin"
 )
 
@@ -54,11 +55,11 @@ type Context struct {
 // Confirm asks the user for confirmation and returns true if they agree.
 // It writes the prompt to Stderr and reads from Stdin.
 func (ctx *Context) Confirm(prompt string) bool {
-	fmt.Fprintf(ctx.Stderr, "%s [y/N]: ", prompt)
+	fmt.Fprint(ctx.Stderr, i18n.Tfmt("confirm.prompt", prompt))
 	var response string
 	fmt.Fscanln(ctx.Stdin, &response)
 	response = strings.ToLower(strings.TrimSpace(response))
-	return response == "y" || response == "yes"
+	return response == "y" || response == "yes" || response == "是"
 }
 
 // ServeProvider provides the HTTP serve functionality.
@@ -117,6 +118,7 @@ type PathsProvider interface {
 // PluginProvider manages plugins.
 type PluginProvider interface {
 	List() []plugin.ManifestEntry
+	GetManifestEntry(name string) (*plugin.ManifestEntry, error)
 	Install(entry plugin.ManifestEntry) error
 	Uninstall(name string) error
 	PluginsDir() string
@@ -168,6 +170,10 @@ type ConfigProvider interface {
 	// Proxy
 	GetProxy() string
 	SetProxy(proxy string) error
+
+	// Language
+	GetLanguage() string
+	SetLanguage(lang string) error
 
 	// File path
 	ConfigPath() string
@@ -356,7 +362,7 @@ func NewApp(name, version string, ctx *Context) *App {
 		Context: ctx,
 		RootCmd: &Command{
 			Name:        name,
-			Description: "Browser Manager - manage multiple browser versions",
+			Description: "浏览器版本管理工具",
 		},
 	}
 }
@@ -386,20 +392,36 @@ func (a *App) Execute(args []string) error {
 	}
 
 	// Find the command
-	cmd, remainingArgs := a.findCommand(args)
-	// If we ended up back at root with args remaining, the command was not found
-	if cmd == a.RootCmd && len(remainingArgs) > 0 && remainingArgs[0] == args[0] {
-		fmt.Fprintf(a.Context.Stderr, "unknown command: %s\n", args[0])
-		a.printRootHelp()
-		return fmt.Errorf("unknown command: %s", args[0])
+	cmd, remainingArgs, candidates, matched := findCommandWithTypo(a.RootCmd, args)
+
+	// Command not found at some level
+	if !matched {
+		if cmd == a.RootCmd {
+			// Case 1: Unknown top-level command
+			a.printRootHelp()
+			printTypoSuggestion(a.Context.Stderr, remainingArgs[0], candidates)
+			return fmt.Errorf("%s", i18n.Tfmt("error.unknown_command", remainingArgs[0]))
+		}
+		// Parent command matched but next arg didn't match any subcommand
+		if cmd.Run != nil {
+			// Check if remaining args contain --help/-h before passing to Run
+			if hasHelpFlag(remainingArgs) {
+				a.printCommandHelp(cmd)
+				return nil
+			}
+			// cmd has Run, remaining args are its arguments — pass them through
+			return cmd.Run(a.Context, remainingArgs)
+		}
+		// Case 2: Subcommand-only command (no Run), subcommand not found
+		a.printCommandHelp(cmd)
+		printTypoSuggestion(a.Context.Stderr, remainingArgs[0], candidates)
+		return fmt.Errorf("%s", i18n.Tfmt("error.unknown_subcommand", cmd.Name, remainingArgs[0]))
 	}
 
 	// Check for help flag on subcommand
-	for _, arg := range remainingArgs {
-		if arg == "--help" || arg == "-h" {
-			a.printCommandHelp(cmd)
-			return nil
-		}
+	if hasHelpFlag(remainingArgs) {
+		a.printCommandHelp(cmd)
+		return nil
 	}
 
 	// Run the command
@@ -407,9 +429,28 @@ func (a *App) Execute(args []string) error {
 		return cmd.Run(a.Context, remainingArgs)
 	}
 
-	// No Run function, print help for this command
+	// Command has SubCommands but no Run, and there are remaining args
+	// → treat as unknown subcommand
+	if len(remainingArgs) > 0 && len(cmd.SubCommands) > 0 {
+		a.printCommandHelp(cmd)
+		subCandidates := collectCommandCandidates(cmd)
+		printTypoSuggestion(a.Context.Stderr, remainingArgs[0], subCandidates)
+		return fmt.Errorf("%s", i18n.Tfmt("error.unknown_subcommand", cmd.Name, remainingArgs[0]))
+	}
+
+	// No Run function, no remaining args → print help for this command
 	a.printCommandHelp(cmd)
 	return nil
+}
+
+// hasHelpFlag checks if any arg is a help flag.
+func hasHelpFlag(args []string) bool {
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			return true
+		}
+	}
+	return false
 }
 
 // findCommand finds the command matching the argument path.
@@ -440,8 +481,8 @@ func findCommandRecursive(cmd *Command, args []string) (*Command, []string) {
 func (a *App) printRootHelp() {
 	w := a.Context.Stdout
 	fmt.Fprintf(w, "%s - %s\n\n", a.Name, a.RootCmd.Description)
-	fmt.Fprintf(w, "Usage:\n  %s <command> [options]\n\n", a.Name)
-	fmt.Fprintf(w, "Available commands:\n")
+	fmt.Fprint(w, i18n.Tfmt("root.usage", a.Name)+"\n\n")
+	fmt.Fprintf(w, "%s\n", i18n.T("root.commands"))
 
 	// Find max name length for alignment
 	maxLen := 0
@@ -455,11 +496,11 @@ func (a *App) printRootHelp() {
 		fmt.Fprintf(w, "  %-*s  %s\n", maxLen, cmd.Name, cmd.Description)
 	}
 
-	fmt.Fprintf(w, "\nFlags:\n")
-	fmt.Fprintf(w, "  -h, --help     Show help\n")
-	fmt.Fprintf(w, "  -v, --version  Show version\n")
-	fmt.Fprintf(w, "\nUse '%s <command> --help' for more information about a command.\n", a.Name)
-	fmt.Fprintf(w, "Use '%s help <topic>' for detailed help.\n", a.Name)
+	fmt.Fprintf(w, "\n%s\n", i18n.T("root.flags"))
+	fmt.Fprintf(w, "  -h, --help     %s\n", i18n.T("root.flag_help"))
+	fmt.Fprintf(w, "  -v, --version  %s\n", i18n.T("root.flag_version"))
+	fmt.Fprintf(w, "\n%s\n", i18n.Tfmt("root.help_line1", a.Name))
+	fmt.Fprintf(w, "%s\n", i18n.Tfmt("root.help_line2", a.Name))
 }
 
 func (a *App) printCommandHelp(cmd *Command) {
@@ -468,13 +509,13 @@ func (a *App) printCommandHelp(cmd *Command) {
 	fmt.Fprintf(w, "%s\n\n", cmd.Description)
 
 	if cmd.Usage != "" {
-		fmt.Fprintf(w, "Usage:\n  %s\n\n", cmd.Usage)
+		fmt.Fprintf(w, "%s\n  %s\n\n", i18n.T("cmd.usage"), cmd.Usage)
 	} else {
-		fmt.Fprintf(w, "Usage:\n  %s %s [options]\n\n", a.Name, cmd.Name)
+		fmt.Fprintf(w, "%s\n  %s %s [options]\n\n", i18n.T("cmd.usage"), a.Name, cmd.Name)
 	}
 
 	if len(cmd.Examples) > 0 {
-		fmt.Fprintf(w, "Examples:\n")
+		fmt.Fprintf(w, "%s\n", i18n.T("cmd.examples"))
 		for _, ex := range cmd.Examples {
 			fmt.Fprintf(w, "  $ %s %s\n", a.Name, ex)
 		}
@@ -482,7 +523,7 @@ func (a *App) printCommandHelp(cmd *Command) {
 	}
 
 	if len(cmd.SubCommands) > 0 {
-		fmt.Fprintf(w, "Subcommands:\n")
+		fmt.Fprintf(w, "%s\n", i18n.T("cmd.subcommands"))
 		maxLen := 0
 		for _, sub := range cmd.SubCommands {
 			if len(sub.Name) > maxLen {
@@ -496,7 +537,7 @@ func (a *App) printCommandHelp(cmd *Command) {
 	}
 
 	if len(cmd.Flags) > 0 {
-		fmt.Fprintf(w, "Flags:\n")
+		fmt.Fprintf(w, "%s\n", i18n.T("cmd.flags"))
 		for _, f := range cmd.Flags {
 			short := "  "
 			if f.Short != "" {
@@ -504,14 +545,14 @@ func (a *App) printCommandHelp(cmd *Command) {
 			}
 			fmt.Fprintf(w, "  %s --%-12s %s", short, f.Name, f.Usage)
 			if f.Default != "" {
-				fmt.Fprintf(w, " (default: %s)", f.Default)
+				fmt.Fprintf(w, " (%s: %s)", i18n.T("cmd.default"), f.Default)
 			}
 			fmt.Fprintln(w)
 		}
 		fmt.Fprintln(w)
 	}
 
-	fmt.Fprintf(w, "Use '%s help %s' for detailed help.\n", a.Name, cmd.Name)
+	fmt.Fprintf(w, "%s\n", i18n.Tfmt("cmd.help_line", a.Name, cmd.Name))
 }
 
 // ParseFlags parses flags from args, returning flag values and remaining positional args.
@@ -569,7 +610,7 @@ func ParseFlags(args []string, flags []*Flag) (map[string]string, []string, erro
 		}
 
 		if !found {
-			return nil, nil, fmt.Errorf("未知选项: %s", arg)
+			return nil, nil, fmt.Errorf("%s", i18n.Tfmt("error.unknown_option", arg))
 		}
 
 		i++

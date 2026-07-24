@@ -13,7 +13,6 @@
 | `bws run` / `bws r` / `bws open` | 运行指定版本的浏览器 |
 | `bws install` / `bws i` | 安装浏览器版本 |
 | `bws shortcut` / `bws sc` | 管理桌面快捷方式 |
-| `bws import` / `bws imp` | 从目录批量导入（自动识别） |
 | `bws uninstall` / `bws rm` / `bws remove` | 卸载浏览器版本 |
 | `bws use` / `bws u` | 设置默认浏览器版本 |
 | `bws download` / `bws dl` | 仅下载不安装 |
@@ -23,6 +22,7 @@
 | `bws config` / `bws cfg` | 管理配置 |
 | `bws repo` | 管理本地二进制仓库 |
 | `bws cache` / `bws cc` | 管理下载缓存 |
+| `bws plugin` / `bws pl` | 插件管理 |
 | `bws doctor` / `bws dt` | 系统健康检查 |
 | `bws help` / `bws h` | 显示帮助信息 |
 
@@ -56,6 +56,8 @@ bws ls [浏览器[@版本]] [选项]
 | `--json` | - | 以 JSON 格式输出 |
 
 ### 示例
+
+> `bws list`（别名 `bws ls`）
 
 ```bash
 # 列出所有已安装版本
@@ -109,6 +111,8 @@ bws show <浏览器@版本>
 
 ### 示例
 
+> `bws info`（别名 `bws show`）
+
 ```bash
 # 查看指定版本详情
 bws show chrome@120
@@ -142,14 +146,14 @@ bws show ff@121
 ### 用法
 
 ```bash
-bws r [浏览器[@版本]] [URL] [选项] [-- 原生参数]
+bws r <浏览器[@版本]> [URL] [选项] [-- 原生参数]
 ```
 
 ### 参数
 
 | 参数 | 说明 |
 |------|------|
-| `浏览器[@版本]` | 要运行的浏览器版本，省略时使用默认浏览器和默认版本 |
+| `浏览器[@版本]` | 要运行的浏览器版本（必填），如 `chrome@120` |
 | `URL` | 可选，启动时打开的网址 |
 
 ### 选项
@@ -160,15 +164,18 @@ bws r [浏览器[@版本]] [URL] [选项] [-- 原生参数]
 | `--incognito` | `-i` | 隐身/无痕模式 |
 | `--new-window` | `-w` | 新窗口打开 |
 | `--profile <name>` | `-p` | 指定命名 Profile |
-| `--native` | - | 原生模式（使用系统 Profile） |
-| `--detach` | `-d` | 后台运行（不等待进程） |
+| `--native` | `-n` | 原生模式（使用系统 Profile） |
+| `--detached` | `-d` | 后台运行（不等待进程） |
 | `--dry-run` | - | 试运行（不实际启动） |
 | `--proxy <url>` | - | 代理地址（如 `socks5://127.0.0.1:1080`），留空使用全局配置 |
 | `--no-proxy` | - | 禁用代理（覆盖全局配置） |
 | `--fingerprint <preset>` | `-fp` | 指纹隔离预设（`standard`/`random`/`none`），或 JSON 配置/@文件路径 |
+| `--plugin <names>` | - | 激活的插件（逗号分隔多个） |
 | `--` | - | 之后的参数原样传递给浏览器 |
 
 ### 示例
+
+> `bws run`（别名 `bws r`、`bws open`）
 
 ```bash
 # 运行指定版本
@@ -293,12 +300,14 @@ bws i --from-file <文件> [浏览器@版本]
 
 | 选项 | 简写 | 说明 |
 |------|------|------|
-| `--dir <path>` | `-d` | 从本地目录安装 |
+| `--from-dir <path>` | `-d` | 从本地目录安装 |
 | `--from-file <path>` | - | 从本地压缩包安装 |
-| `--channel <渠道>` | - | 指定发布渠道 |
+| `--channel <渠道>` | `-c` | 指定发布渠道 |
 | `--force` | `-f` | 强制重新安装 |
 
 ### 示例
+
+> `bws install`（别名 `bws i`）
 
 ```bash
 # 安装最新稳定版
@@ -363,6 +372,8 @@ bws sc <子命令> [浏览器[@版本]] [选项]
 
 ### 示例
 
+> `bws shortcut`（别名 `bws sc`）
+
 ```bash
 # 为指定版本创建快捷方式
 bws sc create chrome@120
@@ -393,40 +404,6 @@ bws sc list
 
 ---
 
-## bws import (别名: imp)
-
-从目录批量导入浏览器版本（自动识别）。
-
-### 用法
-
-```bash
-bws imp <目录> [选项]
-```
-
-### 参数
-
-| 参数 | 说明 |
-|------|------|
-| `目录` | 包含浏览器安装包的目录路径 |
-
-### 选项
-
-| 选项 | 简写 | 说明 |
-|------|------|------|
-| `--force` | `-f` | 强制重新导入已安装的版本 |
-
-### 示例
-
-```bash
-# 批量导入
-bws imp /path/to/browsers
-
-# 强制重新导入
-bws imp /path/to/browsers -f
-```
-
----
-
 ## bws uninstall (别名: rm, remove)
 
 卸载指定的浏览器版本。
@@ -444,6 +421,8 @@ bws rm <浏览器@版本>
 | `浏览器@版本` | 要卸载的浏览器版本（支持部分版本号） |
 
 ### 示例
+
+> `bws uninstall`（别名 `bws rm`、`bws remove`）
 
 ```bash
 # 卸载指定版本
@@ -477,6 +456,8 @@ bws u <浏览器@版本>
 | `浏览器@版本` | 要设为默认的浏览器版本（支持部分版本号） |
 
 ### 示例
+
+> `bws use`（别名 `bws u`）
 
 ```bash
 # 设置 Chrome 120 为默认版本
@@ -516,6 +497,8 @@ bws dl <浏览器@版本> [选项]
 
 ### 示例
 
+> `bws download`（别名 `bws dl`）
+
 ```bash
 # 下载最新稳定版
 bws dl chrome@latest
@@ -554,7 +537,15 @@ bws pf <子命令> [参数] [选项]
 | `reset` | 重置 Profile |
 | `clean` | 清理孤立 Profile |
 
+### 示例
+
+> `bws profile`（别名 `bws pf`）
+
 ### profile list
+
+| 选项 | 简写 | 说明 |
+|------|------|------|
+| `--browser <name>` | `-b` | 指定浏览器 |
 
 ```bash
 # 列出所有 Profile
@@ -562,13 +553,17 @@ bws pf list
 
 # 列出指定浏览器的 Profile
 bws pf list chrome
+bws pf list --browser firefox
 ```
 
 ### profile path
 
 ```bash
-# 查看默认 Profile 路径
-bws pf path chrome@120
+# 查看默认浏览器 Profile 路径
+bws pf path
+
+# 查看指定浏览器的 Profile 路径
+bws pf path chrome
 
 # 查看命名 Profile 路径
 bws pf path chrome myprofile
@@ -622,6 +617,8 @@ bws alias <子命令> [参数]
 
 ### 示例
 
+> `bws alias`（无缩写别名）
+
 ```bash
 # 列出所有别名
 bws alias list
@@ -667,6 +664,8 @@ bws sv [-d <目录>]
 | `sync-channels` | `stable` | 同步的渠道列表，逗号分隔 |
 
 ### 示例
+
+> `bws serve`（别名 `bws sv`、`bws server`）
 
 ```bash
 # 首次运行（自动创建配置文件）
@@ -716,16 +715,19 @@ bws cfg <子命令> [参数]
 | `data-dir` | 数据存储目录 | 空（便携模式） |
 | `default-browser` | 默认浏览器 | `chrome` |
 | `default-channel` | 默认渠道 | `stable` |
+| `language` | 界面语言（zh/en） | 自动检测 |
 | `log-level` | 控制台日志级别 | `info` |
 | `repo-path` | 本地仓库路径 | 空 |
 | `source` | 离线源地址 | 空 |
 | `source-serve` | Serve 源开关 | `true` |
 | `source-omaha` | Omaha 源开关 | `true` |
-| `source-firefox-ftp` | Firefox FTP 源开关 | `true` |
+| `source-firefox-ftp` | Firefox 数据源开关（已保留） | `true` |
 | `disk-threshold` | 磁盘空间告警阈值（GB） | `5` |
 | `proxy` | 代理地址（用于下载和浏览器启动） | 空 |
 
 ### 示例
+
+> `bws config`（别名 `bws cfg`）
 
 ```bash
 # 查看所有配置
@@ -773,6 +775,8 @@ bws repo <子命令> [参数]
 
 ### 示例
 
+> `bws repo`（无缩写别名）
+
 ```bash
 # 查看当前仓库路径
 bws repo path
@@ -811,6 +815,8 @@ bws cc <子命令>
 
 ### 示例
 
+> `bws cache`（别名 `bws cc`）
+
 ```bash
 # 查看缓存信息
 bws cc info
@@ -834,10 +840,13 @@ bws cc clear
 |--------|------|------|
 | `list` | `ls`, `l` | 列出已安装的插件 |
 | `install` | `i`, `add` | 安装插件（本地文件或远程 registry） |
-| `uninstall` | `rm`, `remove` | 卸载插件 |
+| `uninstall` | `rm`, `remove`, `del` | 卸载插件 |
+| `update` | `up`, `u` | 更新插件到最新版本 |
 | `search` | `s`, `find` | 搜索远程插件 |
 
 ### 示例
+
+> `bws plugin`（别名 `bws pl`）
 
 ```bash
 # 列出已安装插件
@@ -851,6 +860,9 @@ bws plugin install ./my-plugin.py
 
 # 从 registry 安装
 bws plugin install fingerprint-enhanced
+
+# 更新插件（仅 registry 来源的插件支持）
+bws plugin update fingerprint-enhanced
 
 # 卸载
 bws plugin uninstall fingerprint-enhanced
@@ -911,13 +923,17 @@ bws dt
 
 ### 检查内容
 
-- 数据目录完整性
+- 目录结构完整性
 - 配置文件有效性
+- 浏览器描述符数量
 - 已安装版本完整性
-- 磁盘空间检查
-- 网络连通性（可选）
+- 系统浏览器检测
+- 远程版本查询可用性
+- 下载管理器可用性
 
 ### 示例
+
+> `bws doctor`（别名 `bws dt`）
 
 ```bash
 bws dt
@@ -936,7 +952,17 @@ bws help [命令]
 bws h [命令]
 ```
 
+### 智能拼写建议
+
+当输入的命令名不存在时，bws 会自动检测相似命令并进行提示。例如，输入 `bws imfo` 会提示：
+
+```
+你是不是想用 "info"? (相似度: 75%)
+```
+
 ### 示例
+
+> `bws help`（别名 `bws h`）
 
 ```bash
 # 显示总帮助

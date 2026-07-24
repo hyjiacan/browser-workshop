@@ -13,7 +13,6 @@ This document lists all commands of `bws` with detailed descriptions, including 
 | `bws run` / `bws r` / `bws open` | Run a specific browser version |
 | `bws install` / `bws i` | Install a browser version |
 | `bws shortcut` / `bws sc` | Manage desktop shortcuts |
-| `bws import` / `bws imp` | Batch import from a directory (auto-detect) |
 | `bws uninstall` / `bws rm` / `bws remove` | Uninstall a browser version |
 | `bws use` / `bws u` | Set the default browser version |
 | `bws download` / `bws dl` | Download only, do not install |
@@ -23,6 +22,7 @@ This document lists all commands of `bws` with detailed descriptions, including 
 | `bws config` / `bws cfg` | Manage configuration |
 | `bws repo` | Manage the local binary repository |
 | `bws cache` / `bws cc` | Manage download cache |
+| `bws plugin` / `bws pl` | Plugin management |
 | `bws doctor` / `bws dt` | System health check |
 | `bws help` / `bws h` | Display help information |
 
@@ -56,6 +56,8 @@ bws ls [browser[@version]] [options]
 | `--json` | - | Output in JSON format |
 
 ### Examples
+
+> `bws list` (alias `bws ls`)
 
 ```bash
 # List all installed versions
@@ -109,6 +111,8 @@ bws show <browser@version>
 
 ### Examples
 
+> `bws info` (alias `bws show`)
+
 ```bash
 # View details of a specific version
 bws show chrome@120
@@ -142,14 +146,14 @@ Run a specific browser version.
 ### Usage
 
 ```bash
-bws r [browser[@version]] [URL] [options] [-- native arguments]
+bws r <browser[@version]> [URL] [options] [-- native arguments]
 ```
 
 ### Arguments
 
 | Argument | Description |
 |----------|-------------|
-| `browser[@version]` | The browser version to run; if omitted, the default browser and default version are used |
+| `browser[@version]` | The browser version to run (required), e.g. `chrome@120` |
 | `URL` | Optional, the URL to open on startup |
 
 ### Options
@@ -160,15 +164,18 @@ bws r [browser[@version]] [URL] [options] [-- native arguments]
 | `--incognito` | `-i` | Incognito / private browsing mode |
 | `--new-window` | `-w` | Open in a new window |
 | `--profile <name>` | `-p` | Specify a named profile |
-| `--native` | - | Native mode (use system profile) |
-| `--detach` | `-d` | Run in the background (do not wait for the process) |
+| `--native` | `-n` | Native mode (use system profile) |
+| `--detached` | `-d` | Run in the background (do not wait for the process) |
 | `--dry-run` | - | Dry run (do not actually start) |
 | `--proxy <url>` | - | Proxy URL (e.g. `socks5://127.0.0.1:1080`), empty uses global config |
 | `--no-proxy` | - | Disable proxy (overrides global config) |
 | `--fingerprint <preset>` | `-fp` | Fingerprint isolation preset (`standard`/`random`/`none`), or JSON config/@file path |
+| `--plugin <names>` | - | Activate plugins (comma-separated) |
 | `--` | - | Arguments after this are passed directly to the browser |
 
 ### Examples
+
+> `bws run` (alias `bws r`, `bws open`)
 
 ```bash
 # Run a specific version
@@ -293,12 +300,14 @@ bws i --from-file <file> [browser@version]
 
 | Option | Short | Description |
 |--------|-------|-------------|
-| `--dir <path>` | `-d` | Install from a local directory |
+| `--from-dir <path>` | `-d` | Install from a local directory |
 | `--from-file <path>` | - | Install from a local archive |
-| `--channel <channel>` | - | Specify the release channel |
+| `--channel <channel>` | `-c` | Specify the release channel |
 | `--force` | `-f` | Force reinstall |
 
 ### Examples
+
+> `bws install` (alias `bws i`)
 
 ```bash
 # Install the latest stable version
@@ -363,6 +372,8 @@ bws sc <subcommand> [browser[@version]] [options]
 
 ### Examples
 
+> `bws shortcut` (alias `bws sc`)
+
 ```bash
 # Create a shortcut for a specific version
 bws sc create chrome@120
@@ -393,40 +404,6 @@ bws sc list
 
 ---
 
-## bws import (alias: imp)
-
-Batch import browser versions from a directory (auto-detect).
-
-### Usage
-
-```bash
-bws imp <directory> [options]
-```
-
-### Arguments
-
-| Argument | Description |
-|----------|-------------|
-| `directory` | The directory path containing browser installation packages |
-
-### Options
-
-| Option | Short | Description |
-|--------|-------|-------------|
-| `--force` | `-f` | Force re-import of already installed versions |
-
-### Examples
-
-```bash
-# Batch import
-bws imp /path/to/browsers
-
-# Force re-import
-bws imp /path/to/browsers -f
-```
-
----
-
 ## bws uninstall (alias: rm, remove)
 
 Uninstall a specific browser version.
@@ -444,6 +421,8 @@ bws rm <browser@version>
 | `browser@version` | The browser version to uninstall (supports partial version numbers) |
 
 ### Examples
+
+> `bws uninstall` (alias `bws rm`, `bws remove`)
 
 ```bash
 # Uninstall a specific version
@@ -477,6 +456,8 @@ bws u <browser@version>
 | `browser@version` | The browser version to set as default (supports partial version numbers) |
 
 ### Examples
+
+> `bws use` (alias `bws u`)
 
 ```bash
 # Set Chrome 120 as the default version
@@ -516,6 +497,8 @@ bws dl <browser@version> [options]
 
 ### Examples
 
+> `bws download` (alias `bws dl`)
+
 ```bash
 # Download the latest stable version
 bws dl chrome@latest
@@ -554,7 +537,15 @@ bws pf <subcommand> [arguments] [options]
 | `reset` | Reset profile |
 | `clean` | Clean up orphaned profiles |
 
+### Examples
+
+> `bws profile` (alias `bws pf`)
+
 ### profile list
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--browser <name>` | `-b` | Specify browser |
 
 ```bash
 # List all profiles
@@ -562,15 +553,19 @@ bws pf list
 
 # List profiles for a specific browser
 bws pf list chrome
+bws pf list --browser firefox
 ```
 
 ### profile path
 
 ```bash
-# View the default profile path
-bws pf path chrome@120
+# View default browser profile path
+bws pf path
 
-# View the named profile path
+# View a specific browser's profile path
+bws pf path chrome
+
+# View a named profile path
 bws pf path chrome myprofile
 ```
 
@@ -622,6 +617,8 @@ bws alias <subcommand> [arguments]
 
 ### Examples
 
+> `bws alias` (no short alias)
+
 ```bash
 # List all aliases
 bws alias list
@@ -667,6 +664,8 @@ The first time you run `bws sv`, a configuration file is automatically created. 
 | `sync-channels` | `stable` | List of channels to sync, comma-separated |
 
 ### Examples
+
+> `bws serve` (alias `bws sv`, `bws server`)
 
 ```bash
 # First run (automatically creates configuration file)
@@ -716,16 +715,19 @@ bws cfg <subcommand> [arguments]
 | `data-dir` | Data storage directory | Empty (portable mode) |
 | `default-browser` | Default browser | `chrome` |
 | `default-channel` | Default channel | `stable` |
+| `language` | Interface language (zh/en) | Auto-detected |
 | `log-level` | Console log level | `info` |
 | `repo-path` | Local repository path | Empty |
 | `source` | Offline source address | Empty |
 | `source-serve` | Serve source switch | `true` |
 | `source-omaha` | Omaha source switch | `true` |
-| `source-firefox-ftp` | Firefox FTP source switch | `true` |
+| `source-firefox-ftp` | Firefox data source switch (reserved) | `true` |
 | `disk-threshold` | Disk space alert threshold (GB) | `5` |
 | `proxy` | Proxy URL (for downloads and browser launching) | empty |
 
 ### Examples
+
+> `bws config` (alias `bws cfg`)
 
 ```bash
 # View all configurations
@@ -773,6 +775,8 @@ bws repo <subcommand> [arguments]
 
 ### Examples
 
+> `bws repo` (no short alias)
+
 ```bash
 # View the current repository path
 bws repo path
@@ -811,6 +815,8 @@ bws cc <subcommand>
 
 ### Examples
 
+> `bws cache` (alias `bws cc`)
+
 ```bash
 # View cache information
 bws cc info
@@ -834,10 +840,13 @@ Manage bws plugins. Plugins can modify browser launch args or execute actions, w
 |------------|---------|-------------|
 | `list` | `ls`, `l` | List installed plugins |
 | `install` | `i`, `add` | Install a plugin (local file or remote registry) |
-| `uninstall` | `rm`, `remove` | Uninstall a plugin |
+| `uninstall` | `rm`, `remove`, `del` | Uninstall a plugin |
+| `update` | `up`, `u` | Update a plugin to the latest version |
 | `search` | `s`, `find` | Search remote plugins |
 
 ### Examples
+
+> `bws plugin` (alias `bws pl`)
 
 ```bash
 # List installed plugins
@@ -851,6 +860,9 @@ bws plugin install ./my-plugin.py
 
 # Install from registry
 bws plugin install fingerprint-enhanced
+
+# Update a plugin (only for registry-sourced plugins)
+bws plugin update fingerprint-enhanced
 
 # Uninstall
 bws plugin uninstall fingerprint-enhanced
@@ -911,13 +923,17 @@ bws dt
 
 ### Check Content
 
-- Data directory integrity
+- Directory structure integrity
 - Configuration file validity
+- Browser descriptor count
 - Installed version integrity
-- Disk space check
-- Network connectivity (optional)
+- System browser detection
+- Remote version query availability
+- Download manager availability
 
 ### Examples
+
+> `bws doctor` (alias `bws dt`)
 
 ```bash
 bws dt
@@ -936,7 +952,17 @@ bws help [command]
 bws h [command]
 ```
 
+### Smart Typo Suggestion
+
+When an entered command name does not exist, bws will automatically detect similar commands and provide a suggestion. For example, entering `bws imfo` will prompt:
+
+```
+Did you mean "info"? (similarity: 75%)
+```
+
 ### Examples
+
+> `bws help` (alias `bws h`)
 
 ```bash
 # Display general help

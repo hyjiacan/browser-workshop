@@ -21,6 +21,7 @@ import (
 	"github.com/bws/bws/internal/fingerprint"
 	bmlog "github.com/bws/bws/internal/log"
 	"github.com/bws/bws/internal/install"
+	"github.com/bws/bws/internal/i18n"
 	"github.com/bws/bws/internal/launch"
 	"github.com/bws/bws/internal/paths"
 	"github.com/bws/bws/internal/plugin"
@@ -29,10 +30,9 @@ import (
 	"github.com/bws/bws/internal/shortcut"
 	"github.com/bws/bws/internal/source"
 	"github.com/bws/bws/internal/system"
-	"github.com/bws/bws/internal/tui"
 )
 
-const version = "0.1.0"
+const version = "1.0.0-beta"
 
 func main() {
 	// Determine config path (portable mode: config in exe directory)
@@ -55,6 +55,9 @@ func main() {
 	if cfg.DataDir != "" {
 		dataDir = cfg.DataDir
 	}
+
+	// Initialize i18n (must be before any CLI output, needs dataDir for external override path)
+	i18n.Init(cfg.GetLanguage(), filepath.Join(dataDir, "i18n"))
 
 	// Initialize paths
 	p := paths.New(dataDir)
@@ -157,26 +160,9 @@ func main() {
 	app := cli.NewApp("bws", version, ctx)
 	cli.RegisterCommands(app)
 
-	// Execute: 无参数且为交互式终端时，优先进入 TUI
-	if len(os.Args) == 1 {
-		if tui.IsInteractive() {
-			tui.Version = version
-			tuiAdapter := &tuiAppAdapter{
-				ctx:      app.Context,
-				launcher: launcher,
-			}
-			if err := tui.Run(tuiAdapter); err != nil {
-				logger.Error("TUI 运行失败: %v", err)
-				// TUI 失败时回退到命令行帮助
-				fmt.Fprintf(os.Stderr, "错误: %v\n", err)
-			}
-			return
-		}
-	}
-
 	if err := app.Execute(os.Args[1:]); err != nil {
-		logger.Error("命令执行失败: %v", err)
 		fmt.Fprintf(os.Stderr, "错误: %v\n", err)
+		logger.Debug("命令执行失败: %v", err)
 		os.Exit(1)
 	}
 }
@@ -425,14 +411,21 @@ func (a *configAdapter) SetProxy(proxy string) error {
 	return config.Save(a.cfg, a.configPath)
 }
 
+func (a *configAdapter) GetLanguage() string { return a.cfg.GetLanguage() }
+func (a *configAdapter) SetLanguage(lang string) error {
+	a.cfg.SetLanguage(lang)
+	return config.Save(a.cfg, a.configPath)
+}
+
 type pluginAdapter struct {
 	mgr *plugin.Manager
 }
 
-func (a *pluginAdapter) List() []plugin.ManifestEntry               { return a.mgr.List() }
-func (a *pluginAdapter) Install(entry plugin.ManifestEntry) error  { return a.mgr.Install(entry) }
-func (a *pluginAdapter) Uninstall(name string) error               { return a.mgr.Uninstall(name) }
-func (a *pluginAdapter) PluginsDir() string                        { return a.mgr.PluginsDir() }
+func (a *pluginAdapter) List() []plugin.ManifestEntry                  { return a.mgr.List() }
+func (a *pluginAdapter) GetManifestEntry(name string) (*plugin.ManifestEntry, error) { return a.mgr.GetManifestEntry(name) }
+func (a *pluginAdapter) Install(entry plugin.ManifestEntry) error   { return a.mgr.Install(entry) }
+func (a *pluginAdapter) Uninstall(name string) error                { return a.mgr.Uninstall(name) }
+func (a *pluginAdapter) PluginsDir() string                         { return a.mgr.PluginsDir() }
 
 type pluginExecutor struct {
 	mgr *plugin.Manager
@@ -1293,193 +1286,4 @@ func describeSourceName(name string) string {
 		}
 		return ""
 	}
-}
-
-// --- tuiAppAdapter: implements tui.App interface for the TUI ---
-
-// tuiAppAdapter adapts the CLI context and managers to the tui.App interface.
-type tuiAppAdapter struct {
-	ctx      *cli.Context
-	launcher *launch.Manager
-}
-
-func (a *tuiAppAdapter) ListInstalled() []tui.BrowserInfo {
-	installed, err := a.ctx.Install.ListWithSystem()
-	if err != nil {
-		return nil
-	}
-	result := make([]tui.BrowserInfo, len(installed))
-	for i, v := range installed {
-		result[i] = tui.BrowserInfo{
-			Browser:  v.Browser,
-			Version:  v.Version,
-			Size:     v.Size,
-			IsSystem: v.IsSystem,
-			Source:   v.Source,
-		}
-	}
-	return result
-}
-
-func (a *tuiAppAdapter) ListInstalledByBrowser(browser string) []tui.BrowserInfo {
-	installed, err := a.ctx.Install.ListWithSystemByBrowser(browser)
-	if err != nil {
-		return nil
-	}
-	result := make([]tui.BrowserInfo, len(installed))
-	for i, v := range installed {
-		result[i] = tui.BrowserInfo{
-			Browser:  v.Browser,
-			Version:  v.Version,
-			Size:     v.Size,
-			IsSystem: v.IsSystem,
-			Source:   v.Source,
-		}
-	}
-	return result
-}
-
-func (a *tuiAppAdapter) GetDefaultBrowser() string {
-	return a.ctx.Config.DefaultBrowser()
-}
-
-func (a *tuiAppAdapter) LaunchBrowser(browser, version string) error {
-	return a.ctx.Launch.Run(cli.LaunchOptions{
-		Browser: browser,
-		Version: version,
-	})
-}
-
-func (a *tuiAppAdapter) UninstallBrowser(browser, version string) error {
-	return a.ctx.Install.Uninstall(browser, version)
-}
-
-func (a *tuiAppAdapter) GetConfigItems() []tui.ConfigItem {
-	cfg := a.ctx.Config
-	items := []tui.ConfigItem{
-		{
-			Key:   "default_browser",
-			Label: "默认浏览器",
-			Value: cfg.DefaultBrowser(),
-			Type:  "string",
-		},
-		{
-			Key:   "default_channel",
-			Label: "默认频道",
-			Value: cfg.DefaultChannel(),
-			Type:  "enum",
-			EnumOptions: []string{"stable", "beta", "dev", "canary", "nightly"},
-		},
-		{
-			Key:   "log_level",
-			Label: "日志级别",
-			Value: cfg.GetLogLevel(),
-			Type:  "enum",
-			EnumOptions: []string{"debug", "info", "warn", "error"},
-		},
-		{
-			Key:   "data_dir",
-			Label: "数据目录",
-			Value: cfg.GetDataDir(),
-			Type:  "string",
-		},
-		{
-			Key:   "repo_path",
-			Label: "仓库路径",
-			Value: cfg.GetRepoPath(),
-			Type:  "string",
-		},
-		{
-			Key:   "proxy",
-			Label: "代理设置",
-			Value: cfg.GetProxy(),
-			Type:  "string",
-		},
-		{
-			Key:   "remote_source",
-			Label: "远程数据源",
-			Value: cfg.GetRemoteSource(),
-			Type:  "string",
-		},
-		{
-			Key:   "serve_source_enabled",
-			Label: "启用远程源",
-			Value: fmt.Sprintf("%v", cfg.IsServeSourceEnabled()),
-			Type:  "bool",
-		},
-		{
-			Key:   "omaha_source_enabled",
-			Label: "启用 Omaha 源",
-			Value: fmt.Sprintf("%v", cfg.IsOmahaSourceEnabled()),
-			Type:  "bool",
-		},
-		{
-			Key:   "firefox_ftp_enabled",
-			Label: "启用 Firefox FTP 源",
-			Value: fmt.Sprintf("%v", cfg.IsFirefoxFTPEnabled()),
-			Type:  "bool",
-		},
-		{
-			Key:   "disk_space_threshold_gb",
-			Label: "磁盘空间阈值(GB)",
-			Value: fmt.Sprintf("%d", cfg.GetDiskSpaceThresholdGB()),
-			Type:  "int",
-		},
-	}
-	return items
-}
-
-func (a *tuiAppAdapter) SetConfig(key, value string) error {
-	cfg := a.ctx.Config
-	switch key {
-	case "default_browser":
-		return cfg.SetDefaultBrowser(value)
-	case "default_channel":
-		return cfg.SetDefaultChannel(value)
-	case "log_level":
-		return cfg.SetLogLevel(value)
-	case "data_dir":
-		return cfg.SetDataDir(value)
-	case "repo_path":
-		return cfg.SetRepoPath(value)
-	case "proxy":
-		return cfg.SetProxy(value)
-	case "remote_source":
-		if value == "" {
-			return cfg.ClearRemoteSource()
-		}
-		return cfg.SetRemoteSource(value)
-	case "serve_source_enabled":
-		return cfg.SetServeSourceEnabled(value == "true")
-	case "omaha_source_enabled":
-		return cfg.SetOmahaSourceEnabled(value == "true")
-	case "firefox_ftp_enabled":
-		return cfg.SetFirefoxFTPEnabled(value == "true")
-	case "disk_space_threshold_gb":
-		var v int
-		if _, err := fmt.Sscanf(value, "%d", &v); err != nil {
-			return fmt.Errorf("无效的数值: %s", value)
-		}
-		return cfg.SetDiskSpaceThresholdGB(v)
-	default:
-		return fmt.Errorf("未知配置项: %s", key)
-	}
-}
-
-func (a *tuiAppAdapter) ListPlugins() []tui.PluginInfo {
-	plugins := a.ctx.Plugin.List()
-	result := make([]tui.PluginInfo, len(plugins))
-	for i, p := range plugins {
-		result[i] = tui.PluginInfo{
-			Name:    p.Name,
-			Type:    p.Type,
-			Version: p.Version,
-			Source:  p.Source,
-		}
-	}
-	return result
-}
-
-func (a *tuiAppAdapter) UninstallPlugin(name string) error {
-	return a.ctx.Plugin.Uninstall(name)
 }

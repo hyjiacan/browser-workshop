@@ -1,0 +1,24 @@
+{
+  "root.description": "浏览器版本管理工具",
+  "root.usage": "用法:\n  %s <命令> [选项]",
+  "root.commands": "可用命令:",
+  "root.flags": "选项:",
+  "root.flag_help": "显示帮助",
+  "root.flag_version": "显示版本",
+  "root.help_line1": "使用 '%s <命令> --help' 查看命令详情。",
+  "root.help_line2": "使用 '%s help <主题>' 查看详细帮助。",
+
+  "cmd.usage": "用法:",
+  "cmd.examples": "示例:",
+  "cmd.subcommands": "子命令:",
+  "cmd.flags": "选项:",
+  "cmd.default": "默认",
+  "cmd.help_line": "使用 '%s help %s' 查看详细帮助。",
+
+  "error.unknown_command": "未知命令: %s",
+  "error.unknown_subcommand": "\"%s\" 没有子命令 \"%s\"",
+  "error.typo_suggestion": "你是不是想用 \"%s\"? (相似度: %d%%)",
+  "error.unknown_option": "未知选项: %s",
+
+  "confirm.prompt": "%s [是/否]: "
+}

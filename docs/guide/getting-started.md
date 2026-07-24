@@ -40,21 +40,21 @@ bws ls chrome@79
 bws ls --no-system
 ```
 
-## 2. 从本地目录导入
+## 2. 从本地目录安装
 
-如果你已经有一些浏览器安装包或绿色版目录，可以使用 `import` 命令批量导入：
+如果你已经有一些浏览器安装包或绿色版目录，可以使用 `install -d` 命令从本地目录安装：
 
 ```bash
-# 自动识别目录下所有浏览器版本
-bws imp /path/to/browsers
+# 从目录自动识别并安装
+bws i -d /path/to/browser-dir
 
-# 强制重新导入已安装的版本
-bws imp /path/to/browsers -f
+# 强制重新安装
+bws i -d /path/to/browser-dir -f
 ```
 
-导入过程中会实时显示进度，无法识别的文件会即时提示。
+安装过程中会实时显示进度，无法识别的文件会即时提示。
 
-> **提示**：支持的文件格式包括 zip、7z、tar.gz、tar.bz2、tar.xz、.exe 等多种压缩包格式。文件名会被自动识别，详细规则请参考 [本地导入](./import.md) 章节。
+> **提示**：支持的文件格式包括 zip、7z、tar.gz、tar.bz2、tar.xz、.exe 等多种压缩包格式。文件名会被自动识别，详细规则请参考 [本地安装](./import.md) 章节。
 
 ## 3. 远程下载安装
 

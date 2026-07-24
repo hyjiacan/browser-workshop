@@ -72,6 +72,7 @@ bws r chrome@120 --plugin hello.py
 | `bws pl list` | List installed plugins |
 | `bws pl install <name\|url\|path>` | Install plugin (local file, Registry, Git URL) |
 | `bws pl uninstall <name>` | Uninstall a plugin |
+| `bws pl update <name>` | Update a plugin (only for registry-sourced plugins) |
 | `bws pl search <query>` | Search plugins in the Registry |
 
 **Note:** `pl` is the short alias for `plugin`. `bws pl l` = `bws plugin list`.
@@ -376,14 +377,45 @@ sequenceDiagram
 
 ### Publishing to Registry
 
+Registry repository: [gitee.com/hyjiacan/browser-workshop-plugins](https://gitee.com/hyjiacan/browser-workshop-plugins)
+
+#### Step 1: Prepare Your Plugin
+
 1. Create a GitHub/Gitee repository named e.g. `bws-plugin-xxx`
-2. Write plugin code and README documentation
-3. Publish a Release
-4. Submit a PR to the official Registry: add an entry to [registry.json](https://github.com/hyjiacan/browser-workshop/blob/master/plugins/registry.json)
+2. Write plugin code and README documentation (describe features, usage, and configuration)
+3. Publish a Release version, ensuring a direct download link is available
 
-### Registry Entry Format
+> **License Notice**: By submitting a plugin to the official Registry, you agree to release it under the MIT License. See [browser-workshop-plugins/LICENSE](https://gitee.com/hyjiacan/browser-workshop-plugins/blob/master/LICENSE).
 
-The plugin Registry is a JSON index file. Each plugin entry looks like:
+#### Step 2: Compute File Hash
+
+To ensure plugin file integrity, providing a SHA256 hash in `registry.json` is recommended.
+
+**Windows:**
+
+```powershell
+Get-FileHash plugin.lua -Algorithm SHA256
+```
+
+**macOS / Linux:**
+
+```bash
+sha256sum plugin.lua
+```
+
+#### Step 3: Fork the Registry Repository
+
+1. Visit [browser-workshop-plugins](https://gitee.com/hyjiacan/browser-workshop-plugins) and Fork to your account
+2. Clone the forked repository locally:
+
+```bash
+git clone https://gitee.com/<your-username>/browser-workshop-plugins.git
+cd browser-workshop-plugins
+```
+
+#### Step 4: Modify registry.json
+
+Add your plugin entry to the `plugins` object in `registry.json`:
 
 ```json
 {
@@ -396,15 +428,50 @@ The plugin Registry is a JSON index file. Each plugin entry looks like:
   "versions": {
     "1.0.0": {
       "url": "https://github.com/.../releases/.../fingerprint-enhanced.lua",
-      "hash": "sha256:...",
-      "platforms": ["all"]
+      "hash": "sha256:..."
     }
   },
   "tags": ["fingerprint", "privacy", "security"]
 }
 ```
 
-Once the PR is merged, users can search (`bws pl search`) and install (`bws pl install fingerprint-enhanced`) your plugin.
+**Field Reference:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Plugin name; lowercase letters, numbers, and hyphens only |
+| `description` | Yes | Short description; keep under 100 characters |
+| `author` | Yes | Author username or organization name |
+| `source` | Yes | Source code repository URL |
+| `type` | Yes | `lua` (script plugin) or `binary` (IPC plugin) |
+| `latest` | Yes | Latest version number |
+| `versions` | Yes | Version map; key is the version string |
+| `versions[].url` | Yes | Direct download link for this version (must be publicly accessible) |
+| `versions[].hash` | No | SHA256 hash for integrity verification during install |
+| `tags` | No | Array of tags for search categorization |
+
+#### Step 5: Submit a PR
+
+```bash
+git add registry.json
+git commit -m "Add plugin: <your-plugin-name>"
+git push origin master
+```
+
+Then submit a Pull Request on Gitee with the title format: `Add plugin: <plugin-name>`.
+
+#### Review & Publishing
+
+Once the PR is reviewed and merged, your plugin will be available in the official Registry. Other users can then use:
+
+```bash
+bws pl search <keyword>      # Search for plugins
+bws pl install <plugin-name> # Install a plugin
+```
+
+#### Updating a Plugin
+
+To release a new version, submit a PR to the same fork, add a new version entry under `versions`, and update the `latest` field.
 
 ## Limitations & Notes
 

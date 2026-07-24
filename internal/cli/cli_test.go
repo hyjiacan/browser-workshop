@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/bws/bws/internal/i18n"
 )
 
 func TestNewApp(t *testing.T) {
+	i18n.Init("zh", "")
 	ctx := DefaultContext()
 	app := NewApp("bws", "1.0.0", ctx)
 
@@ -19,6 +22,7 @@ func TestNewApp(t *testing.T) {
 }
 
 func TestExecute_NoArgs(t *testing.T) {
+	i18n.Init("zh", "")
 	var buf bytes.Buffer
 	ctx := &Context{Stdout: &buf, Stderr: &buf}
 	app := NewApp("bws", "1.0.0", ctx)
@@ -30,7 +34,7 @@ func TestExecute_NoArgs(t *testing.T) {
 	if buf.Len() == 0 {
 		t.Error("no output for no args (expected help)")
 	}
-	if !strings.Contains(buf.String(), "Browser Manager") {
+	if !strings.Contains(buf.String(), "浏览器版本管理工具") {
 		t.Errorf("output doesn't contain description: %s", buf.String())
 	}
 }
@@ -293,6 +297,7 @@ func TestFormatSize(t *testing.T) {
 }
 
 func TestCommandHelp(t *testing.T) {
+	i18n.Init("zh", "")
 	var buf bytes.Buffer
 	ctx := &Context{Stdout: &buf, Stderr: &buf}
 	app := NewApp("bws", "1.0.0", ctx)
@@ -322,7 +327,7 @@ func TestCommandHelp(t *testing.T) {
 	if !strings.Contains(output, "bws install <browser@version>") {
 		t.Errorf("help missing usage: %s", output)
 	}
-	if !strings.Contains(output, "Examples:") {
+	if !strings.Contains(output, "示例:") {
 		t.Errorf("help missing examples: %s", output)
 	}
 	if !strings.Contains(output, "--force") {

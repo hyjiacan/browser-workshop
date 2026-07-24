@@ -11,7 +11,7 @@ bws 支持两种类型的远程源：
 在线源是 bws 内置的官方下载源，直接从浏览器厂商的官方服务器获取版本信息和安装包。
 
 - **Chrome**：通过 Google Omaha 协议（官方更新协议）获取版本列表和下载地址
-- **Firefox**：从 Mozilla 官方 FTP/下载服务器获取
+- **Firefox**：通过 Mozilla Product Details API 获取版本信息和下载地址
 - **其他浏览器**：各自的官方更新渠道
 
 在线源的特点：

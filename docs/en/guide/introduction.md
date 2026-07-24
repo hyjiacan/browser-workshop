@@ -1,6 +1,6 @@
 # Introduction
 
-Browser Workshop is a multi-version browser management tool, supporting local import, remote download, version switching, and isolated execution. Whether you are a front-end developer needing to test compatibility across different browser versions, or a security researcher analyzing specific browser versions, Browser Workshop helps you easily manage multiple browser versions.
+Browser Workshop is a multi-version browser management tool, supporting local installation, remote download, version switching, and isolated execution. Whether you are a front-end developer needing to test compatibility across different browser versions, or a security researcher analyzing specific browser versions, Browser Workshop helps you easily manage multiple browser versions.
 
 ## Features
 
@@ -8,9 +8,9 @@ Browser Workshop is a multi-version browser management tool, supporting local im
 
 Install and manage multiple browser versions simultaneously, with complete isolation between versions and no interference. Built-in support for Chrome, Firefox, and Chromium.
 
-### Local Import
+### Local Installation
 
-Automatically identify and import browser versions from directories or archives. Supports zip, 7z, tar.gz, tar.bz2, tar.xz, and more. Intelligent filename recognition eliminates the need to manually specify version information.
+Automatically identify and install browser versions from directories or archives. Supports zip, 7z, tar.gz, tar.bz2, tar.xz, and more. Intelligent filename recognition eliminates the need to manually specify version information.
 
 ### Remote Download
 
@@ -59,6 +59,10 @@ Supports short aliases such as `gc` (chrome), `ff` (firefox), `cm` (chromium), w
 ### Multi-name Recognition
 
 Browsers support multiple name inputs. For example, Chrome can be referenced via `chrome`, `googlechrome`, `google-chrome`, and more, eliminating the need to memorize a single name.
+
+### Smart Typo Suggestion
+
+When an entered command name does not exist, bws will automatically detect similar commands and provide a suggestion to help you quickly correct input errors. For example, entering `bws imfo` will prompt `Did you mean "info"? (similarity: 75%)`.
 
 ## Use Cases
 

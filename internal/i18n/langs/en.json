@@ -1,0 +1,24 @@
+{
+  "root.description": "Browser Version Manager",
+  "root.usage": "Usage:\n  %s <command> [options]",
+  "root.commands": "Available commands:",
+  "root.flags": "Flags:",
+  "root.flag_help": "Show help",
+  "root.flag_version": "Show version",
+  "root.help_line1": "Use '%s <command> --help' for more information about a command.",
+  "root.help_line2": "Use '%s help <topic>' for detailed help.",
+
+  "cmd.usage": "Usage:",
+  "cmd.examples": "Examples:",
+  "cmd.subcommands": "Subcommands:",
+  "cmd.flags": "Flags:",
+  "cmd.default": "default",
+  "cmd.help_line": "Use '%s help %s' for detailed help.",
+
+  "error.unknown_command": "Unknown command: %s",
+  "error.unknown_subcommand": "\"%s\" has no subcommand \"%s\"",
+  "error.typo_suggestion": "Did you mean \"%s\"? (similarity: %d%%)",
+  "error.unknown_option": "Unknown option: %s",
+
+  "confirm.prompt": "%s [y/N]: "
+}

@@ -90,15 +90,26 @@ func availableTopics() string {
 // topicDescription returns a short description for a help topic.
 func topicDescription(name string) string {
 	descriptions := map[string]string{
-		"main":     "主帮助",
-		"ls":       "版本列表查询",
-		"install":  "下载并安装浏览器版本",
-		"repo":     "仓库管理",
-		"serve":    "HTTP 离线下载源服务",
-		"config":   "配置管理",
-		"sources":  "数据源说明",
-		"concepts": "核心概念",
-		"faq":      "常见问题",
+		"main":      "主帮助",
+		"ls":        "版本列表查询",
+		"install":   "下载并安装浏览器版本",
+		"run":       "运行浏览器",
+		"shortcut":  "快捷方式管理",
+		"repo":      "仓库管理",
+		"serve":     "HTTP 离线下载源服务",
+		"config":    "配置管理",
+		"profile":   "Profile 管理",
+		"plugin":    "插件管理",
+		"alias":     "版本别名管理",
+		"cache":     "下载缓存管理",
+		"doctor":    "系统健康检查",
+		"download":  "下载浏览器版本",
+		"uninstall": "卸载浏览器版本",
+		"use":       "设置默认版本",
+		"info":      "显示版本详细信息",
+		"sources":   "数据源说明",
+		"concepts":  "核心概念",
+		"faq":       "常见问题",
 	}
 	if desc, ok := descriptions[name]; ok {
 		return desc

@@ -1,55 +1,10 @@
-# Local Import
+# Local Installation
 
-bws supports importing browser versions from local directories or files, which is suitable for scenarios where you already have browser installation packages or portable versions. This chapter details the various methods and rules for local import.
-
-## Batch Import from Directory
-
-Use the `import` command to batch import browser versions from a specified directory, automatically identifying all recognizable browser files in the directory.
-
-### Basic Usage
-
-```bash
-# Automatically identify all browser versions in the directory
-bws imp /path/to/browsers
-```
-
-### Force Re-import
-
-By default, already installed versions will be skipped. Use the `-f` parameter to force re-import:
-
-```bash
-bws imp /path/to/browsers -f
-```
-
-### Import Process
-
-The import process displays real-time progress, including:
-
-- The file currently being processed
-- The recognized browser name and version
-- Import progress percentage
-- Success/failure status
-
-Unrecognizable files will be prompted immediately, but the overall import process will not be interrupted.
-
-### Example Output
-
-```
-Scanning directory: D:\browsers
-Found 5 files, starting identification...
-
-✓ Chrome_120.0.6099.109_Windows_x64.exe → chrome 120.0.6099.109
-✓ firefox-121.0-win64.zip → firefox 121.0
-✗ unknown_setup.exe → Unable to recognize
-✓ chrome-79.0.3945.79.zip → chrome 79.0.3945.79
-✓ chrome-79.0.3945.79.tar.gz → chrome 79.0.3945.79
-
-Import complete: 4 successful, 1 failed
-```
+bws supports installing browser versions from local directories or files, which is suitable for scenarios where you already have browser installation packages or portable versions. This chapter details the various methods and rules for local installation.
 
 ## Install from Directory
 
-Use the `install -d` command to install from a single directory, suitable for cases where there is only one browser version directory.
+Use the `install -d` command to install from a local directory, automatically identifying the browser version in the directory.
 
 ### Basic Usage
 
@@ -69,27 +24,18 @@ bws i -d /path/to/browser-dir chrome@120
 
 ## Install from File
 
-Use the `install -f` command to install from a single file, supporting both archive and installer formats.
+Use the `install --from-file` command to install from a single file, supporting both archive and installer formats.
 
 ### Basic Usage
 
 ```bash
 # Install from archive (auto-recognition)
-bws i -f /path/to/chrome-setup.exe
-bws i -f /path/to/chrome.zip
+bws i --from-file /path/to/chrome-setup.exe
+bws i --from-file /path/to/chrome.zip
 
 # Specify version number for installation (when filename cannot be recognized)
-bws i -f /path/to/file.exe chrome@120
+bws i --from-file /path/to/file.exe chrome@120
 ```
-
-### Difference from import
-
-| Feature | `import` | `install -d` / `install -f` |
-|---------|----------|---------------------------|
-| Processing quantity | Batch (all files in directory) | Single (one directory or file) |
-| Auto-recognition | Yes | Yes (can be manually specified) |
-| Force re-import | Supports `-f` | Reinstalls every time |
-| Applicable scenarios | Bulk import | Single version installation |
 
 ## Supported File Formats
 
@@ -127,9 +73,11 @@ bws supports zip, 7z, tar.gz, tar.bz2, tar.xz, tar.zst, gz, bz2, xz, zst, exe, d
 | Java JAR | `.jar` | Java archive file (zip-based) |
 | Web WAR | `.war` | Web application archive (zip-based) |
 
+> **Magic Byte Detection**: In addition to file extensions, bws can also detect archive formats by their file header magic bytes. For example, the PK signature for ZIP files, the `7z` signature for 7z files, and so on. Therefore, even if a file lacks the proper extension, bws can still correctly identify and process it based on its file header characteristics.
+
 ### Directory Format
 
-Directories directly containing browser executable files can also be recognized and imported.
+Directories directly containing browser executable files can also be recognized and installed.
 
 ## Filename Auto-Recognition Rules
 
@@ -171,14 +119,14 @@ If a filename or directory name cannot be automatically recognized, you can inst
 
 ### Specify Version for Installation
 
-When using the `install -d` or `install -f` command, append the version identifier at the end:
+When using the `install -d` or `install --from-file` command, append the version identifier at the end:
 
 ```bash
 # Install from directory, manually specify version
 bws i -d /path/to/dir chrome@120
 
 # Install from file, manually specify version
-bws i -f /path/to/file.exe chrome@120
+bws i --from-file /path/to/file.exe chrome@120
 ```
 
 ### Version Identifier Format
@@ -191,7 +139,7 @@ The version identifier format is `browser@version`:
 Examples:
 
 ```bash
-bws i -f ./mystery.exe gc@120.0.6099.109
+bws i --from-file ./mystery.exe gc@120.0.6099.109
 bws i -d ./my-browser ff@115.0esr
 ```
 
@@ -200,7 +148,7 @@ bws i -d ./my-browser ff@115.0esr
 If more precise specification is needed, you can also use other parameters:
 
 ```bash
-bws i -f ./file.exe chrome@120 --channel beta
+bws i --from-file ./file.exe chrome@120 --channel beta
 ```
 
 ### Common Reasons for Unrecognition

@@ -11,7 +11,7 @@ bws supports two types of remote sources:
 Online sources are built-in official download sources for bws, directly obtaining version information and installation packages from the browser vendor's official servers.
 
 - **Chrome**: Obtains version lists and download addresses via the Google Omaha protocol (official update protocol)
-- **Firefox**: Obtains from Mozilla's official FTP/download servers
+- **Firefox**: Obtains version information and download URLs via the Mozilla Product Details API
 - **Other browsers**: Their respective official update channels
 
 Characteristics of online sources:

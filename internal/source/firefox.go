@@ -477,10 +477,13 @@ func mapToMozillaOS(platform Platform, arch Arch) string {
 		}
 		return "win64"
 	case PlatformMacOS:
+		if arch == ArchARM64 {
+			return "osx"
+		}
 		return "osx"
 	case PlatformLinux:
 		if arch == ArchARM64 {
-			return "linux64"
+			return "linux-aarch64"
 		}
 		return "linux64"
 	default:

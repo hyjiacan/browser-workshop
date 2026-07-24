@@ -72,6 +72,7 @@ bws r chrome@120 --plugin hello.py
 | `bws pl list` | 列出已安装插件 |
 | `bws pl install <name\|url\|path>` | 安装插件（本地文件、Registry、Git URL） |
 | `bws pl uninstall <name>` | 卸载插件 |
+| `bws pl update <name>` | 更新插件（仅 registry 来源的插件支持） |
 | `bws pl search <query>` | 搜索 Registry 中的插件 |
 
 **缩写说明：** `pl` 是 `plugin` 的别名，`bws pl l` = `bws plugin list`。
@@ -376,14 +377,45 @@ sequenceDiagram
 
 ### 发布到 Registry
 
+Registry 仓库地址：[gitee.com/hyjiacan/browser-workshop-plugins](https://gitee.com/hyjiacan/browser-workshop-plugins)
+
+#### 步骤 1：准备插件
+
 1. 创建 GitHub/Gitee 仓库，命名如 `bws-plugin-xxx`
-2. 编写插件代码和 README 文档
-3. 发布 Release 版本
-4. 向官方 Registry 提交 PR：在 [registry.json](https://gitee.com/hyjiacan/bws/blob/master/plugins/registry.json) 中添加插件条目
+2. 编写插件代码和 README 文档（说明功能、用法、配置项）
+3. 发布 Release 版本，确保提供可直接下载的文件链接
 
-### Registry 条目格式
+> **许可证声明**：向官方 Registry 提交插件，即表示你同意该插件以 MIT 许可证发布。详见 [browser-workshop-plugins/LICENSE](https://gitee.com/hyjiacan/browser-workshop-plugins/blob/master/LICENSE)。
 
-插件 Registry 是一个 JSON 索引文件，每个插件条目包含以下信息：
+#### 步骤 2：计算文件哈希
+
+为了保证插件文件完整性，建议在 `registry.json` 中提供 SHA256 哈希值。
+
+**Windows：**
+
+```powershell
+Get-FileHash plugin.lua -Algorithm SHA256
+```
+
+**macOS / Linux：**
+
+```bash
+sha256sum plugin.lua
+```
+
+#### 步骤 3：Fork Registry 仓库
+
+1. 访问 [browser-workshop-plugins](https://gitee.com/hyjiacan/browser-workshop-plugins) 并 Fork 到你的账号
+2. 克隆 Fork 后的仓库到本地：
+
+```bash
+git clone https://gitee.com/<你的用户名>/browser-workshop-plugins.git
+cd browser-workshop-plugins
+```
+
+#### 步骤 4：修改 registry.json
+
+在 `registry.json` 的 `plugins` 对象中添加你的插件条目：
 
 ```json
 {
@@ -396,15 +428,50 @@ sequenceDiagram
   "versions": {
     "1.0.0": {
       "url": "https://github.com/.../releases/.../fingerprint-enhanced.lua",
-      "hash": "sha256:...",
-      "platforms": ["all"]
+      "hash": "sha256:..."
     }
   },
   "tags": ["fingerprint", "privacy", "security"]
 }
 ```
 
-Registry 提交后，其他用户即可通过 `bws pl search` 搜索和 `bws pl install fingerprint-enhanced` 安装你的插件。
+**字段说明：**
+
+| 字段 | 必填 | 说明 |
+|------|------|------|
+| `name` | 是 | 插件名称，仅允许小写字母、数字、连字符 |
+| `description` | 是 | 简短描述，建议不超过 100 字 |
+| `author` | 是 | 作者用户名或组织名 |
+| `source` | 是 | 源码仓库地址 |
+| `type` | 是 | `lua`（脚本插件）或 `binary`（IPC 插件） |
+| `latest` | 是 | 最新版本号 |
+| `versions` | 是 | 版本映射，key 为版本号 |
+| `versions[].url` | 是 | 该版本文件的直接下载链接（需公开访问） |
+| `versions[].hash` | 否 | SHA256 哈希值，用于安装时校验完整性 |
+| `tags` | 否 | 标签数组，便于搜索分类 |
+
+#### 步骤 5：提交 PR
+
+```bash
+git add registry.json
+git commit -m "Add plugin: <你的插件名>"
+git push origin master
+```
+
+然后在 Gitee 上提交 Pull Request，标题格式：`Add plugin: <插件名>`。
+
+#### 审核与发布
+
+PR 审核通过后，你的插件将加入官方 Registry。其他用户即可通过以下命令使用：
+
+```bash
+bws pl search <关键词>     # 搜索插件
+bws pl install <插件名>    # 安装插件
+```
+
+#### 更新插件
+
+如需发布新版本，向同一 Fork 提交 PR，在 `versions` 中添加新版本条目并更新 `latest` 字段即可。
 
 ## 限制与注意事项
 

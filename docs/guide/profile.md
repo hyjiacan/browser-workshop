@@ -117,7 +117,11 @@ bws pf list gc
 ### 查看默认 Profile 路径
 
 ```bash
-bws pf path chrome@120
+# 查看默认浏览器的 Profile 路径
+bws pf path
+
+# 查看指定浏览器的 Profile 路径
+bws pf path chrome
 ```
 
 ### 查看命名 Profile 路径
@@ -227,7 +231,7 @@ bws pf clean chrome -f
 |------|------|
 | `bws pf list` | 列出所有 Profile |
 | `bws pf list <browser>` | 列出指定浏览器的 Profile |
-| `bws pf path <browser@version>` | 查看默认 Profile 路径 |
+| `bws pf path [browser]` | 查看默认 Profile 路径 |
 | `bws pf path <browser> <name>` | 查看命名 Profile 路径 |
 | `bws pf reset <browser@version>` | 重置默认 Profile |
 | `bws pf reset <browser@version> <name>` | 重置命名 Profile |

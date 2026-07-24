@@ -3,20 +3,19 @@
 ================================================================================
 
 【命令说明】
-  config 命令用于查看和修改 BWS 的配置项。配置采用分层结构，
-  支持全局配置和用户级配置。
+  config 命令用于查看和修改 bws 的配置项。配置存储在 JSON 文件中，
+  修改后立即生效（部分配置如下次启动生效会特别说明）。
 
 【命令格式】
-  bws config <子命令> [参数]
+  bws cfg <子命令> [参数]
 
 【子命令列表】
   ┌─────────────┬──────────────────────────────────────────────┐
   │ 子命令       │ 说明                                         │
   ├─────────────┼──────────────────────────────────────────────┤
-  │ get         │ 获取指定配置项的值                            │
-  │ set         │ 设置指定配置项的值                            │
-  │ list        │ 列出所有配置项及其当前值                      │
-  │ reset       │ 重置配置项为默认值                            │
+  │ show (ls)   │ 显示所有配置项及其当前值                      │
+  │ get         │ 获取指定配置项的值（无参数时列出所有可读项）  │
+  │ set         │ 设置指定配置项的值（无参数时列出所有可写项）  │
   │ path        │ 显示配置文件路径                              │
   └─────────────┴──────────────────────────────────────────────┘
 
@@ -24,53 +23,56 @@
   ┌──────────────────────┬──────────────┬──────────────────────────────────┐
   │ 配置项               │ 默认值       │ 说明                             │
   ├──────────────────────┼──────────────┼──────────────────────────────────┤
-  │ cache-dir            │ 系统缓存目录 │ 下载文件的缓存目录               │
-  │ install-dir          │ 用户目录     │ 浏览器安装目录                   │
-  │ default-source       │ auto         │ 默认数据源                       │
-  │ source-url           │ -            │ 自定义离线下载源地址             │
-  │ proxy                │ -            │ 代理地址（http/https/socks5）    │
-  │ timeout              │ 300          │ 下载超时时间（秒）               │
-  │ retry                │ 3            │ 下载失败重试次数                 │
-  │ concurrent-downloads │ 3            │ 并行下载任务数                   │
-  │ language             │ zh-CN        │ 界面语言                         │
-  │ log-level            │ info         │ 日志级别                         │
+  │ data-dir             │ 空（便携模式）│ 数据存储目录                     │
+  │ default-browser      │ chrome       │ 默认浏览器                       │
+  │ default-channel      │ stable       │ 默认渠道                         │
+  │ language (lang)      │ 自动检测     │ 界面语言（zh / en）              │
+  │ log-level (log)      │ info         │ 日志级别（debug/info/warn/error）│
+  │ repo-path (repo)     │ 空           │ 本地仓库路径                     │
+  │ source (remote)      │ 空           │ 离线源 URL                       │
+  │ source-serve         │ true         │ Serve 源开关                     │
+  │ source-omaha         │ true         │ Omaha 源开关                     │
+  │ source-firefox-ftp   │ true         │ Firefox 数据源开关（已保留）     │
+  │ disk-threshold       │ 5            │ 磁盘空间告警阈值（GB）           │
+  │ proxy                │ 空           │ 代理地址                         │
   └──────────────────────┴──────────────┴──────────────────────────────────┘
 
 【使用示例】
 
   1. 查看所有配置：
-     bws config list
+     bws cfg show
 
-  2. 获取指定配置项：
-     bws config get cache-dir
+  2. 获取配置项：
+     bws cfg get default-browser
+     bws cfg get log-level
 
   3. 设置配置项：
-     bws config set cache-dir D:\bws-cache
+     bws cfg set default-browser firefox
+     bws cfg set log-level debug
+     bws cfg set source http://server:8080
 
   4. 设置代理：
-     bws config set proxy http://127.0.0.1:7890
+     bws cfg set proxy socks5://127.0.0.1:1080
+     bws cfg set proxy http://proxy.example.com:8080
 
-  5. 设置超时时间：
-     bws config set timeout 600
+  5. 清除代理：
+     bws cfg set proxy none
 
-  6. 重置配置项为默认值：
-     bws config reset cache-dir
+  6. 设置语言：
+     bws cfg set language zh
+     bws cfg set lang en
 
-  7. 查看配置文件路径：
-     bws config path
+  7. 显示配置文件路径：
+     bws cfg path
 
 【配置文件说明】
-  配置文件采用 JSON 格式存储，位于：
-  * Windows: %APPDATA%\bws\config.json
-  * macOS:   ~/Library/Application Support/bws/config.json
-  * Linux:   ~/.config/bws/config.json
+  配置文件采用 JSON 格式存储，位于程序目录（便携模式）或用户目录下。
+  首次运行时会自动创建并引导设置。
 
 【注意事项】
-  * 修改配置后立即生效，无需重启程序。
-  * 设置 source-url 后，默认数据源将自动切换为自定义源。
-  * 代理配置支持 HTTP、HTTPS 和 SOCKS5 协议。
-  * 设置代理后，bws 下载和浏览器启动都会使用该代理。
+  * 修改配置后立即生效，无需重启程序（data-dir 等少数配置需重启）。
+  * 设置 source-url 后，离线源将优先于在线源使用。
+  * 代理配置支持 HTTP、HTTPS、SOCKS5、SOCKS5H 协议。
   * 可通过 --proxy 选项为单次启动指定不同代理，或用 --no-proxy 禁用。
-  * 并发下载数建议不超过 5，以免影响系统性能。
 
 ================================================================================

@@ -90,6 +90,7 @@ func (p *Paths) EnsureAll() error {
 		p.ManifestCacheDir,
 		p.DownloadCacheDir,
 		p.RuntimeDir,
+		filepath.Join(p.Root, "i18n"),
 	}
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0o755); err != nil {

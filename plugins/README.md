@@ -13,10 +13,10 @@ IPC 插件通过 stdin/stdout JSON-RPC 通信，可以用 **任何编程语言**
 
 ## 插件目录
 
-插件存放在以下目录之一：
+插件存放在 bws 数据目录的 `plugins/` 子目录下：
 
-- **便携模式**：`bws-data/plugins/`（与 bws 可执行文件同级）
-- **用户目录**：`~/.bws/plugins/`
+- **便携模式**：`<bws 所在目录>/bws-data/plugins/`
+- **自定义数据目录**：`<data-dir 配置项>/plugins/`
 
 ## 快速开始
 
@@ -173,7 +173,7 @@ end
 
 1. 创建 GitHub/Gitee 仓库，命名如 `bws-plugin-xxx`
 2. 编写插件代码 + README
-3. 向官方 Registry 提交 PR（在 [registry.json](https://gitee.com/hyjiacan/bws/blob/master/plugins/registry.json) 中添加条目）
+3. 向官方 Registry 提交 PR（在 [browser-workshop-plugins](https://gitee.com/hyjiacan/browser-workshop-plugins) 仓库的 `registry.json` 中添加条目）
 
 ## 限制
 
