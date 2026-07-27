@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -214,6 +216,43 @@ func (m *mockInstall) IsSystemVersion(browser, version string) bool {
 	}
 	_, ok = b[version]
 	return ok
+}
+
+func (m *mockInstall) ResolveInstalledVersion(browser, version string) (string, error) {
+	all, _ := m.ListWithSystemByBrowser(browser)
+
+	// Handle "system" special version
+	if version == "system" {
+		for _, v := range all {
+			if v.IsSystem {
+				return v.Version, nil
+			}
+		}
+		return "", fmt.Errorf("未找到 %s 的系统浏览器", browser)
+	}
+
+	// Handle "latest"
+	if version == "latest" {
+		for _, v := range all {
+			return v.Version, nil
+		}
+		return "", fmt.Errorf("%s 没有已安装的版本", browser)
+	}
+
+	// exact match
+	for _, v := range all {
+		if v.Version == version {
+			return version, nil
+		}
+	}
+	// prefix match
+	prefix := version + "."
+	for _, v := range all {
+		if v.Version == version || strings.HasPrefix(v.Version, prefix) {
+			return v.Version, nil
+		}
+	}
+	return "", fmt.Errorf("%s@%s 未安装", browser, version)
 }
 
 func (m *mockInstall) IsInstalled(browser, version string) bool {

@@ -209,6 +209,9 @@ type InstallProvider interface {
 	ListWithSystem() ([]InstalledVersion, error)
 	ListWithSystemByBrowser(browser string) ([]InstalledVersion, error)
 	IsSystemVersion(browser, version string) bool
+	// ResolveInstalledVersion resolves a version spec (exact/partial/alias) to a full installed version.
+	// Supports "126" → "126.0.6478.115", "latest", "system", exact match.
+	ResolveInstalledVersion(browser, version string) (string, error)
 	// ImportFromDir scans a directory and imports all recognized browser versions.
 	// The onProgress callback is called for each item being processed (item index, total, message).
 	ImportFromDir(dir string, force bool, onProgress func(current int, total int, message string)) (*ImportSummary, error)
@@ -404,7 +407,7 @@ func (a *App) Execute(args []string) error {
 		if cmd == a.RootCmd {
 			// Case 1: Unknown top-level command
 			a.printRootHelp()
-			printTypoSuggestion(a.Context.Stderr, remainingArgs[0], candidates)
+			printTypoSuggestion(a.Context.Stderr, remainingArgs[0], candidates, a.RootCmd)
 			return fmt.Errorf("%s", i18n.Tfmt("error.unknown_command", remainingArgs[0]))
 		}
 		// Parent command matched but next arg didn't match any subcommand
@@ -419,7 +422,7 @@ func (a *App) Execute(args []string) error {
 		}
 		// Case 2: Subcommand-only command (no Run), subcommand not found
 		a.printCommandHelp(cmd)
-		printTypoSuggestion(a.Context.Stderr, remainingArgs[0], candidates)
+		printTypoSuggestion(a.Context.Stderr, remainingArgs[0], candidates, cmd)
 		return fmt.Errorf("%s", i18n.Tfmt("error.unknown_subcommand", cmd.Name, remainingArgs[0]))
 	}
 
@@ -439,7 +442,7 @@ func (a *App) Execute(args []string) error {
 	if len(remainingArgs) > 0 && len(cmd.SubCommands) > 0 {
 		a.printCommandHelp(cmd)
 		subCandidates := collectCommandCandidates(cmd)
-		printTypoSuggestion(a.Context.Stderr, remainingArgs[0], subCandidates)
+		printTypoSuggestion(a.Context.Stderr, remainingArgs[0], subCandidates, cmd)
 		return fmt.Errorf("%s", i18n.Tfmt("error.unknown_subcommand", cmd.Name, remainingArgs[0]))
 	}
 

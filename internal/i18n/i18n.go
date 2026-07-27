@@ -148,10 +148,12 @@ func builtinZh() map[string]string {
 		"cmd.default":     "默认",
 		"cmd.help_line":   "使用 '%s help %s' 查看详细帮助。",
 
-		"error.unknown_command":    "未知命令: %s",
-		"error.unknown_subcommand": "\"%s\" 没有子命令 \"%s\"",
-		"error.typo_suggestion":    "你是不是想用 \"%s\"? (相似度: %d%%)",
-		"error.unknown_option":     "未知选项: %s",
+		"error.unknown_command":               "未知命令: %s",
+		"error.unknown_subcommand":            "\"%s\" 没有子命令 \"%s\"",
+		"error.typo_suggestion":               "你是不是想用 \"%s\"? (相似度: %d%%)",
+		"error.typo_suggestion_with_name":     "你是不是想用 \"%s\" (命令: %s)? (相似度: %d%%)",
+		"error.typo_suggestion_with_aliases":  "你是不是想用 \"%s\" (缩写: %s)? (相似度: %d%%)",
+		"error.unknown_option":                "未知选项: %s",
 
 		"confirm.prompt": "%s [是/否]: ",
 	}
@@ -177,10 +179,12 @@ func builtinEn() map[string]string {
 		"cmd.default":     "default",
 		"cmd.help_line":   "Use '%s help %s' for detailed help.",
 
-		"error.unknown_command":    "Unknown command: %s",
-		"error.unknown_subcommand": "\"%s\" has no subcommand \"%s\"",
-		"error.typo_suggestion":    "Did you mean \"%s\"? (similarity: %d%%)",
-		"error.unknown_option":     "Unknown option: %s",
+		"error.unknown_command":               "Unknown command: %s",
+		"error.unknown_subcommand":            "\"%s\" has no subcommand \"%s\"",
+		"error.typo_suggestion":               "Did you mean \"%s\"? (similarity: %d%%)",
+		"error.typo_suggestion_with_name":     "Did you mean \"%s\" (command: %s)? (similarity: %d%%)",
+		"error.typo_suggestion_with_aliases":  "Did you mean \"%s\" (aliases: %s)? (similarity: %d%%)",
+		"error.unknown_option":                "Unknown option: %s",
 
 		"confirm.prompt": "%s [y/N]: ",
 	}

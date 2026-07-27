@@ -19,6 +19,8 @@
   "error.unknown_command": "未知命令: %s",
   "error.unknown_subcommand": "\"%s\" 没有子命令 \"%s\"",
   "error.typo_suggestion": "你是不是想用 \"%s\"? (相似度: %d%%)",
+  "error.typo_suggestion_with_name": "你是不是想用 \"%s\" (命令: %s)? (相似度: %d%%)",
+  "error.typo_suggestion_with_aliases": "你是不是想用 \"%s\" (缩写: %s)? (相似度: %d%%)",
   "error.unknown_option": "未知选项: %s",
 
   "confirm.prompt": "%s [是/否]: "

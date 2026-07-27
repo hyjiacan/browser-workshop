@@ -19,6 +19,8 @@
   "error.unknown_command": "Unknown command: %s",
   "error.unknown_subcommand": "\"%s\" has no subcommand \"%s\"",
   "error.typo_suggestion": "Did you mean \"%s\"? (similarity: %d%%)",
+  "error.typo_suggestion_with_name": "Did you mean \"%s\" (command: %s)? (similarity: %d%%)",
+  "error.typo_suggestion_with_aliases": "Did you mean \"%s\" (aliases: %s)? (similarity: %d%%)",
   "error.unknown_option": "Unknown option: %s",
 
   "confirm.prompt": "%s [y/N]: "

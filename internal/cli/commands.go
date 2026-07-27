@@ -98,8 +98,7 @@ func runLs(ctx *Context, args []string) error {
 	// 解析参数，支持 chrome@79 这样的语法
 	spec := browserVersionSpec{Browser: "", Version: ""}
 	if len(positional) > 0 {
-		spec = parseBrowserVersion(positional[0], "")
-		spec = resolveBrowserSpec(ctx, spec)
+		spec = resolveSpec(ctx, positional[0], "")
 	}
 
 	includeSystem := flags["no-system"] != "true"
@@ -201,8 +200,8 @@ func runLs(ctx *Context, args []string) error {
 }
 
 func runRemoteQuery(ctx *Context, args []string) error {
-	if ctx.Source == nil {
-		return fmt.Errorf("当前构建不支持远程源")
+	if err := checkFeature(ctx.Source, "远程源"); err != nil {
+		return err
 	}
 
 	flagVals, positional, err := ParseFlags(args, []*Flag{
@@ -217,8 +216,7 @@ func runRemoteQuery(ctx *Context, args []string) error {
 	// 解析参数，支持 chrome@79 这样的语法
 	spec := browserVersionSpec{Browser: ctx.Config.DefaultBrowser(), Version: ""}
 	if len(positional) > 0 {
-		spec = parseBrowserVersion(positional[0], ctx.Config.DefaultBrowser())
-		spec = resolveBrowserSpec(ctx, spec)
+		spec = resolveSpec(ctx, positional[0], ctx.Config.DefaultBrowser())
 	}
 
 	channel := flagVals["channel"]
@@ -499,8 +497,7 @@ func runRun(ctx *Context, args []string) error {
 	}
 
 	// Parse browser@version
-	spec := parseBrowserVersion(positional[0], ctx.Config.DefaultBrowser())
-	spec = resolveBrowserSpec(ctx, spec)
+	spec := resolveSpec(ctx, positional[0], ctx.Config.DefaultBrowser())
 	if ctx.Logger != nil {
 		ctx.Logger.Debug("[run] 解析规格: %s@%s (别名=%v)", spec.Browser, spec.Version, spec.IsAlias)
 	}
@@ -632,8 +629,7 @@ func runInstall(ctx *Context, args []string) error {
 
 	spec := browserVersionSpec{Browser: ctx.Config.DefaultBrowser(), Version: "latest", IsAlias: true}
 	if len(positional) > 0 {
-		spec = parseBrowserVersion(positional[0], ctx.Config.DefaultBrowser())
-		spec = resolveBrowserSpec(ctx, spec)
+		spec = resolveSpec(ctx, positional[0], ctx.Config.DefaultBrowser())
 	}
 
 	// Check disk space before any install operation
@@ -817,22 +813,23 @@ func runUninstall(ctx *Context, args []string) error {
 		return fmt.Errorf("请指定要卸载的版本")
 	}
 
-	spec := parseBrowserVersion(args[0], ctx.Config.DefaultBrowser())
-	spec = resolveBrowserSpec(ctx, spec)
+	spec := resolveFirstArg(ctx, args)
 	if ctx.Logger != nil {
 		ctx.Logger.Debug("[uninstall] 解析规格: %s@%s", spec.Browser, spec.Version)
 	}
 
-	if !ctx.Install.IsInstalled(spec.Browser, spec.Version) {
+	// Resolve partial version to full installed version
+	resolvedVersion, err := ctx.Install.ResolveInstalledVersion(spec.Browser, spec.Version)
+	if err != nil {
 		ctx.Printf("%s@%s 未安装\n", spec.Browser, spec.Version)
 		return nil
 	}
 
-	if err := ctx.Install.Uninstall(spec.Browser, spec.Version); err != nil {
+	if err := ctx.Install.Uninstall(spec.Browser, resolvedVersion); err != nil {
 		return fmt.Errorf("卸载失败: %w", err)
 	}
 
-	ctx.Printf("✓ %s@%s 已卸载\n", spec.Browser, spec.Version)
+	ctx.Printf("✓ %s@%s 已卸载\n", spec.Browser, resolvedVersion)
 	return nil
 }
 
@@ -858,33 +855,20 @@ func runUse(ctx *Context, args []string) error {
 		return fmt.Errorf("请指定版本")
 	}
 
-	spec := parseBrowserVersion(args[0], ctx.Config.DefaultBrowser())
-	spec = resolveBrowserSpec(ctx, spec)
+	spec := resolveFirstArg(ctx, args)
 	if ctx.Logger != nil {
 		ctx.Logger.Debug("[use] 设置默认: %s@%s", spec.Browser, spec.Version)
 	}
 
-	// Handle "system" alias
-	if spec.Version == "system" {
-		sysVersions, err := ctx.Install.ListWithSystemByBrowser(spec.Browser)
-		if err != nil {
-			return err
-		}
-		found := false
-		for _, v := range sysVersions {
-			if v.IsSystem && v.Channel == "stable" {
-				spec.Version = v.Version
-				found = true
-				break
-			}
-		}
-		if !found {
-			return fmt.Errorf("未找到系统安装的 %s", spec.Browser)
-		}
+	// Resolve partial / alias versions against installed versions.
+	// Supports "system", "126", "latest", etc.
+	resolvedVersion, err := ctx.Install.ResolveInstalledVersion(spec.Browser, spec.Version)
+	if err != nil {
+		return err
 	}
 
 	// Store as alias "default"
-	target := fmt.Sprintf("%s@%s", spec.Browser, spec.Version)
+	target := fmt.Sprintf("%s@%s", spec.Browser, resolvedVersion)
 	if err := ctx.Config.AddAlias("default", target); err != nil {
 		return err
 	}
@@ -1025,8 +1009,8 @@ func runRepoSet(ctx *Context, args []string) error {
 }
 
 func runRepoScan(ctx *Context, args []string) error {
-	if ctx.Repo == nil {
-		return fmt.Errorf("当前构建不支持仓库功能")
+	if err := checkFeature(ctx.Repo, "仓库"); err != nil {
+		return err
 	}
 
 	path := ctx.Config.GetRepoPath()
@@ -1079,8 +1063,8 @@ func runRepoScan(ctx *Context, args []string) error {
 }
 
 func runRepoImport(ctx *Context, args []string) error {
-	if ctx.Repo == nil {
-		return fmt.Errorf("当前构建不支持仓库功能")
+	if err := checkFeature(ctx.Repo, "仓库"); err != nil {
+		return err
 	}
 
 	flags, _, err := ParseFlags(args, []*Flag{
@@ -1151,85 +1135,59 @@ func runInfo(ctx *Context, args []string) error {
 		return fmt.Errorf("请指定版本，例如 'bws show chrome@120'")
 	}
 
-	spec := parseBrowserVersion(args[0], ctx.Config.DefaultBrowser())
-	spec = resolveBrowserSpec(ctx, spec)
+	spec := resolveFirstArg(ctx, args)
 	if ctx.Logger != nil {
 		ctx.Logger.Debug("[info] 查询: %s@%s", spec.Browser, spec.Version)
 	}
 
-	// Check if it's installed
-	if ctx.Install.IsInstalled(spec.Browser, spec.Version) {
-		record, err := ctx.Install.GetRecord(spec.Browser, spec.Version)
-		if err != nil {
-			return fmt.Errorf("获取记录失败: %w", err)
+	// Resolve partial / alias versions against installed + system versions.
+	// Supports "126" → "126.0.6478.115", "76" → "76.0.1", etc.
+	resolvedVersion, localErr := ctx.Install.ResolveInstalledVersion(spec.Browser, spec.Version)
+	if localErr == nil {
+		// Local version found — show installed or system info
+		isSystem := ctx.Install.IsSystemVersion(spec.Browser, resolvedVersion)
+		if record, err := ctx.Install.GetRecord(spec.Browser, resolvedVersion); err == nil && !isSystem {
+			ctx.Printf("%s@%s\n", record.Browser, record.Version)
+			ctx.Printf("  平台:         %s\n", record.Platform)
+			ctx.Printf("  架构:         %s\n", record.Arch)
+			ctx.Printf("  安装时间:     %s\n", record.InstalledAt)
+			ctx.Printf("  来源:         %s\n", record.Source)
+			ctx.Printf("  安装目录:     %s\n", record.InstallDir)
+			ctx.Printf("  可执行文件:   %s\n", record.ExecutablePath)
+		} else {
+			// System version
+			ctx.Printf("%s@%s\n", spec.Browser, resolvedVersion)
+			ctx.Printf("  类型:     系统安装\n")
+			if versions, err := ctx.Install.ListWithSystemByBrowser(spec.Browser); err == nil {
+				for _, v := range versions {
+					if v.Version == resolvedVersion {
+						ctx.Printf("  渠道:     %s\n", v.Channel)
+						break
+					}
+				}
+			}
 		}
 
-		ctx.Printf("%s@%s\n", record.Browser, record.Version)
-		ctx.Printf("  平台:         %s\n", record.Platform)
-		ctx.Printf("  架构:         %s\n", record.Arch)
-		ctx.Printf("  安装时间:     %s\n", record.InstalledAt)
-		ctx.Printf("  来源:         %s\n", record.Source)
-		ctx.Printf("  安装目录:     %s\n", record.InstallDir)
-		ctx.Printf("  可执行文件:   %s\n", record.ExecutablePath)
+		// Check remote for update
+		if ctx.Source != nil {
+			if versionInfo, err := ctx.Source.ResolveVersion(spec.Browser, spec.Version); err == nil && versionInfo.Version != "" && versionInfo.Version != resolvedVersion {
+				ctx.Printf("\n%s@%s（远程更新可用）\n", versionInfo.Browser, versionInfo.Version)
+				ctx.Printf("  渠道:         %s\n", versionInfo.Channel)
+				ctx.Printf("  平台:         %s\n", versionInfo.Platform)
+				ctx.Printf("  架构:         %s\n", versionInfo.Arch)
+				if versionInfo.DownloadURL != "" {
+					ctx.Printf("  下载链接:     %s\n", versionInfo.DownloadURL)
+				}
+				ctx.Printf("\n  使用 'bws i %s@%s' 升级到此版本。\n", spec.Browser, versionInfo.Version)
+			}
+		}
 		return nil
 	}
 
-	// Check if it's a system version
-	if ctx.Install.IsSystemVersion(spec.Browser, spec.Version) {
-		versions, err := ctx.Install.ListWithSystemByBrowser(spec.Browser)
-		if err != nil {
-			return err
-		}
-		for _, v := range versions {
-			if v.Version == spec.Version {
-				ctx.Printf("%s@%s\n", v.Browser, v.Version)
-				ctx.Printf("  类型:     系统安装\n")
-				ctx.Printf("  渠道:     %s\n", v.Channel)
-				return nil
-			}
-		}
-	}
-
-	// When spec.Version is a partial prefix (e.g. "126"), also search installed+system versions
-	// for prefix matches before falling back to remote.
-	installedPrefix := systemPrefixMatch(ctx, spec.Browser, spec.Version)
-
-	// Try to resolve from remote source
-	var remoteVersion string
+	// Not installed locally — try remote source
 	if ctx.Source != nil {
 		versionInfo, err := ctx.Source.ResolveVersion(spec.Browser, spec.Version)
 		if err == nil && versionInfo.Version != "" {
-			remoteVersion = versionInfo.Version
-
-			// If same version is already installed (via prefix match), show installed + remote details
-			if len(installedPrefix) > 0 {
-				// Show installed versions first
-				for _, iv := range installedPrefix {
-					tag := ""
-					if iv.IsSystem {
-						tag = " [系统]"
-					}
-					ctx.Printf("%s@%s%s\n", iv.Browser, iv.Version, tag)
-					if iv.Channel != "" {
-						ctx.Printf("  渠道:         %s\n", iv.Channel)
-					}
-				}
-				ctx.Println()
-
-				// Show remote version only if different
-				if installedPrefix[0].Version != remoteVersion {
-					ctx.Printf("%s@%s（远程更新可用）\n", versionInfo.Browser, versionInfo.Version)
-					ctx.Printf("  渠道:         %s\n", versionInfo.Channel)
-					ctx.Printf("  平台:         %s\n", versionInfo.Platform)
-					ctx.Printf("  架构:         %s\n", versionInfo.Arch)
-					if versionInfo.DownloadURL != "" {
-						ctx.Printf("  下载链接:     %s\n", versionInfo.DownloadURL)
-					}
-					ctx.Printf("\n  使用 'bws i %s@%s' 升级到此版本。\n", spec.Browser, versionInfo.Version)
-				}
-				return nil
-			}
-
 			ctx.Printf("%s@%s（远程）\n", versionInfo.Browser, versionInfo.Version)
 			ctx.Printf("  渠道:         %s\n", versionInfo.Channel)
 			ctx.Printf("  平台:         %s\n", versionInfo.Platform)
@@ -1242,37 +1200,7 @@ func runInfo(ctx *Context, args []string) error {
 		}
 	}
 
-	// No remote match but we found installed prefix matches
-	if len(installedPrefix) > 0 {
-		for _, iv := range installedPrefix {
-			tag := ""
-			if iv.IsSystem {
-				tag = " [系统]"
-			}
-			ctx.Printf("%s@%s%s\n", iv.Browser, iv.Version, tag)
-			if iv.Channel != "" {
-				ctx.Printf("  渠道:         %s\n", iv.Channel)
-			}
-		}
-		return nil
-	}
-
 	return fmt.Errorf("%s@%s 未找到（未安装且远程源中也不可用）", spec.Browser, spec.Version)
-}
-
-// systemPrefixMatch returns installed and system versions whose version starts with prefix.
-func systemPrefixMatch(ctx *Context, browser, prefix string) []InstalledVersion {
-	versions, err := ctx.Install.ListWithSystemByBrowser(browser)
-	if err != nil {
-		return nil
-	}
-	var matches []InstalledVersion
-	for _, v := range versions {
-		if strings.HasPrefix(v.Version, prefix) {
-			matches = append(matches, v)
-		}
-	}
-	return matches
 }
 
 // --- list-remote command ---
@@ -1411,8 +1339,7 @@ func runDownload(ctx *Context, args []string) error {
 		return fmt.Errorf("请指定要下载的版本，例如 'bws dl chrome@120'")
 	}
 
-	spec := parseBrowserVersion(args[0], ctx.Config.DefaultBrowser())
-	spec = resolveBrowserSpec(ctx, spec)
+	spec := resolveFirstArg(ctx, args)
 	channel := "stable"
 	outputDir := ""
 
@@ -2200,8 +2127,7 @@ func runProfileReset(ctx *Context, args []string) error {
 		return fmt.Errorf("请指定浏览器版本，例如 'bws pf reset chrome@120'")
 	}
 
-	spec := parseBrowserVersion(positional[0], ctx.Config.DefaultBrowser())
-	spec = resolveBrowserSpec(ctx, spec)
+	spec := resolveSpec(ctx, positional[0], ctx.Config.DefaultBrowser())
 
 	profileName := ""
 	if len(positional) > 1 {
@@ -2386,8 +2312,8 @@ func runServe(ctx *Context, args []string) error {
 
 	baseDir := flags["dir"]
 
-	if ctx.Serve == nil {
-		return fmt.Errorf("当前构建不支持 serve 功能")
+	if err := checkFeature(ctx.Serve, "serve"); err != nil {
+		return err
 	}
 
 	if ctx.Logger != nil {
@@ -2461,6 +2387,30 @@ func parseBrowserVersion(input string, defaultBrowser string) browserVersionSpec
 
 	// Treat as browser name
 	return browserVersionSpec{Browser: input, Version: "latest", IsAlias: true}
+}
+
+// resolveSpec parses input and resolves browser name aliases.
+// This is the canonical entry point shared by all commands.
+func resolveSpec(ctx *Context, input string, defaultBrowser string) browserVersionSpec {
+	spec := parseBrowserVersion(input, defaultBrowser)
+	return resolveBrowserSpec(ctx, spec)
+}
+
+// resolveFirstArg resolves the first positional argument as a browser@version spec.
+// Uses the configured default browser when no browser name is given.
+func resolveFirstArg(ctx *Context, args []string) browserVersionSpec {
+	if len(args) > 0 {
+		return resolveSpec(ctx, args[0], ctx.Config.DefaultBrowser())
+	}
+	return browserVersionSpec{Browser: ctx.Config.DefaultBrowser(), Version: "latest", IsAlias: true}
+}
+
+// checkFeature returns an error if the given provider is nil, indicating the build doesn't support this feature.
+func checkFeature(provider interface{}, name string) error {
+	if provider == nil {
+		return fmt.Errorf("当前构建不支持%s功能", name)
+	}
+	return nil
 }
 
 func isVersionAlias(v string) bool {

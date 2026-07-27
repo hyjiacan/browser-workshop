@@ -182,12 +182,38 @@ func collectCommandCandidates(cmd *Command) []string {
 	return names
 }
 
-// printTypoSuggestion 在输出中打印 typo 建议
-func printTypoSuggestion(w io.Writer, input string, candidates []string) {
+// lookupCommandByNameOrAlias 在 cmd 的子命令树中查找 Name 或 Alias 匹配的命令。
+func lookupCommandByNameOrAlias(cmd *Command, name string) *Command {
+	for _, sub := range cmd.SubCommands {
+		if sub.Name == name {
+			return sub
+		}
+		for _, alias := range sub.Aliases {
+			if alias == name {
+				return sub
+			}
+		}
+	}
+	return nil
+}
+
+// printTypoSuggestion 在输出中打印 typo 建议，同时显示别名和缩写信息。
+func printTypoSuggestion(w io.Writer, input string, candidates []string, parentCmd *Command) {
 	suggestion, score := suggestCommand(input, candidates)
 	// 阈值：相似度低于 0.35 不推荐
 	if suggestion != "" && score >= 0.35 {
-		fmt.Fprintf(w, "\n%s\n", i18n.Tfmt("error.typo_suggestion", suggestion, int(score*100)))
+		// 查找建议的命令是否在子命令树中，并收集别名信息
+		cmd := lookupCommandByNameOrAlias(parentCmd, suggestion)
+		if cmd != nil && cmd.Name != suggestion {
+			// 用户可能输入了别名，提示对应的完整命令名
+			fmt.Fprintf(w, "\n%s\n", i18n.Tfmt("error.typo_suggestion_with_name", suggestion, cmd.Name, int(score*100)))
+		} else if cmd != nil && len(cmd.Aliases) > 0 {
+			// 建议是命令名，显示其别名/缩写
+			aliasList := strings.Join(cmd.Aliases, ", ")
+			fmt.Fprintf(w, "\n%s\n", i18n.Tfmt("error.typo_suggestion_with_aliases", suggestion, aliasList, int(score*100)))
+		} else {
+			fmt.Fprintf(w, "\n%s\n", i18n.Tfmt("error.typo_suggestion", suggestion, int(score*100)))
+		}
 	}
 }
 

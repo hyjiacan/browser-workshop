@@ -726,6 +726,10 @@ func (a *installAdapter) IsSystemVersion(browser, version string) bool {
 	return a.mgr.IsSystemVersion(browser, version)
 }
 
+func (a *installAdapter) ResolveInstalledVersion(browser, version string) (string, error) {
+	return a.mgr.ResolveInstalledVersion(browser, version)
+}
+
 func (a *installAdapter) ImportFromDir(dir string, force bool, onProgress func(current int, total int, message string)) (*cli.ImportSummary, error) {
 	if a.scanner == nil {
 		return nil, fmt.Errorf("scanner not available")
