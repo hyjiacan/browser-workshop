@@ -1190,10 +1190,46 @@ func runInfo(ctx *Context, args []string) error {
 		}
 	}
 
+	// When spec.Version is a partial prefix (e.g. "126"), also search installed+system versions
+	// for prefix matches before falling back to remote.
+	installedPrefix := systemPrefixMatch(ctx, spec.Browser, spec.Version)
+
 	// Try to resolve from remote source
+	var remoteVersion string
 	if ctx.Source != nil {
 		versionInfo, err := ctx.Source.ResolveVersion(spec.Browser, spec.Version)
 		if err == nil && versionInfo.Version != "" {
+			remoteVersion = versionInfo.Version
+
+			// If same version is already installed (via prefix match), show installed + remote details
+			if len(installedPrefix) > 0 {
+				// Show installed versions first
+				for _, iv := range installedPrefix {
+					tag := ""
+					if iv.IsSystem {
+						tag = " [系统]"
+					}
+					ctx.Printf("%s@%s%s\n", iv.Browser, iv.Version, tag)
+					if iv.Channel != "" {
+						ctx.Printf("  渠道:         %s\n", iv.Channel)
+					}
+				}
+				ctx.Println()
+
+				// Show remote version only if different
+				if installedPrefix[0].Version != remoteVersion {
+					ctx.Printf("%s@%s（远程更新可用）\n", versionInfo.Browser, versionInfo.Version)
+					ctx.Printf("  渠道:         %s\n", versionInfo.Channel)
+					ctx.Printf("  平台:         %s\n", versionInfo.Platform)
+					ctx.Printf("  架构:         %s\n", versionInfo.Arch)
+					if versionInfo.DownloadURL != "" {
+						ctx.Printf("  下载链接:     %s\n", versionInfo.DownloadURL)
+					}
+					ctx.Printf("\n  使用 'bws i %s@%s' 升级到此版本。\n", spec.Browser, versionInfo.Version)
+				}
+				return nil
+			}
+
 			ctx.Printf("%s@%s（远程）\n", versionInfo.Browser, versionInfo.Version)
 			ctx.Printf("  渠道:         %s\n", versionInfo.Channel)
 			ctx.Printf("  平台:         %s\n", versionInfo.Platform)
@@ -1206,7 +1242,37 @@ func runInfo(ctx *Context, args []string) error {
 		}
 	}
 
+	// No remote match but we found installed prefix matches
+	if len(installedPrefix) > 0 {
+		for _, iv := range installedPrefix {
+			tag := ""
+			if iv.IsSystem {
+				tag = " [系统]"
+			}
+			ctx.Printf("%s@%s%s\n", iv.Browser, iv.Version, tag)
+			if iv.Channel != "" {
+				ctx.Printf("  渠道:         %s\n", iv.Channel)
+			}
+		}
+		return nil
+	}
+
 	return fmt.Errorf("%s@%s 未找到（未安装且远程源中也不可用）", spec.Browser, spec.Version)
+}
+
+// systemPrefixMatch returns installed and system versions whose version starts with prefix.
+func systemPrefixMatch(ctx *Context, browser, prefix string) []InstalledVersion {
+	versions, err := ctx.Install.ListWithSystemByBrowser(browser)
+	if err != nil {
+		return nil
+	}
+	var matches []InstalledVersion
+	for _, v := range versions {
+		if strings.HasPrefix(v.Version, prefix) {
+			matches = append(matches, v)
+		}
+	}
+	return matches
 }
 
 // --- list-remote command ---
