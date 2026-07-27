@@ -359,9 +359,11 @@ func (s *HTTPSource) Resolve(ctx context.Context, browser string, version string
 	}
 
 	// Prefix match - find the latest matching version
+	// Use "." separator to avoid "12" matching "120.x.x.x"
+	prefix := version + "."
 	var matches []VersionInfo
 	for _, v := range versions {
-		if strings.HasPrefix(v.Version, version) {
+		if strings.HasPrefix(v.Version, prefix) {
 			matches = append(matches, v)
 		}
 	}

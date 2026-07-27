@@ -302,11 +302,23 @@ func (s *FirefoxSource) Resolve(ctx context.Context, browser string, version str
 		}
 	}
 
-	// Try prefix match
+	// Try prefix match — collect all matches and return the highest.
+	// Use "." separator to avoid "12" matching "120.x".
+	prefix := version + "."
+	var matches []VersionInfo
 	for _, v := range list {
-		if strings.HasPrefix(v.Version, version) {
-			return v, nil
+		if strings.HasPrefix(v.Version, prefix) {
+			matches = append(matches, v)
 		}
+	}
+	if len(matches) > 0 {
+		latest := matches[0]
+		for _, v := range matches[1:] {
+			if compareVersions(v.Version, latest.Version) > 0 {
+				latest = v
+			}
+		}
+		return latest, nil
 	}
 
 	return VersionInfo{}, fmt.Errorf("firefox version %s not found", version)
