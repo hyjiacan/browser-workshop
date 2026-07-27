@@ -929,15 +929,16 @@ func listBinFiles(binDir string) []binFile {
 func detectPlatformArch(filename string) (string, string) {
 	lower := strings.ToLower(filename)
 
-	// Platform detection
+	// Platform detection — specific patterns first, then generic.
+	// "darwin" contains substring "win", so darwin/macos must be checked before windows.
 	platform := "unknown"
 	switch {
-	case strings.Contains(lower, ".exe") || strings.Contains(lower, "win"):
-		platform = "windows"
-	case strings.Contains(lower, "mac") || strings.Contains(lower, "darwin") || strings.Contains(lower, "macos"):
+	case strings.Contains(lower, "darwin") || strings.Contains(lower, "macos") || strings.Contains(lower, "_mac") || strings.Contains(lower, "-mac"):
 		platform = "macos"
 	case strings.Contains(lower, "linux"):
 		platform = "linux"
+	case strings.Contains(lower, ".exe") || strings.Contains(lower, "win") || strings.Contains(lower, "windows"):
+		platform = "windows"
 	}
 
 	// Arch detection
@@ -945,9 +946,9 @@ func detectPlatformArch(filename string) (string, string) {
 	switch {
 	case strings.Contains(lower, "arm64") || strings.Contains(lower, "aarch64"):
 		arch = "arm64"
-	case strings.Contains(lower, "x64") || strings.Contains(lower, "amd64") || strings.Contains(lower, "64"):
+	case strings.Contains(lower, "x86_64") || strings.Contains(lower, "amd64") || strings.Contains(lower, "x64"):
 		arch = "x64"
-	case strings.Contains(lower, "x86") || strings.Contains(lower, "386") || strings.Contains(lower, "32"):
+	case strings.Contains(lower, "x86") || strings.Contains(lower, "i386") || strings.Contains(lower, "386"):
 		arch = "x86"
 	}
 
