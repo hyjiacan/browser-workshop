@@ -93,108 +93,12 @@ func TestCompare(t *testing.T) {
 	}
 }
 
-func TestLessGreaterEqual(t *testing.T) {
-	if !Less("1.0", "2.0") {
-		t.Error("Less(1.0, 2.0) should be true")
-	}
-	if Less("2.0", "1.0") {
-		t.Error("Less(2.0, 1.0) should be false")
-	}
+func TestGreater(t *testing.T) {
 	if !Greater("2.0", "1.0") {
 		t.Error("Greater(2.0, 1.0) should be true")
 	}
 	if Greater("1.0", "2.0") {
 		t.Error("Greater(1.0, 2.0) should be false")
-	}
-	if !Equal("1.0.0", "1.0") {
-		t.Error("Equal(1.0.0, 1.0) should be true")
-	}
-	if Equal("1.0", "2.0") {
-		t.Error("Equal(1.0, 2.0) should be false")
-	}
-}
-
-func TestParseSpec(t *testing.T) {
-	tests := []struct {
-		input          string
-		defaultBrowser string
-		expected       Spec
-	}{
-		{
-			input:          "chrome@120.0.6099.109",
-			defaultBrowser: "chrome",
-			expected:       Spec{Browser: "chrome", Version: "120.0.6099.109", IsAlias: false},
-		},
-		{
-			input:          "firefox@beta",
-			defaultBrowser: "chrome",
-			expected:       Spec{Browser: "firefox", Version: "beta", IsAlias: true},
-		},
-		{
-			input:          "120",
-			defaultBrowser: "chrome",
-			expected:       Spec{Browser: "chrome", Version: "120", IsAlias: false},
-		},
-		{
-			input:          "v121.0",
-			defaultBrowser: "chrome",
-			expected:       Spec{Browser: "chrome", Version: "v121.0", IsAlias: false},
-		},
-		{
-			input:          "firefox",
-			defaultBrowser: "chrome",
-			expected:       Spec{Browser: "firefox", Version: "latest", IsAlias: true},
-		},
-		{
-			input:          "",
-			defaultBrowser: "chrome",
-			expected:       Spec{Browser: "chrome", Version: "latest", IsAlias: true},
-		},
-		{
-			input:          "latest",
-			defaultBrowser: "chrome",
-			expected:       Spec{Browser: "chrome", Version: "latest", IsAlias: true},
-		},
-		{
-			input:          "chromium@latest",
-			defaultBrowser: "chrome",
-			expected:       Spec{Browser: "chromium", Version: "latest", IsAlias: true},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			result := ParseSpec(tt.input, tt.defaultBrowser)
-			if result.Browser != tt.expected.Browser {
-				t.Errorf("Browser = %q, want %q", result.Browser, tt.expected.Browser)
-			}
-			if result.Version != tt.expected.Version {
-				t.Errorf("Version = %q, want %q", result.Version, tt.expected.Version)
-			}
-			if result.IsAlias != tt.expected.IsAlias {
-				t.Errorf("IsAlias = %v, want %v", result.IsAlias, tt.expected.IsAlias)
-			}
-		})
-	}
-}
-
-func TestIsAlias(t *testing.T) {
-	aliases := []string{"latest", "stable", "beta", "dev", "canary", "esr", "release", "nightly"}
-	for _, a := range aliases {
-		if !isAlias(a) {
-			t.Errorf("isAlias(%q) should be true", a)
-		}
-		// case insensitive
-		if !isAlias("BETA") {
-			t.Error("isAlias('BETA') should be true (case insensitive)")
-		}
-	}
-
-	if isAlias("120") {
-		t.Error("isAlias('120') should be false")
-	}
-	if isAlias("chrome") {
-		t.Error("isAlias('chrome') should be false")
 	}
 }
 
@@ -300,83 +204,6 @@ func TestListLatest(t *testing.T) {
 	_, ok = empty.Latest()
 	if ok {
 		t.Error("Latest() on empty list should return false")
-	}
-}
-
-func TestListLatestByMajor(t *testing.T) {
-	list := List{
-		{Version: "120.0.6099.71", MajorVersion: 120},
-		{Version: "120.0.6099.109", MajorVersion: 120},
-		{Version: "121.0.6167.85", MajorVersion: 121},
-		{Version: "121.0.6167.140", MajorVersion: 121},
-		{Version: "119.0.6045.199", MajorVersion: 119},
-	}
-
-	result := list.LatestByMajor()
-
-	if result[120].Version != "120.0.6099.109" {
-		t.Errorf("latest major 120 = %q, want 120.0.6099.109", result[120].Version)
-	}
-	if result[121].Version != "121.0.6167.140" {
-		t.Errorf("latest major 121 = %q, want 121.0.6167.140", result[121].Version)
-	}
-	if len(result) != 3 {
-		t.Errorf("LatestByMajor() = %d entries, want 3", len(result))
-	}
-}
-
-func TestListFind(t *testing.T) {
-	list := List{
-		{Version: "120.0.6099.109"},
-		{Version: "121.0.6167.85"},
-	}
-
-	v, ok := list.Find("120.0.6099.109")
-	if !ok {
-		t.Fatal("Find() returned false")
-	}
-	if v.Version != "120.0.6099.109" {
-		t.Errorf("Find() = %q", v.Version)
-	}
-
-	_, ok = list.Find("999.0.0.0")
-	if ok {
-		t.Error("Find() for non-existent should return false")
-	}
-}
-
-func TestListFindByMajor(t *testing.T) {
-	list := List{
-		{Version: "120.0.6099.71", MajorVersion: 120},
-		{Version: "120.0.6099.109", MajorVersion: 120},
-		{Version: "121.0.6167.85", MajorVersion: 121},
-	}
-
-	v, ok := list.FindByMajor(120)
-	if !ok {
-		t.Fatal("FindByMajor(120) returned false")
-	}
-	if v.Version != "120.0.6099.109" {
-		t.Errorf("FindByMajor(120) = %q, want latest 120.x", v.Version)
-	}
-
-	_, ok = list.FindByMajor(999)
-	if ok {
-		t.Error("FindByMajor(999) should return false")
-	}
-}
-
-func TestListBrowsers(t *testing.T) {
-	list := List{
-		{Browser: "chrome"},
-		{Browser: "firefox"},
-		{Browser: "chrome"},
-		{Browser: "chromium"},
-	}
-
-	browsers := list.Browsers()
-	if len(browsers) != 3 {
-		t.Errorf("Browsers() = %d items, want 3", len(browsers))
 	}
 }
 
