@@ -159,7 +159,7 @@ func systemBrowserToVersion(sb system.BrowserInfo) version.Version {
 		Version:      sb.Version,
 		MajorVersion: version.Major(sb.Version),
 		Channel:      sb.Channel,
-		Platform:     platformFromArch(sb.Architecture),
+		Platform:     currentPlatform(),
 		Arch:         sb.Architecture,
 		Source:       "system",
 		IsSystem:     true,
@@ -173,7 +173,7 @@ func systemBrowserToRecord(sb system.BrowserInfo) *version.InstallRecord {
 	return &version.InstallRecord{
 		Browser:        sb.Browser,
 		Version:        sb.Version,
-		Platform:       platformFromArch(sb.Architecture),
+		Platform:       currentPlatform(),
 		Arch:           sb.Architecture,
 		InstallDir:     sb.InstallPath,
 		ExecutablePath: execRel,
@@ -183,9 +183,7 @@ func systemBrowserToRecord(sb system.BrowserInfo) *version.InstallRecord {
 	}
 }
 
-// platformFromArch returns the current platform string.
-// Since system detection runs on the current machine, the platform is always
-// the current OS.
-func platformFromArch(arch string) string {
+// currentPlatform returns the current runtime platform string.
+func currentPlatform() string {
 	return runtime.GOOS
 }

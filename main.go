@@ -143,7 +143,19 @@ func main() {
 	// Create CLI context
 	ctx := cli.DefaultContext()
 	ctx.Paths = &pathsAdapter{p: p}
-	ctx.Config = &configAdapter{cfg: cfg, configPath: configPath, dataDir: dataDir}
+	ca := &configAdapter{cfg: cfg, configPath: configPath, dataDir: dataDir}
+	ctx.Config = ca
+	ctx.Cfg = &cli.Settings{
+		Aliases:  ca,
+		Repo:     ca,
+		Defaults: ca,
+		Data:     ca,
+		Proxy:    ca,
+		Source:   ca,
+		Disk:     ca,
+		Log:      ca,
+		Language: ca,
+	}
 	ctx.Browsers = &browserAdapter{reg: browser.DefaultRegistry}
 
 	// Create a shared scanner for import functionality (always available)
@@ -201,13 +213,13 @@ func resolvePaths() (configPath string, dataRoot string, isNew bool) {
 		return configPath, dataDir, true
 	}
 
-	// Fallback: ~/.bm
+	// Fallback: ~/.bws
 	home, err := os.UserHomeDir()
 	if err != nil {
 		wd, _ := os.Getwd()
 		home = wd
 	}
-	dataRoot = filepath.Join(home, ".bm")
+	dataRoot = filepath.Join(home, ".bws")
 	configPath = filepath.Join(dataRoot, "config.json")
 
 	// Check if config exists
@@ -218,16 +230,20 @@ func resolvePaths() (configPath string, dataRoot string, isNew bool) {
 	return configPath, dataRoot, true
 }
 
-// parseGlobalVerbose checks os.Args for --verbose / -V and removes them.
+// parseGlobalVerbose checks os.Args for --verbose / -V and removes all of them.
 // Returns true if verbose mode is enabled.
 func parseGlobalVerbose() bool {
-	for i, arg := range os.Args {
+	verbose := false
+	keep := make([]string, 0, len(os.Args))
+	for _, arg := range os.Args {
 		if arg == "--verbose" || arg == "-V" {
-			os.Args = append(os.Args[:i], os.Args[i+1:]...)
-			return true
+			verbose = true
+			continue
 		}
+		keep = append(keep, arg)
 	}
-	return false
+	os.Args = keep
+	return verbose
 }
 
 // firstTimeSetup runs the first-time setup wizard.

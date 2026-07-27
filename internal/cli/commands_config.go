@@ -1,0 +1,247 @@
+package cli
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+func runConfigShow(ctx *Context, args []string) error {
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[config] 显示配置: path=%s", ctx.Config.ConfigPath())
+	}
+	ctx.Printf("配置信息：\n\n")
+	ctx.Printf("  配置文件:       %s\n", ctx.Config.ConfigPath())
+	ctx.Printf("  数据目录:       %s\n", ctx.Config.GetDataDir())
+	ctx.Printf("  默认浏览器:     %s\n", ctx.Config.DefaultBrowser())
+	ctx.Printf("  默认渠道:       %s\n", ctx.Config.DefaultChannel())
+	ctx.Printf("  日志级别:       %s\n", ctx.Config.GetLogLevel())
+	ctx.Printf("  仓库路径:       %s\n", ctx.Config.GetRepoPath())
+	ctx.Printf("\n  数据源开关:\n")
+	ctx.Printf("    Serve 源:     %s\n", boolStr(ctx.Config.IsServeSourceEnabled()))
+	ctx.Printf("    Omaha 源:     %s\n", boolStr(ctx.Config.IsOmahaSourceEnabled()))
+	ctx.Printf("    Firefox FTP:  %s\n", boolStr(ctx.Config.IsFirefoxFTPEnabled()))
+	ctx.Printf("\n  磁盘空间阈值:   %d GB (低于此值会提示)\n", ctx.Config.GetDiskSpaceThresholdGB())
+
+	proxy := ctx.Config.GetProxy()
+	if proxy == "" {
+		ctx.Printf("  代理:           (未设置，直连)\n")
+	} else {
+		ctx.Printf("  代理:           %s\n", proxy)
+	}
+
+	lang := ctx.Config.GetLanguage()
+	if lang == "" {
+		ctx.Printf("  界面语言:       (自动检测)\n")
+	} else {
+		ctx.Printf("  界面语言:       %s\n", lang)
+	}
+
+	aliases := ctx.Config.ListAliases()
+	if len(aliases) > 0 {
+		ctx.Printf("\n  别名:\n")
+		for name, target := range aliases {
+			ctx.Printf("    %s -> %s\n", name, target)
+		}
+	}
+	return nil
+}
+
+func runConfigGet(ctx *Context, args []string) error {
+	if len(args) == 0 {
+		printConfigKeyList(ctx.Stdout, readableConfigKeys(), false)
+		return nil
+	}
+
+	key := strings.ToLower(args[0])
+	switch key {
+	case "default-browser", "default", "browser":
+		ctx.Println(ctx.Config.DefaultBrowser())
+	case "default-channel", "channel":
+		ctx.Println(ctx.Config.DefaultChannel())
+	case "log-level", "log":
+		ctx.Println(ctx.Config.GetLogLevel())
+	case "data-dir", "datadir", "data":
+		ctx.Println(ctx.Config.GetDataDir())
+	case "repo-path", "repo":
+		ctx.Println(ctx.Config.GetRepoPath())
+	case "source", "remote-source", "remote":
+		src := ctx.Config.GetRemoteSource()
+		if src == "" {
+			ctx.Println("（未设置）")
+		} else {
+			ctx.Println(src)
+		}
+	case "source-serve", "serve-source":
+		ctx.Println(boolStr(ctx.Config.IsServeSourceEnabled()))
+	case "source-omaha", "omaha-source":
+		ctx.Println(boolStr(ctx.Config.IsOmahaSourceEnabled()))
+	case "source-firefox-ftp", "firefox-ftp":
+		ctx.Println(boolStr(ctx.Config.IsFirefoxFTPEnabled()))
+	case "disk-threshold", "disk-space-threshold", "space-threshold":
+		ctx.Printf("%d GB\n", ctx.Config.GetDiskSpaceThresholdGB())
+	case "proxy":
+		p := ctx.Config.GetProxy()
+		if p == "" {
+			ctx.Println("(未设置)")
+		} else {
+			ctx.Println(p)
+		}
+	case "language", "lang":
+		lang := ctx.Config.GetLanguage()
+		if lang == "" {
+			ctx.Println("(自动检测)")
+		} else {
+			ctx.Println(lang)
+		}
+	case "path", "config-path", "config":
+		ctx.Println(ctx.Config.ConfigPath())
+	default:
+		// Try alias
+		if alias, ok := ctx.Config.GetAlias(args[0]); ok {
+			ctx.Println(alias)
+			return nil
+		}
+		return fmt.Errorf("未知的配置键: %s。使用 'bws cfg get' 查看可用配置项。", args[0])
+	}
+	return nil
+}
+
+func runConfigSet(ctx *Context, args []string) error {
+	if len(args) == 0 {
+		printConfigKeyList(ctx.Stdout, writableConfigKeys(), true)
+		return nil
+	}
+	if len(args) < 2 {
+		printConfigKeyList(ctx.Stdout, writableConfigKeys(), true)
+		return fmt.Errorf("请提供配置值")
+	}
+
+	key := strings.ToLower(args[0])
+	value := args[1]
+
+	switch key {
+	case "default-browser", "default", "browser":
+		if !ctx.Browsers.Has(value) {
+			return fmt.Errorf("未知的浏览器: %s", value)
+		}
+		if err := ctx.Config.SetDefaultBrowser(value); err != nil {
+			return fmt.Errorf("设置默认浏览器失败: %w", err)
+		}
+		ctx.Printf("默认浏览器已设置为: %s\n", value)
+
+	case "default-channel", "channel":
+		validChannels := map[string]bool{"stable": true, "beta": true, "dev": true, "canary": true, "esr": true}
+		if !validChannels[strings.ToLower(value)] {
+			return fmt.Errorf("无效的渠道: %s（必须是 stable、beta、dev、canary 或 esr）", value)
+		}
+		if err := ctx.Config.SetDefaultChannel(value); err != nil {
+			return fmt.Errorf("设置默认渠道失败: %w", err)
+		}
+		ctx.Printf("默认渠道已设置为: %s\n", value)
+
+	case "log-level", "log":
+		level := strings.ToLower(value)
+		validLevels := map[string]bool{"debug": true, "info": true, "warn": true, "warning": true, "error": true}
+		if !validLevels[level] {
+			return fmt.Errorf("无效的日志级别: %s（必须是 debug、info、warn 或 error）", value)
+		}
+		if err := ctx.Config.SetLogLevel(level); err != nil {
+			return fmt.Errorf("设置日志级别失败: %w", err)
+		}
+		ctx.Printf("日志级别已设置为: %s\n", level)
+
+	case "data-dir", "datadir", "data":
+		if err := ctx.Config.SetDataDir(value); err != nil {
+			return fmt.Errorf("设置数据目录失败: %w", err)
+		}
+		ctx.Printf("数据目录已设置为: %s\n", value)
+		ctx.Printf("注意: 重启 bws 后生效。\n")
+
+	case "repo-path", "repo":
+		if err := ctx.Config.SetRepoPath(value); err != nil {
+			return fmt.Errorf("设置仓库路径失败: %w", err)
+		}
+		ctx.Printf("仓库路径已设置为: %s\n", value)
+
+	case "source", "remote-source", "remote":
+		if err := ctx.Config.SetRemoteSource(value); err != nil {
+			return fmt.Errorf("设置离线源失败: %w", err)
+		}
+		ctx.Printf("离线源已设置为: %s\n", value)
+		ctx.Println("优先级: 离线源 → 在线源（离线源优先）")
+
+	case "source-serve", "serve-source":
+		enabled := parseBool(value)
+		if err := ctx.Config.SetServeSourceEnabled(enabled); err != nil {
+			return fmt.Errorf("设置 Serve 源开关失败: %w", err)
+		}
+		if enabled {
+			ctx.Println("Serve 源已启用")
+		} else {
+			ctx.Println("Serve 源已禁用")
+		}
+
+	case "source-omaha", "omaha-source":
+		enabled := parseBool(value)
+		if err := ctx.Config.SetOmahaSourceEnabled(enabled); err != nil {
+			return fmt.Errorf("设置 Omaha 源开关失败: %w", err)
+		}
+		if enabled {
+			ctx.Println("Omaha 源已启用")
+		} else {
+			ctx.Println("Omaha 源已禁用")
+		}
+
+	case "source-firefox-ftp", "firefox-ftp":
+		enabled := parseBool(value)
+		if err := ctx.Config.SetFirefoxFTPEnabled(enabled); err != nil {
+			return fmt.Errorf("设置 Firefox FTP 源开关失败: %w", err)
+		}
+		if enabled {
+			ctx.Println("Firefox FTP 源已启用")
+		} else {
+			ctx.Println("Firefox FTP 源已禁用")
+		}
+
+	case "disk-threshold", "disk-space-threshold", "space-threshold":
+		gb, err := strconv.Atoi(value)
+		if err != nil || gb <= 0 {
+			return fmt.Errorf("无效的磁盘阈值: %s（必须为正整数）", value)
+		}
+		if err := ctx.Config.SetDiskSpaceThresholdGB(gb); err != nil {
+			return fmt.Errorf("设置磁盘阈值失败: %w", err)
+		}
+		ctx.Printf("磁盘空间阈值已设置为 %d GB\n", gb)
+
+	case "proxy":
+		if strings.ToLower(value) == "none" || value == "" {
+			if err := ctx.Config.SetProxy(""); err != nil {
+				return fmt.Errorf("清除代理设置失败: %w", err)
+			}
+			ctx.Println("代理已清除（直连模式）。")
+		} else {
+			if err := validateProxyURL(value); err != nil {
+				return err
+			}
+			if err := ctx.Config.SetProxy(value); err != nil {
+				return fmt.Errorf("设置代理失败: %w", err)
+			}
+			ctx.Printf("代理已设置为: %s\n", value)
+		}
+
+	case "language", "lang":
+		value = strings.ToLower(value)
+		if value != "zh" && value != "en" {
+			return fmt.Errorf("不支持的语言: %s（支持 zh、en）", value)
+		}
+		if err := ctx.Config.SetLanguage(value); err != nil {
+			return fmt.Errorf("设置语言失败: %w", err)
+		}
+		ctx.Printf("界面语言已设置为: %s\n", value)
+
+	default:
+		return fmt.Errorf("未知的配置项: %s。使用 'bws cfg set' 查看可设置项。", args[0])
+	}
+	return nil
+}

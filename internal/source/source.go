@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+
+	"github.com/bws/bws/internal/version"
 )
 
 // newTransportWithProxy creates an http.Transport with the given proxy.
@@ -381,29 +383,7 @@ func applyDefaults(filter *Filter) *Filter {
 
 // compareVersions compares two version strings.
 // Returns 1 if a > b, -1 if a < b, 0 if equal.
+// Delegates to version.Compare for a single consistent implementation.
 func compareVersions(a, b string) int {
-	aParts := strings.Split(a, ".")
-	bParts := strings.Split(b, ".")
-
-	maxLen := len(aParts)
-	if len(bParts) > maxLen {
-		maxLen = len(bParts)
-	}
-
-	for i := 0; i < maxLen; i++ {
-		var aNum, bNum int
-		if i < len(aParts) {
-			fmt.Sscanf(aParts[i], "%d", &aNum)
-		}
-		if i < len(bParts) {
-			fmt.Sscanf(bParts[i], "%d", &bNum)
-		}
-		if aNum > bNum {
-			return 1
-		}
-		if aNum < bNum {
-			return -1
-		}
-	}
-	return 0
+	return version.Compare(a, b)
 }

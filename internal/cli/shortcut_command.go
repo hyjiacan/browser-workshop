@@ -122,7 +122,7 @@ func runShortcutCreate(ctx *Context, args []string) error {
 	}
 
 	// Single shortcut
-	spec := resolveSpec(ctx, positional[0], ctx.Config.DefaultBrowser())
+	spec := resolveSpec(ctx, positional[0], ctx.Cfg.Defaults.DefaultBrowser())
 
 	ver, err := ctx.Install.ResolveInstalledVersion(spec.Browser, spec.Version)
 	if err != nil {
@@ -148,7 +148,7 @@ func createOneShortcut(ctx *Context, browser, version, profileName string, nativ
 		Version:     version,
 		ProfileName: profileName,
 		NativeMode:  native,
-		Proxy:       ctx.Config.GetProxy(),
+		Proxy:       ctx.Cfg.Proxy.GetProxy(),
 	}
 
 	exePath, args, err := ctx.Launch.PreviewCommand(opts)

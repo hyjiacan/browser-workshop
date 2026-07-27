@@ -358,12 +358,25 @@ func setupTestApp(t *testing.T) (*App, *bytes.Buffer, *mockInstall, *mockLaunch)
 
 	launcher := &mockLaunch{}
 
+	cfg := &mockConfig{
+		defaultBrowser: "chrome",
+		aliases:        map[string]string{"stable": "chrome@120.0.6099.109"},
+	}
+
 	ctx := &Context{
 		Stdout: &buf,
 		Stderr: &buf,
-		Config: &mockConfig{
-			defaultBrowser: "chrome",
-			aliases:        map[string]string{"stable": "chrome@120.0.6099.109"},
+		Config: cfg,
+		Cfg: &Settings{
+			Aliases:  cfg,
+			Repo:     cfg,
+			Defaults: cfg,
+			Data:     cfg,
+			Proxy:    cfg,
+			Source:   cfg,
+			Disk:     cfg,
+			Log:      cfg,
+			Language: cfg,
 		},
 		Browsers: &mockBrowsers{
 			list: []BrowserDescriptor{
@@ -627,9 +640,9 @@ func TestCompareVersions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.a+"_vs_"+tt.b, func(t *testing.T) {
-			result := compareVersions(tt.a, tt.b)
+			result := version.Compare(tt.a, tt.b)
 			if result != tt.want {
-				t.Errorf("compareVersions(%q, %q) = %d, want %d", tt.a, tt.b, result, tt.want)
+				t.Errorf("version.Compare(%q, %q) = %d, want %d", tt.a, tt.b, result, tt.want)
 			}
 		})
 	}

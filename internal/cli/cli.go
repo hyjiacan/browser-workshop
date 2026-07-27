@@ -43,7 +43,8 @@ type Context struct {
 	Stderr   io.Writer
 	Stdin    io.Reader
 	Paths    PathsProvider
-	Config   ConfigProvider
+	Config   ConfigProvider // full config (kept for backward compatibility)
+	Cfg      *Settings      // role-based config interfaces (preferred)
 	Browsers BrowserProvider
 	Install  InstallProvider
 	Profile  ProfileProvider
@@ -109,59 +110,102 @@ type PluginProvider interface {
 	PluginsDir() string
 }
 
-// ConfigProvider provides configuration.
-type ConfigProvider interface {
-	// Basic settings
-	DefaultBrowser() string
-	SetDefaultBrowser(browser string) error
-	DefaultChannel() string
-	SetDefaultChannel(channel string) error
+// ---- Role-based config interfaces (ISP-compliant) ----
 
-	// Repository
-	GetRepoPath() string
-	SetRepoPath(path string) error
-
-	// Aliases
+// AliasManager manages browser version aliases.
+type AliasManager interface {
 	GetAlias(name string) (string, bool)
 	AddAlias(name, target string) error
 	RemoveAlias(name string) error
 	ListAliases() map[string]string
+}
 
-	// Logging
-	GetLogLevel() string
-	SetLogLevel(level string) error
+// RepoSettings manages the local binary repository path.
+type RepoSettings interface {
+	GetRepoPath() string
+	SetRepoPath(path string) error
+}
 
-	// Data directory
+// DefaultSettings manages default browser and channel.
+type DefaultSettings interface {
+	DefaultBrowser() string
+	SetDefaultBrowser(browser string) error
+	DefaultChannel() string
+	SetDefaultChannel(channel string) error
+}
+
+// AppDataConfig manages data directory and config path.
+type AppDataConfig interface {
 	GetDataDir() string
 	SetDataDir(path string) error
+	ConfigPath() string
+}
 
-	// Remote source (custom HTTP source for bws serve)
+// ProxySettings manages proxy configuration.
+type ProxySettings interface {
+	GetProxy() string
+	SetProxy(proxy string) error
+}
+
+// SourceSettings manages remote source URL and source-type toggles.
+type SourceSettings interface {
 	GetRemoteSource() string
 	SetRemoteSource(url string) error
 	ClearRemoteSource() error
-
-	// Source switches
 	IsServeSourceEnabled() bool
 	SetServeSourceEnabled(v bool) error
 	IsOmahaSourceEnabled() bool
 	SetOmahaSourceEnabled(v bool) error
 	IsFirefoxFTPEnabled() bool
 	SetFirefoxFTPEnabled(v bool) error
+}
 
-	// Disk space
+// DiskSpaceSettings manages the free-disk-space threshold (GB).
+type DiskSpaceSettings interface {
 	GetDiskSpaceThresholdGB() int
 	SetDiskSpaceThresholdGB(v int) error
+}
 
-	// Proxy
-	GetProxy() string
-	SetProxy(proxy string) error
+// LogSettings manages log-level configuration.
+type LogSettings interface {
+	GetLogLevel() string
+	SetLogLevel(level string) error
+}
 
-	// Language
+// LangSettings manages the UI language.
+type LangSettings interface {
 	GetLanguage() string
 	SetLanguage(lang string) error
+}
 
-	// File path
-	ConfigPath() string
+// Settings groups the fine-grained config interfaces together.
+// A single ConfigProvider implementation can satisfy every field,
+// or individual mocks/stubs can be injected independently in tests.
+type Settings struct {
+	Aliases  AliasManager
+	Repo     RepoSettings
+	Defaults DefaultSettings
+	Data     AppDataConfig
+	Proxy    ProxySettings
+	Source   SourceSettings
+	Disk     DiskSpaceSettings
+	Log      LogSettings
+	Language LangSettings
+}
+
+// ConfigProvider is the full configuration interface, composing all
+// role-based interfaces. Prefer the smaller interfaces when a command
+// only needs a subset of configuration — use ctx.Cfg.* instead.
+type ConfigProvider interface {
+	AliasManager
+	RepoSettings
+	DefaultSettings
+	AppDataConfig
+	ProxySettings
+	SourceSettings
+	DiskSpaceSettings
+	LogSettings
+	LangSettings
 }
 
 // BrowserProvider provides browser descriptors.
