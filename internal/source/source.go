@@ -261,6 +261,7 @@ func (m *MultiSource) Latest(ctx context.Context, filter *Filter) (VersionInfo, 
 
 // Resolve finds a specific version from any relevant source.
 func (m *MultiSource) Resolve(ctx context.Context, browser string, version string, platform Platform, arch Arch) (VersionInfo, error) {
+	version = normalizeVersionAlias(browser, version)
 	sources := m.sourcesForBrowser(browser)
 	for _, src := range sources {
 		v, err := src.Resolve(ctx, browser, version, platform, arch)
@@ -269,6 +270,70 @@ func (m *MultiSource) Resolve(ctx context.Context, browser string, version strin
 		}
 	}
 	return VersionInfo{}, fmt.Errorf("version %s@%s not found in any source", browser, version)
+}
+
+// normalizeVersionAlias maps user-facing version aliases to the canonical form
+// understood by each browser's underlying source. This provides a unified
+// user experience: all aliases (latest, stable, beta, dev, canary, nightly,
+// esr, release) work consistently regardless of which Source handles the
+// request. Sources keep their own alias parsing as-is; this layer only
+// fills the gaps where a source does not recognize a particular alias.
+func normalizeVersionAlias(browser, version string) string {
+	v := strings.TrimSpace(version)
+
+	// Empty version means "latest"
+	if v == "" {
+		return "latest"
+	}
+
+	// If it's not a known alias, pass through as-is (version number or prefix)
+	if !isKnownVersionAlias(v) {
+		return v
+	}
+
+	v = strings.ToLower(v)
+	b := strings.ToLower(browser)
+
+	switch b {
+	case "chrome", "chromium":
+		// ChromeSource/OmahaSource already handle: latest, stable, beta, dev, canary
+		switch v {
+		case "release":
+			return "stable" // "release" is synonymous with "stable"
+		case "nightly", "esr":
+			return "latest" // Chrome has no nightly or ESR channels
+		}
+
+	case "firefox":
+		// FirefoxSource already handles: latest, beta, dev, devedition, esr, nightly
+		switch v {
+		case "stable", "release":
+			return "latest" // Firefox "stable" is just "latest"
+		case "canary":
+			return "latest" // Firefox uses "nightly", not "canary"
+		}
+
+	default:
+		// All other browsers (edge, brave, opera, etc.)
+		// These are served by HTTPSource which doesn't support channel aliases.
+		// Map every alias to "latest" (HTTPSource returns the highest version).
+		if v != "latest" {
+			return "latest"
+		}
+	}
+
+	return v
+}
+
+// isKnownVersionAlias reports whether s is a user-facing version alias
+// as opposed to a version number or prefix.
+func isKnownVersionAlias(s string) bool {
+	switch strings.ToLower(s) {
+	case "latest", "stable", "beta", "dev", "canary",
+		"esr", "release", "nightly", "devedition":
+		return true
+	}
+	return false
 }
 
 // CurrentPlatform returns the current platform.
