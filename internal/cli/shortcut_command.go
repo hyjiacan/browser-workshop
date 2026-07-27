@@ -90,18 +90,6 @@ func runShortcutCreate(ctx *Context, args []string) error {
 			all, profileName, native, customName)
 	}
 
-	// Resolve version if needed
-	resolveVersion := func(browser, ver string) (string, error) {
-		if isVersionAlias(ver) {
-			resolved, err := ctx.Source.ResolveVersion(browser, ver)
-			if err != nil {
-				return "", fmt.Errorf("解析版本失败: %w", err)
-			}
-			return resolved.Version, nil
-		}
-		return ver, nil
-	}
-
 	if all {
 		// Create shortcuts for all installed versions
 		installed, err := ctx.Install.ListInstalled()
@@ -115,18 +103,12 @@ func runShortcutCreate(ctx *Context, args []string) error {
 
 		var created int
 		for _, rec := range installed {
-			ver, err := resolveVersion(rec.Browser, rec.Version)
-			if err != nil {
-				fmt.Fprintf(ctx.Stderr, "  跳过 %s@%s: %v\n", rec.Browser, rec.Version, err)
-				continue
-			}
-
 			name := customName
 			if name == "" {
-				name = fmt.Sprintf("%s %s", rec.Browser, ver)
+				name = fmt.Sprintf("%s %s", rec.Browser, rec.Version)
 			}
 
-			if err := createOneShortcut(ctx, rec.Browser, ver, profileName, native, name); err != nil {
+			if err := createOneShortcut(ctx, rec.Browser, rec.Version, profileName, native, name); err != nil {
 				fmt.Fprintf(ctx.Stderr, "  创建 %s 快捷方式失败: %v\n", name, err)
 				continue
 			}
@@ -138,13 +120,9 @@ func runShortcutCreate(ctx *Context, args []string) error {
 	}
 
 	// Single shortcut
-	defaultBrowser := ""
-	if ctx.Config != nil {
-		defaultBrowser = ctx.Config.DefaultBrowser()
-	}
-	spec := parseBrowserVersion(positional[0], defaultBrowser)
+	spec := resolveSpec(ctx, positional[0], ctx.Config.DefaultBrowser())
 
-	ver, err := resolveVersion(spec.Browser, spec.Version)
+	ver, err := ctx.Install.ResolveInstalledVersion(spec.Browser, spec.Version)
 	if err != nil {
 		return err
 	}

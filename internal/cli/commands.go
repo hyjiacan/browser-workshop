@@ -502,33 +502,9 @@ func runRun(ctx *Context, args []string) error {
 		ctx.Logger.Debug("[run] 解析规格: %s@%s (别名=%v)", spec.Browser, spec.Version, spec.IsAlias)
 	}
 
-	// Handle "system" alias → resolve to system browser version
-	if spec.Version == "system" {
-		sysVersions, err := ctx.Install.ListWithSystemByBrowser(spec.Browser)
-		if err != nil {
-			return err
-		}
-		found := false
-		for _, v := range sysVersions {
-			if v.IsSystem && v.Channel == "stable" {
-				spec.Version = v.Version
-				found = true
-				break
-			}
-		}
-		if !found {
-			// Fallback to any system version
-			for _, v := range sysVersions {
-				if v.IsSystem {
-					spec.Version = v.Version
-					found = true
-					break
-				}
-			}
-		}
-		if !found {
-			return fmt.Errorf("未找到系统安装的 %s", spec.Browser)
-		}
+	// Resolve alias / partial versions (e.g. "system", "latest", "126") uniformly.
+	if resolvedVersion, err := ctx.Install.ResolveInstalledVersion(spec.Browser, spec.Version); err == nil {
+		spec.Version = resolvedVersion
 	}
 
 	// URLs from remaining positional args (before --)
@@ -2134,12 +2110,10 @@ func runProfileReset(ctx *Context, args []string) error {
 		profileName = positional[1]
 	}
 
-	// 解析版本别名（仅对默认 profile 有意义）
+	// 解析版本别名（仅对默认 profile 有意义）。优先用 ResolveInstalledVersion 统一解析。
 	if spec.IsAlias && spec.Version != "system" && profileName == "" {
-		resolved, err := ctx.Install.ListInstalledByBrowser(spec.Browser)
-		if err == nil && len(resolved) > 0 {
-			// 使用最新版本
-			spec.Version = resolved[0].Version
+		if v, err := ctx.Install.ResolveInstalledVersion(spec.Browser, spec.Version); err == nil {
+			spec.Version = v
 		}
 		// 如果无法解析，继续使用别名作为版本名（profile 目录可能已存在）
 	}
