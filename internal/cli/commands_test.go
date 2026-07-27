@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/bws/bws/internal/version"
 )
 
 // Mock providers for testing
@@ -140,35 +142,36 @@ func (m *mockBrowsers) ResolveName(name string) (string, bool) {
 }
 
 type mockInstall struct {
-	installed map[string]map[string]InstalledVersion // browser -> version -> record
-	system    map[string]map[string]InstalledVersion // system browsers
+	records map[string]map[string]*version.InstallRecord // browser -> version -> record
+	system  map[string]map[string]version.Version        // system browsers
 }
 
 func newMockInstall() *mockInstall {
 	return &mockInstall{
-		installed: make(map[string]map[string]InstalledVersion),
-		system:    make(map[string]map[string]InstalledVersion),
+		records: make(map[string]map[string]*version.InstallRecord),
+		system:  make(map[string]map[string]version.Version),
 	}
 }
 
-func (m *mockInstall) add(browser, version string, size int64) {
-	if m.installed[browser] == nil {
-		m.installed[browser] = make(map[string]InstalledVersion)
+func (m *mockInstall) add(browser, ver string, size int64) {
+	if m.records[browser] == nil {
+		m.records[browser] = make(map[string]*version.InstallRecord)
 	}
-	m.installed[browser][version] = InstalledVersion{
+	m.records[browser][ver] = &version.InstallRecord{
 		Browser: browser,
-		Version: version,
+		Version: ver,
 		Size:    size,
+		Source:  "test",
 	}
 }
 
-func (m *mockInstall) addSystem(browser, version, channel string) {
+func (m *mockInstall) addSystem(browser, ver, channel string) {
 	if m.system[browser] == nil {
-		m.system[browser] = make(map[string]InstalledVersion)
+		m.system[browser] = make(map[string]version.Version)
 	}
-	m.system[browser][version] = InstalledVersion{
+	m.system[browser][ver] = version.Version{
 		Browser:  browser,
-		Version:  version,
+		Version:  ver,
 		Channel:  channel,
 		IsSystem: true,
 		Source:   "system",
@@ -179,11 +182,11 @@ func (m *mockInstall) HasSystem() bool {
 	return len(m.system) > 0
 }
 
-func (m *mockInstall) ListWithSystem() ([]InstalledVersion, error) {
-	var result []InstalledVersion
-	for _, b := range m.installed {
-		for _, v := range b {
-			result = append(result, v)
+func (m *mockInstall) ListWithSystem() (version.List, error) {
+	var result version.List
+	for _, b := range m.records {
+		for _, r := range b {
+			result = append(result, r.ToVersion())
 		}
 	}
 	for _, b := range m.system {
@@ -194,11 +197,11 @@ func (m *mockInstall) ListWithSystem() ([]InstalledVersion, error) {
 	return result, nil
 }
 
-func (m *mockInstall) ListWithSystemByBrowser(browser string) ([]InstalledVersion, error) {
-	var result []InstalledVersion
-	if b, ok := m.installed[browser]; ok {
-		for _, v := range b {
-			result = append(result, v)
+func (m *mockInstall) ListWithSystemByBrowser(browser string) (version.List, error) {
+	var result version.List
+	if b, ok := m.records[browser]; ok {
+		for _, r := range b {
+			result = append(result, r.ToVersion())
 		}
 	}
 	if b, ok := m.system[browser]; ok {
@@ -209,20 +212,20 @@ func (m *mockInstall) ListWithSystemByBrowser(browser string) ([]InstalledVersio
 	return result, nil
 }
 
-func (m *mockInstall) IsSystemVersion(browser, version string) bool {
+func (m *mockInstall) IsSystemVersion(browser, ver string) bool {
 	b, ok := m.system[browser]
 	if !ok {
 		return false
 	}
-	_, ok = b[version]
+	_, ok = b[ver]
 	return ok
 }
 
-func (m *mockInstall) ResolveInstalledVersion(browser, version string) (string, error) {
+func (m *mockInstall) ResolveInstalledVersion(browser, ver string) (string, error) {
 	all, _ := m.ListWithSystemByBrowser(browser)
 
 	// Handle "system" special version
-	if version == "system" {
+	if ver == "system" {
 		for _, v := range all {
 			if v.IsSystem {
 				return v.Version, nil
@@ -232,7 +235,7 @@ func (m *mockInstall) ResolveInstalledVersion(browser, version string) (string, 
 	}
 
 	// Handle "latest"
-	if version == "latest" {
+	if ver == "latest" {
 		for _, v := range all {
 			return v.Version, nil
 		}
@@ -241,92 +244,86 @@ func (m *mockInstall) ResolveInstalledVersion(browser, version string) (string, 
 
 	// exact match
 	for _, v := range all {
-		if v.Version == version {
-			return version, nil
+		if v.Version == ver {
+			return ver, nil
 		}
 	}
 	// prefix match
-	prefix := version + "."
+	prefix := ver + "."
 	for _, v := range all {
-		if v.Version == version || strings.HasPrefix(v.Version, prefix) {
+		if v.Version == ver || strings.HasPrefix(v.Version, prefix) {
 			return v.Version, nil
 		}
 	}
-	return "", fmt.Errorf("%s@%s 未安装", browser, version)
+	return "", fmt.Errorf("%s@%s 未安装", browser, ver)
 }
 
-func (m *mockInstall) IsInstalled(browser, version string) bool {
-	b, ok := m.installed[browser]
+func (m *mockInstall) IsInstalled(browser, ver string) bool {
+	b, ok := m.records[browser]
 	if !ok {
 		return false
 	}
-	_, ok = b[version]
+	_, ok = b[ver]
 	return ok
 }
 
-func (m *mockInstall) ListInstalled() ([]InstalledVersion, error) {
-	var result []InstalledVersion
-	for _, b := range m.installed {
-		for _, v := range b {
-			result = append(result, v)
+func (m *mockInstall) ListInstalled() (version.List, error) {
+	var result version.List
+	for _, b := range m.records {
+		for _, r := range b {
+			result = append(result, r.ToVersion())
 		}
 	}
 	return result, nil
 }
 
-func (m *mockInstall) ListInstalledByBrowser(browser string) ([]InstalledVersion, error) {
-	b, ok := m.installed[browser]
+func (m *mockInstall) ListInstalledByBrowser(browser string) (version.List, error) {
+	b, ok := m.records[browser]
 	if !ok {
 		return nil, nil
 	}
-	var result []InstalledVersion
-	for _, v := range b {
-		result = append(result, v)
+	var result version.List
+	for _, r := range b {
+		result = append(result, r.ToVersion())
 	}
 	return result, nil
 }
 
-func (m *mockInstall) GetRecord(browser, version string) (*InstallRecord, error) {
-	if m.IsInstalled(browser, version) {
-		return &InstallRecord{
-			Browser: browser,
-			Version: version,
-			Size:    m.installed[browser][version].Size,
-		}, nil
+func (m *mockInstall) GetRecord(browser, ver string) (*version.InstallRecord, error) {
+	if b, ok := m.records[browser]; ok {
+		if r, ok := b[ver]; ok {
+			return r, nil
+		}
 	}
-	return nil, nil
+	return nil, fmt.Errorf("not found")
 }
 
-func (m *mockInstall) Uninstall(browser, version string) error {
-	if b, ok := m.installed[browser]; ok {
-		delete(b, version)
+func (m *mockInstall) Uninstall(browser, ver string) error {
+	if b, ok := m.records[browser]; ok {
+		delete(b, ver)
 	}
 	return nil
 }
 
-func (m *mockInstall) InstallFromDir(browser, version, sourceDir string) (*InstallRecord, error) {
-	rec := &InstallRecord{
+func (m *mockInstall) InstallFromDir(browser, ver, sourceDir string) (*version.InstallRecord, error) {
+	rec := &version.InstallRecord{
 		Browser: browser,
-		Version: version,
+		Version: ver,
 		Size:    1024 * 1024,
 		Source:  "test",
 	}
-	if m.installed == nil {
-		m.installed = make(map[string]map[string]InstalledVersion)
+	if m.records == nil {
+		m.records = make(map[string]map[string]*version.InstallRecord)
 	}
-	if m.installed[browser] == nil {
-		m.installed[browser] = make(map[string]InstalledVersion)
+	if m.records[browser] == nil {
+		m.records[browser] = make(map[string]*version.InstallRecord)
 	}
-	m.installed[browser][version] = InstalledVersion{
-		Browser: browser,
-		Version: version,
-		Size:    rec.Size,
-	}
+	m.records[browser][ver] = rec
 	return rec, nil
 }
 
-func (m *mockInstall) InstallFromFile(browser, version, filePath string) (*InstallRecord, error) {
-	return m.InstallFromDir(browser, version, "")
+func (m *mockInstall) InstallFromFile(browser, ver, filePath string) (*version.InstallRecord, error) {
+	return m.InstallFromDir(browser, ver, "")
 }
 
 func (m *mockInstall) ImportFromDir(dir string, force bool, onProgress func(current int, total int, message string)) (*ImportSummary, error) {
@@ -874,7 +871,7 @@ func TestIsVersionAlias_System(t *testing.T) {
 }
 
 func TestInstalledVersion_IsSystem(t *testing.T) {
-	v := InstalledVersion{
+	v := version.Version{
 		Browser:  "chrome",
 		Version:  "125.0.0.0",
 		IsSystem: true,

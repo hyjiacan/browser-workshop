@@ -8,7 +8,12 @@ import (
 	"strings"
 
 	"github.com/bws/bws/internal/i18n"
+	"github.com/bws/bws/internal/install"
 	"github.com/bws/bws/internal/plugin"
+	"github.com/bws/bws/internal/repo"
+	"github.com/bws/bws/internal/shortcut"
+	"github.com/bws/bws/internal/source"
+	"github.com/bws/bws/internal/version"
 )
 
 // Command represents a CLI command.
@@ -85,28 +90,8 @@ type Logger interface {
 
 // RepoProvider provides repository scanning and importing.
 type RepoProvider interface {
-	Scan() ([]RepoScanResult, error)
-	Import(force bool, onProgress func(int, int, string)) (*RepoImportSummary, error)
-}
-
-// RepoScanResult is a simplified view of a scanned repository entry.
-type RepoScanResult struct {
-	Path    string
-	Browser string
-	Version string
-	Arch    string
-	Status  string
-	Detail  string
-}
-
-// RepoImportSummary is a simplified view of an import summary.
-type RepoImportSummary struct {
-	Total                  int
-	Success                int
-	Failed                 int
-	Skipped                int
-	SkippedIncompatible    int
-	SkippedAlreadyInstalled int
+	Scan() ([]repo.MatchResult, error)
+	Import(force bool, onProgress func(int, int, string)) (*repo.ImportSummary, error)
 }
 
 // PathsProvider provides path management.
@@ -196,18 +181,18 @@ type BrowserDescriptor struct {
 // InstallProvider provides installation management.
 type InstallProvider interface {
 	IsInstalled(browser, version string) bool
-	ListInstalled() ([]InstalledVersion, error)
-	ListInstalledByBrowser(browser string) ([]InstalledVersion, error)
-	GetRecord(browser, version string) (*InstallRecord, error)
+	ListInstalled() (version.List, error)
+	ListInstalledByBrowser(browser string) (version.List, error)
+	GetRecord(browser, version string) (*version.InstallRecord, error)
 	Uninstall(browser, version string) error
 	// Install from a local directory
-	InstallFromDir(browser, version, sourceDir string) (*InstallRecord, error)
+	InstallFromDir(browser, version, sourceDir string) (*version.InstallRecord, error)
 	// Install from a local archive file
-	InstallFromFile(browser, version, filePath string) (*InstallRecord, error)
+	InstallFromFile(browser, version, filePath string) (*version.InstallRecord, error)
 	// System browser support
 	HasSystem() bool
-	ListWithSystem() ([]InstalledVersion, error)
-	ListWithSystemByBrowser(browser string) ([]InstalledVersion, error)
+	ListWithSystem() (version.List, error)
+	ListWithSystemByBrowser(browser string) (version.List, error)
 	IsSystemVersion(browser, version string) bool
 	// ResolveInstalledVersion resolves a version spec (exact/partial/alias) to a full installed version.
 	// Supports "126" → "126.0.6478.115", "latest", "system", exact match.
@@ -237,29 +222,6 @@ type ImportError struct {
 	Error   string
 }
 
-// InstalledVersion is a simplified view of an installed version.
-type InstalledVersion struct {
-	Browser  string
-	Version  string
-	Channel  string
-	Size     int64
-	IsSystem bool
-	Source   string
-}
-
-// InstallRecord is a simplified view of install.InstallRecord.
-type InstallRecord struct {
-	Browser        string
-	Version        string
-	InstalledAt    string
-	Platform       string
-	Arch           string
-	InstallDir     string
-	ExecutablePath string
-	Size           int64
-	Source         string
-}
-
 // ProfileProvider provides profile directory management.
 type ProfileProvider interface {
 	// ProfileDir returns the profile directory path.
@@ -267,17 +229,9 @@ type ProfileProvider interface {
 	// ResetProfile deletes and recreates the profile directory.
 	ResetProfile(browser string, version string, profileName string) error
 	// ListProfiles lists all profiles for a browser.
-	ListProfiles(browser string) ([]ProfileInfo, error)
+	ListProfiles(browser string) ([]install.ProfileInfo, error)
 	// CleanOrphanedProfiles finds orphaned profiles for uninstalled versions.
 	CleanOrphanedProfiles(browser string) ([]string, error)
-}
-
-// ProfileInfo describes a browser profile.
-type ProfileInfo struct {
-	Name    string
-	Path    string
-	Type    string // "named" or "version"
-	Version string // for version-type profiles
 }
 
 // LaunchProvider provides browser launching.
@@ -314,38 +268,17 @@ type DownloadProvider interface {
 
 // ShortcutProvider provides desktop shortcut creation.
 type ShortcutProvider interface {
-	Create(opts ShortcutOptions) error
+	Create(opts shortcut.Options) error
 	Remove(name string, desktopDir string) error
 	List(desktopDir string) ([]string, error)
 }
 
-// ShortcutOptions configures a desktop shortcut.
-type ShortcutOptions struct {
-	Name       string
-	Target     string
-	Args       []string
-	WorkingDir string
-	IconPath   string
-	DesktopDir string
-}
-
 // SourceProvider provides browser version data sources.
 type SourceProvider interface {
-	ResolveVersion(browser string, version string) (SourceVersionInfo, error)
-	ListVersions(browser string, channel string) ([]SourceVersionInfo, error)
+	ResolveVersion(browser string, version string) (source.VersionInfo, error)
+	ListVersions(browser string, channel string) ([]source.VersionInfo, error)
 	// Describe returns a human-readable description of the data source(s).
 	Describe() string
-}
-
-// SourceVersionInfo is a simplified view of source.VersionInfo for CLI.
-type SourceVersionInfo struct {
-	Browser     string
-	Version     string
-	Channel     string
-	Platform    string
-	Arch        string
-	DownloadURL string
-	Size        int64
 }
 
 // App is the main CLI application.

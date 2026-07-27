@@ -22,6 +22,7 @@ import (
 	bmlog "github.com/bws/bws/internal/log"
 	"github.com/bws/bws/internal/install"
 	"github.com/bws/bws/internal/i18n"
+	bwversion "github.com/bws/bws/internal/version"
 	"github.com/bws/bws/internal/launch"
 	"github.com/bws/bws/internal/paths"
 	"github.com/bws/bws/internal/plugin"
@@ -563,163 +564,45 @@ func (a *installAdapter) IsInstalled(browser, version string) bool {
 	return a.mgr.IsInstalled(browser, version)
 }
 
-func (a *installAdapter) ListInstalled() ([]cli.InstalledVersion, error) {
-	list, err := a.mgr.ListInstalled()
-	if err != nil {
-		return nil, err
-	}
-	result := make([]cli.InstalledVersion, len(list))
-	for i, v := range list {
-		result[i] = cli.InstalledVersion{
-			Browser: v.Browser,
-			Version: v.Version,
-			Channel: v.Channel,
-			Size:    0,
-		}
-	}
-	// Get sizes from records
-	for i := range result {
-		rec, err := a.mgr.GetRecord(result[i].Browser, result[i].Version)
-		if err == nil {
-			result[i].Size = rec.Size
-		}
-	}
-	return result, nil
+func (a *installAdapter) ListInstalled() (bwversion.List, error) {
+	return a.mgr.ListInstalled()
 }
 
-func (a *installAdapter) ListInstalledByBrowser(browser string) ([]cli.InstalledVersion, error) {
-	list, err := a.mgr.ListInstalledByBrowser(browser)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]cli.InstalledVersion, len(list))
-	for i, v := range list {
-		result[i] = cli.InstalledVersion{
-			Browser: v.Browser,
-			Version: v.Version,
-			Channel: v.Channel,
-		}
-		rec, err := a.mgr.GetRecord(v.Browser, v.Version)
-		if err == nil {
-			result[i].Size = rec.Size
-		}
-	}
-	return result, nil
+func (a *installAdapter) ListInstalledByBrowser(browser string) (bwversion.List, error) {
+	return a.mgr.ListInstalledByBrowser(browser)
 }
 
-func (a *installAdapter) GetRecord(browser, version string) (*cli.InstallRecord, error) {
-	rec, err := a.mgr.GetRecord(browser, version)
-	if err != nil {
-		return nil, err
-	}
-	return &cli.InstallRecord{
-		Browser:        rec.Browser,
-		Version:        rec.Version,
-		InstalledAt:    rec.InstalledAt.String(),
-		Platform:       rec.Platform,
-		Arch:           rec.Arch,
-		InstallDir:     rec.InstallDir,
-		ExecutablePath: rec.ExecutablePath,
-		Size:           rec.Size,
-		Source:         rec.Source,
-	}, nil
+func (a *installAdapter) GetRecord(browser, version string) (*bwversion.InstallRecord, error) {
+	return a.mgr.GetRecord(browser, version)
 }
 
 func (a *installAdapter) Uninstall(browser, version string) error {
 	return a.mgr.Uninstall(browser, version)
 }
 
-func (a *installAdapter) InstallFromDir(browser, version, sourceDir string) (*cli.InstallRecord, error) {
-	rec, err := a.mgr.InstallFromDir(install.InstallOptions{
+func (a *installAdapter) InstallFromDir(browser, version, sourceDir string) (*bwversion.InstallRecord, error) {
+	return a.mgr.InstallFromDir(install.InstallOptions{
 		Browser:   browser,
 		Version:   version,
 		Source:    "cli",
 		SourceDir: sourceDir,
 	}, nil)
-	if err != nil {
-		return nil, err
-	}
-	return &cli.InstallRecord{
-		Browser:        rec.Browser,
-		Version:        rec.Version,
-		InstalledAt:    rec.InstalledAt.String(),
-		Platform:       rec.Platform,
-		Arch:           rec.Arch,
-		InstallDir:     rec.InstallDir,
-		ExecutablePath: rec.ExecutablePath,
-		Size:           rec.Size,
-		Source:         rec.Source,
-	}, nil
 }
 
-func (a *installAdapter) InstallFromFile(browser, version, filePath string) (*cli.InstallRecord, error) {
-	rec, err := a.mgr.InstallFromFile(browser, version, filePath)
-	if err != nil {
-		return nil, err
-	}
-	return &cli.InstallRecord{
-		Browser:        rec.Browser,
-		Version:        rec.Version,
-		InstalledAt:    rec.InstalledAt.String(),
-		Platform:       rec.Platform,
-		Arch:           rec.Arch,
-		InstallDir:     rec.InstallDir,
-		ExecutablePath: rec.ExecutablePath,
-		Size:           rec.Size,
-		Source:         rec.Source,
-	}, nil
+func (a *installAdapter) InstallFromFile(browser, version, filePath string) (*bwversion.InstallRecord, error) {
+	return a.mgr.InstallFromFile(browser, version, filePath)
 }
 
 func (a *installAdapter) HasSystem() bool {
 	return a.mgr.HasSystem()
 }
 
-func (a *installAdapter) ListWithSystem() ([]cli.InstalledVersion, error) {
-	list, err := a.mgr.ListWithSystem()
-	if err != nil {
-		return nil, err
-	}
-	result := make([]cli.InstalledVersion, len(list))
-	for i, v := range list {
-		result[i] = cli.InstalledVersion{
-			Browser:  v.Browser,
-			Version:  v.Version,
-			Channel:  v.Channel,
-			IsSystem: v.IsSystem,
-			Source:   v.Source,
-		}
-		if !v.IsSystem {
-			rec, err := a.mgr.GetRecord(v.Browser, v.Version)
-			if err == nil {
-				result[i].Size = rec.Size
-			}
-		}
-	}
-	return result, nil
+func (a *installAdapter) ListWithSystem() (bwversion.List, error) {
+	return a.mgr.ListWithSystem()
 }
 
-func (a *installAdapter) ListWithSystemByBrowser(browser string) ([]cli.InstalledVersion, error) {
-	list, err := a.mgr.ListWithSystemByBrowser(browser)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]cli.InstalledVersion, len(list))
-	for i, v := range list {
-		result[i] = cli.InstalledVersion{
-			Browser:  v.Browser,
-			Version:  v.Version,
-			Channel:  v.Channel,
-			IsSystem: v.IsSystem,
-			Source:   v.Source,
-		}
-		if !v.IsSystem {
-			rec, err := a.mgr.GetRecord(v.Browser, v.Version)
-			if err == nil {
-				result[i].Size = rec.Size
-			}
-		}
-	}
-	return result, nil
+func (a *installAdapter) ListWithSystemByBrowser(browser string) (bwversion.List, error) {
+	return a.mgr.ListWithSystemByBrowser(browser)
 }
 
 func (a *installAdapter) IsSystemVersion(browser, version string) bool {
@@ -879,21 +762,8 @@ func (a *profileAdapter) ResetProfile(browser string, version string, profileNam
 	return a.mgr.ResetProfile(browser, version, profileName)
 }
 
-func (a *profileAdapter) ListProfiles(browser string) ([]cli.ProfileInfo, error) {
-	list, err := a.mgr.ListProfiles(browser)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]cli.ProfileInfo, len(list))
-	for i, p := range list {
-		result[i] = cli.ProfileInfo{
-			Name:    p.Name,
-			Path:    p.Path,
-			Type:    p.Type,
-			Version: p.Version,
-		}
-	}
-	return result, nil
+func (a *profileAdapter) ListProfiles(browser string) ([]install.ProfileInfo, error) {
+	return a.mgr.ListProfiles(browser)
 }
 
 func (a *profileAdapter) CleanOrphanedProfiles(browser string) ([]string, error) {
@@ -984,48 +854,20 @@ type repoAdapter struct {
 	importer *repo.Importer
 }
 
-func (a *repoAdapter) Scan() ([]cli.RepoScanResult, error) {
-	matches, err := a.scanner.Scan()
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]cli.RepoScanResult, len(matches))
-	for i, m := range matches {
-		result[i] = cli.RepoScanResult{
-			Path:    m.Path,
-			Browser: m.Browser,
-			Version: m.Version,
-			Arch:    m.Arch,
-			Status:  m.Status.String(),
-			Detail:  m.Detail,
-		}
-	}
-	return result, nil
+func (a *repoAdapter) Scan() ([]repo.MatchResult, error) {
+	return a.scanner.Scan()
 }
 
-func (a *repoAdapter) Import(force bool, onProgress func(int, int, string)) (*cli.RepoImportSummary, error) {
+func (a *repoAdapter) Import(force bool, onProgress func(int, int, string)) (*repo.ImportSummary, error) {
 	var cb repo.ProgressCallback
 	if onProgress != nil {
 		cb = func(p repo.ImportProgress) {
 			onProgress(p.Current, p.Total, p.Message)
 		}
 	}
-	summary, err := a.importer.ImportAll(repo.ImportOptions{
+	return a.importer.ImportAll(repo.ImportOptions{
 		Force: force,
 	}, cb)
-	if err != nil {
-		return nil, err
-	}
-
-	return &cli.RepoImportSummary{
-		Total:                  summary.Total,
-		Success:                summary.Success,
-		Failed:                 summary.Failed,
-		Skipped:                summary.Skipped,
-		SkippedIncompatible:    summary.SkippedIncompatible,
-		SkippedAlreadyInstalled: summary.SkippedAlreadyInstalled,
-	}, nil
 }
 
 // serveAdapter adapts serve.Server to cli.ServeProvider.
@@ -1160,16 +1002,9 @@ func (a *shortcutAdapter) ensureManager() {
 	}
 }
 
-func (a *shortcutAdapter) Create(opts cli.ShortcutOptions) error {
+func (a *shortcutAdapter) Create(opts shortcut.Options) error {
 	a.ensureManager()
-	return a.mgr.Create(shortcut.Options{
-		Name:       opts.Name,
-		Target:     opts.Target,
-		Args:       opts.Args,
-		WorkingDir: opts.WorkingDir,
-		IconPath:   opts.IconPath,
-		DesktopDir: opts.DesktopDir,
-	})
+	return a.mgr.Create(opts)
 }
 
 func (a *shortcutAdapter) Remove(name string, desktopDir string) error {
@@ -1210,23 +1045,11 @@ type sourceAdapter struct {
 	cfg *config.Config
 }
 
-func (a *sourceAdapter) ResolveVersion(browser string, version string) (cli.SourceVersionInfo, error) {
-	v, err := a.src.Resolve(context.TODO(), browser, version, source.CurrentPlatform(), source.CurrentArch())
-	if err != nil {
-		return cli.SourceVersionInfo{}, err
-	}
-	return cli.SourceVersionInfo{
-		Browser:     v.Browser,
-		Version:     v.Version,
-		Channel:     string(v.Channel),
-		Platform:    string(v.Platform),
-		Arch:        string(v.Arch),
-		DownloadURL: v.DownloadURL,
-		Size:        v.Size,
-	}, nil
+func (a *sourceAdapter) ResolveVersion(browser string, version string) (source.VersionInfo, error) {
+	return a.src.Resolve(context.TODO(), browser, version, source.CurrentPlatform(), source.CurrentArch())
 }
 
-func (a *sourceAdapter) ListVersions(browser string, channel string) ([]cli.SourceVersionInfo, error) {
+func (a *sourceAdapter) ListVersions(browser string, channel string) ([]source.VersionInfo, error) {
 	filter := &source.Filter{
 		Browser:  browser,
 		Platform: source.CurrentPlatform(),
@@ -1235,23 +1058,7 @@ func (a *sourceAdapter) ListVersions(browser string, channel string) ([]cli.Sour
 	if channel != "" {
 		filter.Channel = source.Channel(channel)
 	}
-	versions, err := a.src.List(context.TODO(), filter)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]cli.SourceVersionInfo, len(versions))
-	for i, v := range versions {
-		result[i] = cli.SourceVersionInfo{
-			Browser:     v.Browser,
-			Version:     v.Version,
-			Channel:     string(v.Channel),
-			Platform:    string(v.Platform),
-			Arch:        string(v.Arch),
-			DownloadURL: v.DownloadURL,
-			Size:        v.Size,
-		}
-	}
-	return result, nil
+	return a.src.List(context.TODO(), filter)
 }
 
 func (a *sourceAdapter) Describe() string {

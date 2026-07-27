@@ -13,6 +13,9 @@ import (
 
 	"github.com/bws/bws/internal/disk"
 	"github.com/bws/bws/internal/help"
+	"github.com/bws/bws/internal/install"
+	"github.com/bws/bws/internal/repo"
+	"github.com/bws/bws/internal/version"
 )
 
 // RegisterCommands registers all built-in CLI commands.
@@ -107,7 +110,7 @@ func runLs(ctx *Context, args []string) error {
 			spec.Browser, spec.Version, includeSystem)
 	}
 
-	var versions []InstalledVersion
+	var versions []version.Version
 
 	if includeSystem {
 		if spec.Browser != "" {
@@ -128,7 +131,7 @@ func runLs(ctx *Context, args []string) error {
 
 	// 按版本前缀筛选
 	if spec.Version != "" && !spec.IsAlias {
-		var filtered []InstalledVersion
+		var filtered []version.Version
 		for _, v := range versions {
 			if matchesVersionPrefix(v.Version, spec.Version) {
 				filtered = append(filtered, v)
@@ -147,7 +150,7 @@ func runLs(ctx *Context, args []string) error {
 	}
 
 	// Group by browser
-	byBrowser := make(map[string][]InstalledVersion)
+	byBrowser := make(map[string][]version.Version)
 	for _, v := range versions {
 		byBrowser[v.Browser] = append(byBrowser[v.Browser], v)
 	}
@@ -362,7 +365,7 @@ func runRemoteQuery(ctx *Context, args []string) error {
 				status = "已安装"
 				installedCount++
 			}
-			rows = append(rows, []string{v.Version, ch, v.Platform, v.Arch, status})
+			rows = append(rows, []string{v.Version, ch, string(v.Platform), string(v.Arch), status})
 			totalShown++
 		}
 	}
@@ -736,7 +739,7 @@ func runInstall(ctx *Context, args []string) error {
 	}
 
 	// Determine filename from URL
-	fileName := getDownloadFilename(spec.Browser, versionInfo.Version, versionInfo.DownloadURL, versionInfo.Platform)
+	fileName := getDownloadFilename(spec.Browser, versionInfo.Version, versionInfo.DownloadURL, string(versionInfo.Platform))
 	downloadDest := filepath.Join(tempDir, fileName)
 	if ctx.Logger != nil {
 		ctx.Logger.Debug("[install] 下载目标: %s", downloadDest)
@@ -1012,23 +1015,23 @@ func runRepoScan(ctx *Context, args []string) error {
 	ctx.Printf("已扫描 %d 个条目，路径: %s\n\n", len(results), path)
 
 	// Count by status
-	statusCounts := make(map[string]int)
+	statusCounts := make(map[repo.MatchStatus]int)
 	for _, r := range results {
 		statusCounts[r.Status]++
 	}
 
 	ctx.Printf("统计:\n")
 	for status, count := range statusCounts {
-		ctx.Printf("  %-15s %d\n", status+":", count)
+		ctx.Printf("  %-15s %d\n", status.String()+":", count)
 	}
 	ctx.Println()
 
 	// Print recognized versions
 	ctx.Println("已识别的版本:")
 	for _, r := range results {
-		if r.Status == "ok" || r.Status == "partial" {
+		if r.Status == repo.MatchOK || r.Status == repo.MatchPartial {
 			detail := ""
-			if r.Status == "partial" && r.Detail != "" {
+			if r.Status == repo.MatchPartial && r.Detail != "" {
 				detail = " (" + r.Detail + ")"
 			}
 			ctx.Printf("  %s@%s  [%s]%s\n", r.Browser, r.Version, r.Arch, detail)
@@ -1126,7 +1129,7 @@ func runInfo(ctx *Context, args []string) error {
 			ctx.Printf("%s@%s\n", record.Browser, record.Version)
 			ctx.Printf("  平台:         %s\n", record.Platform)
 			ctx.Printf("  架构:         %s\n", record.Arch)
-			ctx.Printf("  安装时间:     %s\n", record.InstalledAt)
+			ctx.Printf("  安装时间:     %s\n", record.InstalledAt.Format("2006-01-02 15:04:05"))
 			ctx.Printf("  来源:         %s\n", record.Source)
 			ctx.Printf("  安装目录:     %s\n", record.InstallDir)
 			ctx.Printf("  可执行文件:   %s\n", record.ExecutablePath)
@@ -1381,7 +1384,7 @@ func runDownload(ctx *Context, args []string) error {
 	}
 
 	// Determine filename from URL
-	fileName := getDownloadFilename(spec.Browser, versionInfo.Version, versionInfo.DownloadURL, versionInfo.Platform)
+	fileName := getDownloadFilename(spec.Browser, versionInfo.Version, versionInfo.DownloadURL, string(versionInfo.Platform))
 	destPath := filepath.Join(outputDir, fileName)
 	if ctx.Logger != nil {
 		ctx.Logger.Debug("[download] 目标文件: %s", destPath)
@@ -2001,8 +2004,8 @@ func runProfileList(ctx *Context, args []string) error {
 	}
 
 	// 分类显示
-	var namedProfiles []ProfileInfo
-	var versionProfiles []ProfileInfo
+	var namedProfiles []install.ProfileInfo
+	var versionProfiles []install.ProfileInfo
 	for _, p := range profiles {
 		if p.Type == "named" {
 			namedProfiles = append(namedProfiles, p)

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"github.com/bws/bws/internal/shortcut"
 )
 
 // NewShortcutCommand creates the shortcut command.
@@ -162,7 +164,7 @@ func createOneShortcut(ctx *Context, browser, version, profileName string, nativ
 		}
 	}
 
-	scOpts := ShortcutOptions{
+	scOpts := shortcut.Options{
 		Name:       name,
 		Target:     exePath,
 		Args:       args,
