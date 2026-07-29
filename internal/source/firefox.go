@@ -4,24 +4,64 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/bws/bws/internal/paths"
 )
 
 const (
-	firefoxProductDetailsURL    = "https://product-details.mozilla.org/1.0/firefox_versions.json"
-	firefoxHistoryMajorURL      = "https://product-details.mozilla.org/1.0/firefox_history_major_releases.json"
-	firefoxHistoryStabilityURL = "https://product-details.mozilla.org/1.0/firefox_history_stability_releases.json"
-	firefoxDownloadBase         = "https://download.mozilla.org/"
+	// firefoxFTPBaseURL 是 Mozilla 官方版本归档的 HTTPS 目录列表地址。
+	// 虽然域名前缀为 ftp，但 FTP 协议（端口21）已被 Mozilla 关闭，
+	// 现在仅提供 HTTPS 访问，返回 HTML 格式的目录列表。
+	firefoxFTPBaseURL = "https://ftp.mozilla.org/pub/firefox/releases/"
+	// firefoxFTPLang 是下载时使用的默认语言。
+	firefoxFTPLang = "en-US"
 )
 
-// FirefoxSource provides version data for Mozilla Firefox using Mozilla's
-// Product Details API.
+// versionDirRegex 匹配有效的 Firefox 版本目录名。
+// 有效示例: 141.0, 141.0.1, 141.0b1, 140.0esr, 128.10.0esr
+// 无效示例: 13.0.1-funnelcake11, 1.0rc1, 3.0.16-real, 1.cdn_test
+var versionDirRegex = regexp.MustCompile(`^\d+\.\d+(\.\d+)*(esr|b\d+|a\d+)?$`)
+
+// dirLinkRegex 匹配 HTML 目录列表中的 <a href="..."> 链接。
+var dirLinkRegex = regexp.MustCompile(`<a href="([^"]*)">([^<]*)</a>`)
+
+// FirefoxSource 通过解析 ftp.mozilla.org 的 HTTPS 目录列表
+// 提供 Firefox 版本数据。
+//
+// 目录结构:
+//   /pub/firefox/releases/
+//     ├── 141.0/                    (版本目录)
+//     │   ├── win64/                (平台目录)
+//     │   │   └── en-US/            (语言目录)
+//     │   │       ├── Firefox Setup 141.0.exe
+//     │   │       └── Firefox Setup 141.0.msi
+//     │   ├── linux-x86_64/
+//     │   │   └── en-US/
+//     │   │       ├── firefox-141.0.tar.xz
+//     │   │       └── firefox-141.0.deb
+//     │   └── mac/
+//     │       └── en-US/
+//     │           ├── Firefox 141.0.dmg
+//     │           └── Firefox 141.0.pkg
+//     ├── 141.0b1/                  (Beta 版本)
+//     └── 140.0esr/                 (ESR 版本)
 type FirefoxSource struct {
-	httpClient *http.Client
+	baseURL      string
+	httpClient   *http.Client
+	cacheDir     string        // 缓存文件所在目录（来自 paths.ManifestCacheDir）
+	cacheTTL     time.Duration // 缓存有效期（默认 24 小时）
+	forceRefresh bool          // 为 true 时跳过缓存，强制从网络抓取
+	mu           sync.Mutex    // 保护缓存文件访问及 forceRefresh 标志
 }
 
 // NewFirefoxSource creates a new FirefoxSource.
@@ -31,14 +71,32 @@ func NewFirefoxSource() *FirefoxSource {
 
 // NewFirefoxSourceWithProxy creates a new FirefoxSource that uses the given proxy.
 func NewFirefoxSourceWithProxy(proxyURL string) *FirefoxSource {
+	return NewFirefoxSourceWithOptions(proxyURL, paths.Default().ManifestCacheDir, 24*time.Hour)
+}
+
+// NewFirefoxSourceWithOptions creates a new FirefoxSource with explicit cache
+// configuration. cacheDir is the directory where the cache file is stored;
+// cacheTTL is the cache time-to-live. Pass an empty cacheDir to disable caching.
+func NewFirefoxSourceWithOptions(proxyURL, cacheDir string, cacheTTL time.Duration) *FirefoxSource {
 	return &FirefoxSource{
-		httpClient: &http.Client{Timeout: 30 * time.Second, Transport: newTransportWithProxy(proxyURL)},
+		baseURL:    firefoxFTPBaseURL,
+		httpClient: &http.Client{Timeout: 60 * time.Second, Transport: newTransportWithProxy(proxyURL)},
+		cacheDir:   cacheDir,
+		cacheTTL:   cacheTTL,
 	}
+}
+
+// SetForceRefresh sets whether the next List() call should bypass the cache
+// and fetch fresh data from the network.
+func (s *FirefoxSource) SetForceRefresh(force bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.forceRefresh = force
 }
 
 // Name returns the name of this source.
 func (s *FirefoxSource) Name() string {
-	return "firefox-mozilla"
+	return "firefox-ftp"
 }
 
 // SupportsBrowser reports whether this source supports the given browser.
@@ -46,111 +104,16 @@ func (s *FirefoxSource) SupportsBrowser(browser string) bool {
 	return strings.ToLower(browser) == "firefox"
 }
 
-// List returns all available Firefox versions matching the filter.
-// It combines data from:
-// - firefox_versions.json: latest versions for each channel (stable, beta, esr, devedition, nightly)
-// - firefox_history_major_releases.json: all historical major stable releases
-// - firefox_history_stability_releases.json: historical patch releases for ESR branches
+// List 返回所有匹配过滤条件的 Firefox 版本。
+// 它抓取 ftp.mozilla.org 顶层目录列表，解析版本目录名，
+// 并根据版本名中的后缀(esr/b)判断渠道。
 func (s *FirefoxSource) List(ctx context.Context, filter *Filter) ([]VersionInfo, error) {
 	filter = applyDefaults(filter)
 
-	channel := filter.Channel
-	if channel == "" {
-		channel = ChannelStable
-	}
-
-	// Collect versions from multiple sources (parallel fetch)
-	type fetchResult struct {
-		latestMap         map[Channel]string
-		historyVersions   []string
-		stabilityVersions []string
-	}
-
-	var fr fetchResult
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var fetchErr error
-
-	// 1. Fetch latest channel versions (required)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		m, err := s.fetchLatestVersions(ctx)
-		mu.Lock()
-		defer mu.Unlock()
-		if err != nil {
-			fetchErr = err
-		} else {
-			fr.latestMap = m
-		}
-	}()
-
-	// 2. Fetch historical major releases (optional)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		v, err := s.fetchHistoryMajorVersions(ctx)
-		mu.Lock()
-		defer mu.Unlock()
-		if err == nil {
-			fr.historyVersions = v
-		}
-	}()
-
-	// 3. Fetch historical stability/patch releases (optional)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		v, err := s.fetchHistoryStabilityVersions(ctx)
-		mu.Lock()
-		defer mu.Unlock()
-		if err == nil {
-			fr.stabilityVersions = v
-		}
-	}()
-
-	wg.Wait()
-
-	if fetchErr != nil {
-		return nil, fetchErr
-	}
-
-	var results []VersionInfo
-
-	// Add latest versions for all channels
-	for ch, ver := range fr.latestMap {
-		if ver == "" {
-			continue
-		}
-		plat := filter.Platform
-		arch := filter.Arch
-		if plat == "" {
-			plat = CurrentPlatform()
-		}
-		if arch == "" {
-			arch = CurrentArch()
-		}
-
-		results = append(results, VersionInfo{
-			Browser:     "firefox",
-			Version:     ver,
-			Channel:     ch,
-			Platform:    plat,
-			Arch:        arch,
-			DownloadURL: s.buildDownloadURL(ver, plat, arch, ch),
-			Size:        0,
-		})
-	}
-
-	// Build a set of known ESR base versions from latestMap
-	esrBases := make(map[string]bool)
-	for ch, ver := range fr.latestMap {
-		if ch == ChannelESR && ver != "" {
-			base := extractMajorVersion(ver)
-			if base != "" {
-				esrBases[base] = true
-			}
-		}
+	// 抓取顶层目录列表（带缓存）
+	dirs, err := s.fetchDirsWithCache(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("抓取 Firefox 版本目录失败: %w", err)
 	}
 
 	plat := filter.Platform
@@ -162,68 +125,36 @@ func (s *FirefoxSource) List(ctx context.Context, filter *Filter) ([]VersionInfo
 		arch = CurrentArch()
 	}
 
-	// Add historical stable major versions
-	for _, ver := range fr.historyVersions {
+	var results []VersionInfo
+	for _, dir := range dirs {
+		version := strings.TrimSuffix(dir, "/")
+		if !versionDirRegex.MatchString(version) {
+			continue
+		}
+
+		channel := classifyFirefoxChannel(version)
+
+		// 按渠道过滤
+		if filter.Channel != "" && filter.Channel != ChannelUnknown && filter.Channel != channel {
+			continue
+		}
+
+		// 按版本前缀过滤
+		if filter.VersionPrefix != "" && !strings.HasPrefix(version, filter.VersionPrefix) {
+			continue
+		}
+
 		results = append(results, VersionInfo{
 			Browser:     "firefox",
-			Version:     ver,
-			Channel:     ChannelStable,
+			Version:     version,
+			Channel:     channel,
 			Platform:    plat,
 			Arch:        arch,
-			DownloadURL: s.buildDownloadURL(ver, plat, arch, ChannelStable),
-			Size:        0,
+			DownloadURL: s.buildDownloadURL(version, plat, arch),
 		})
 	}
 
-	// Add stability patch releases, classifying them by channel
-	for _, ver := range fr.stabilityVersions {
-		ch := classifyFirefoxVersion(ver, esrBases)
-		results = append(results, VersionInfo{
-			Browser:     "firefox",
-			Version:     ver,
-			Channel:     ch,
-			Platform:    plat,
-			Arch:        arch,
-			DownloadURL: s.buildDownloadURL(ver, plat, arch, ch),
-			Size:        0,
-		})
-	}
-
-	// Filter by channel
-	if channel != "" {
-		var filtered []VersionInfo
-		for _, v := range results {
-			if v.Channel == channel {
-				filtered = append(filtered, v)
-			}
-		}
-		results = filtered
-	}
-
-	// Filter by version prefix
-	if filter.VersionPrefix != "" {
-		var filtered []VersionInfo
-		for _, v := range results {
-			if strings.HasPrefix(v.Version, filter.VersionPrefix) {
-				filtered = append(filtered, v)
-			}
-		}
-		results = filtered
-	}
-
-	// Deduplicate by (version, platform, arch)
-	seen := make(map[string]bool)
-	var deduped []VersionInfo
-	for _, v := range results {
-		key := fmt.Sprintf("%s|%s|%s|%s", v.Version, v.Platform, v.Arch, v.Channel)
-		if !seen[key] {
-			seen[key] = true
-			deduped = append(deduped, v)
-		}
-	}
-	results = deduped
-
-	// Sort by version descending
+	// 按版本号降序排序
 	sort.Slice(results, func(i, j int) bool {
 		return compareVersions(results[i].Version, results[j].Version) > 0
 	})
@@ -231,7 +162,7 @@ func (s *FirefoxSource) List(ctx context.Context, filter *Filter) ([]VersionInfo
 	return results, nil
 }
 
-// Latest returns the latest Firefox version matching the filter.
+// Latest 返回匹配过滤条件的最新 Firefox 版本。
 func (s *FirefoxSource) Latest(ctx context.Context, filter *Filter) (VersionInfo, error) {
 	filter = applyDefaults(filter)
 
@@ -240,40 +171,26 @@ func (s *FirefoxSource) Latest(ctx context.Context, filter *Filter) (VersionInfo
 		channel = ChannelStable
 	}
 
-	// For latest, just query the current versions API
-	latestMap, err := s.fetchLatestVersions(ctx)
+	versions, err := s.List(ctx, &Filter{
+		Browser:  "firefox",
+		Channel:  channel,
+		Platform: filter.Platform,
+		Arch:     filter.Arch,
+	})
 	if err != nil {
 		return VersionInfo{}, err
 	}
-
-	ver, ok := latestMap[channel]
-	if !ok || ver == "" {
-		return VersionInfo{}, fmt.Errorf("no firefox %s version found", channel)
+	if len(versions) == 0 {
+		return VersionInfo{}, fmt.Errorf("未找到 firefox %s 版本", channel)
 	}
 
-	plat := filter.Platform
-	arch := filter.Arch
-	if plat == "" {
-		plat = CurrentPlatform()
-	}
-	if arch == "" {
-		arch = CurrentArch()
-	}
-
-	return VersionInfo{
-		Browser:     "firefox",
-		Version:     ver,
-		Channel:     channel,
-		Platform:    plat,
-		Arch:        arch,
-		DownloadURL: s.buildDownloadURL(ver, plat, arch, channel),
-		Size:        0,
-	}, nil
+	return versions[0], nil
 }
 
-// Resolve finds a specific Firefox version.
+// Resolve 查找指定版本的 Firefox。
+// 支持别名(latest/beta/esr)、精确匹配和前缀匹配。
 func (s *FirefoxSource) Resolve(ctx context.Context, browser string, version string, platform Platform, arch Arch) (VersionInfo, error) {
-	// Handle aliases
+	// 处理别名
 	if version == "latest" || version == "" {
 		return s.Latest(ctx, &Filter{Browser: browser, Platform: platform, Arch: arch})
 	}
@@ -283,27 +200,29 @@ func (s *FirefoxSource) Resolve(ctx context.Context, browser string, version str
 	if version == "esr" {
 		return s.Latest(ctx, &Filter{Browser: browser, Platform: platform, Arch: arch, Channel: ChannelESR})
 	}
+	// devedition/dev 在 FTP releases 目录中没有单独的渠道，回退到 beta
 	if version == "devedition" || version == "dev" {
-		return s.Latest(ctx, &Filter{Browser: browser, Platform: platform, Arch: arch, Channel: ChannelDev})
+		return s.Latest(ctx, &Filter{Browser: browser, Platform: platform, Arch: arch, Channel: ChannelBeta})
 	}
+	// nightly 构建不在 releases 目录下，在 /pub/firefox/nightly/ 目录
 	if version == "nightly" {
-		return s.Latest(ctx, &Filter{Browser: browser, Platform: platform, Arch: arch, Channel: ChannelCanary})
+		return VersionInfo{}, fmt.Errorf("nightly 版本不在 releases 目录中，请使用 /pub/firefox/nightly/ 目录")
 	}
 
-	// Try exact match first
 	list, err := s.List(ctx, &Filter{Browser: browser, Platform: platform, Arch: arch})
 	if err != nil {
 		return VersionInfo{}, err
 	}
 
+	// 精确匹配
 	for _, v := range list {
 		if v.Version == version {
 			return v, nil
 		}
 	}
 
-	// Try prefix match — collect all matches and return the highest.
-	// Use "." separator to avoid "12" matching "120.x".
+	// 前缀匹配 — 收集所有匹配项并返回最高版本。
+	// 使用 "." 分隔符避免 "12" 匹配 "120.x"。
 	prefix := version + "."
 	var matches []VersionInfo
 	for _, v := range list {
@@ -321,24 +240,117 @@ func (s *FirefoxSource) Resolve(ctx context.Context, browser string, version str
 		return latest, nil
 	}
 
-	return VersionInfo{}, fmt.Errorf("firefox version %s not found", version)
+	return VersionInfo{}, fmt.Errorf("未找到 firefox 版本 %s", version)
 }
 
 // --- internal helpers ---
 
-type firefoxVersionsResponse struct {
-	LATEST_FIREFOX_VERSION              string `json:"LATEST_FIREFOX_VERSION"`
-	LATEST_FIREFOX_DEVEL_VERSION       string `json:"LATEST_FIREFOX_DEVEL_VERSION"`
-	FIREFOX_ESR                         string `json:"FIREFOX_ESR"`
-	FIREFOX_ESR115                      string `json:"FIREFOX_ESR115"`
-	FIREFOX_DEVEDITION                  string `json:"FIREFOX_DEVEDITION"`
-	FIREFOX_NIGHTLY                     string `json:"FIREFOX_NIGHTLY"`
-	LATEST_FIREFOX_RELEASED_DEVEL_VERSION string `json:"LATEST_FIREFOX_RELEASED_DEVEL_VERSION"`
+// firefoxCacheEntry 是缓存文件的 JSON 结构。
+type firefoxCacheEntry struct {
+	FetchedAt time.Time `json:"fetched_at"`
+	Dirs      []string  `json:"dirs"`
 }
 
-// fetchLatestVersions returns a map of channel -> latest version string.
-func (s *FirefoxSource) fetchLatestVersions(ctx context.Context) (map[Channel]string, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", firefoxProductDetailsURL, nil)
+// cachePath 返回 Firefox FTP 缓存文件的完整路径。
+func (s *FirefoxSource) cachePath() string {
+	return filepath.Join(s.cacheDir, "firefox-ftp-cache.json")
+}
+
+// loadCache 读取缓存文件，返回缓存的目录条目及抓取时间。
+func (s *FirefoxSource) loadCache() ([]string, time.Time, error) {
+	data, err := os.ReadFile(s.cachePath())
+	if err != nil {
+		return nil, time.Time{}, err
+	}
+	var entry firefoxCacheEntry
+	if err := json.Unmarshal(data, &entry); err != nil {
+		return nil, time.Time{}, err
+	}
+	return entry.Dirs, entry.FetchedAt, nil
+}
+
+// saveCache 将目录条目写入缓存文件。
+func (s *FirefoxSource) saveCache(dirs []string) error {
+	if err := os.MkdirAll(s.cacheDir, 0o755); err != nil {
+		return err
+	}
+	entry := firefoxCacheEntry{
+		FetchedAt: time.Now().UTC(),
+		Dirs:      dirs,
+	}
+	data, err := json.MarshalIndent(entry, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.cachePath(), data, 0o644)
+}
+
+// isCacheExpired 判断缓存是否已超过 TTL。
+func (s *FirefoxSource) isCacheExpired(fetchedAt time.Time) bool {
+	return time.Since(fetchedAt) > s.cacheTTL
+}
+
+// fetchDirsWithCache 获取目录列表，支持缓存、强制刷新和网络失败回退。
+//
+// 流程:
+//  1. 如果 forceRefresh 为 true，跳过缓存直接从网络抓取
+//  2. 尝试读取缓存——如果存在且未过期，使用缓存数据
+//  3. 缓存未命中或已过期时，从网络抓取新数据
+//  4. 网络抓取失败但缓存存在（即使已过期）时，使用缓存作为回退
+//  5. 抓取成功后更新缓存文件
+//  6. 抓取完成后重置 forceRefresh 标志
+func (s *FirefoxSource) fetchDirsWithCache(ctx context.Context) ([]string, error) {
+	s.mu.Lock()
+	force := s.forceRefresh
+	s.mu.Unlock()
+
+	// 如果未配置缓存目录，直接从网络抓取（不缓存）。
+	// 这也覆盖了测试中直接构造 FirefoxSource 的场景。
+	if s.cacheDir == "" {
+		dirs, err := s.fetchDirectoryListing(ctx, s.baseURL)
+		if err != nil {
+			return nil, err
+		}
+		s.mu.Lock()
+		s.forceRefresh = false
+		s.mu.Unlock()
+		return dirs, nil
+	}
+
+	// 读取缓存（加锁保护文件访问）
+	s.mu.Lock()
+	cachedDirs, fetchedAt, cacheErr := s.loadCache()
+	s.mu.Unlock()
+	cacheValid := cacheErr == nil && len(cachedDirs) > 0
+
+	// 缓存有效且未过期且未强制刷新 → 直接使用缓存
+	if !force && cacheValid && !s.isCacheExpired(fetchedAt) {
+		return cachedDirs, nil
+	}
+
+	// 缓存未命中、已过期或强制刷新 → 从网络抓取
+	dirs, fetchErr := s.fetchDirectoryListing(ctx, s.baseURL)
+	if fetchErr != nil {
+		// 网络抓取失败——如果缓存存在（即使已过期），作为回退使用
+		if cacheValid {
+			return cachedDirs, nil
+		}
+		return nil, fetchErr
+	}
+
+	// 抓取成功，更新缓存并重置 forceRefresh 标志
+	s.mu.Lock()
+	_ = s.saveCache(dirs)
+	s.forceRefresh = false
+	s.mu.Unlock()
+
+	return dirs, nil
+}
+
+// fetchDirectoryListing 抓取 HTTPS 目录列表页面并提取目录名。
+// 仅返回以 "/" 结尾的条目（即目录），跳过父目录链接 ".."。
+func (s *FirefoxSource) fetchDirectoryListing(ctx context.Context, pageURL string) ([]string, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", pageURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -350,190 +362,107 @@ func (s *FirefoxSource) fetchLatestVersions(ctx context.Context) (map[Channel]st
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("firefox versions API returned %d", resp.StatusCode)
+		return nil, fmt.Errorf("目录列表返回状态码 %d", resp.StatusCode)
 	}
 
-	var data firefoxVersionsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		return nil, err
-	}
-
-	result := make(map[Channel]string)
-
-	if data.LATEST_FIREFOX_VERSION != "" {
-		result[ChannelStable] = data.LATEST_FIREFOX_VERSION
-	}
-	if data.LATEST_FIREFOX_DEVEL_VERSION != "" {
-		result[ChannelBeta] = data.LATEST_FIREFOX_DEVEL_VERSION
-	}
-	if data.FIREFOX_ESR != "" {
-		result[ChannelESR] = data.FIREFOX_ESR
-	}
-	// Also add older ESR if available and different
-	if data.FIREFOX_ESR115 != "" && data.FIREFOX_ESR115 != data.FIREFOX_ESR {
-		result[ChannelESR] = data.FIREFOX_ESR115 // Multiple ESR lines: keep latest, could extend
-	}
-	if data.FIREFOX_DEVEDITION != "" {
-		result[ChannelDev] = data.FIREFOX_DEVEDITION
-	}
-	if data.FIREFOX_NIGHTLY != "" {
-		result[ChannelCanary] = data.FIREFOX_NIGHTLY
-	}
-
-	return result, nil
-}
-
-// fetchHistoryMajorVersions fetches all historical major Firefox release version numbers.
-func (s *FirefoxSource) fetchHistoryMajorVersions(ctx context.Context) ([]string, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", firefoxHistoryMajorURL, nil)
+	// 限制响应体大小为 10MB
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("firefox history API returned %d", resp.StatusCode)
-	}
-
-	var history map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&history); err != nil {
-		return nil, err
-	}
-
-	var versions []string
-	for ver := range history {
-		versions = append(versions, ver)
-	}
-
-	return versions, nil
+	return parseDirectoryEntries(string(body)), nil
 }
 
-// fetchHistoryStabilityVersions fetches historical patch/stability release version numbers.
-// These include point releases for both stable and ESR branches.
-func (s *FirefoxSource) fetchHistoryStabilityVersions(ctx context.Context) ([]string, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", firefoxHistoryStabilityURL, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("firefox stability history API returned %d", resp.StatusCode)
-	}
-
-	var history map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&history); err != nil {
-		return nil, err
-	}
-
-	var versions []string
-	for ver := range history {
-		versions = append(versions, ver)
-	}
-
-	return versions, nil
-}
-
-// buildDownloadURL constructs the download URL for a Firefox version.
-func (s *FirefoxSource) buildDownloadURL(version string, platform Platform, arch Arch, channel Channel) string {
-	osParam := mapToMozillaOS(platform, arch)
-	if osParam == "" {
-		osParam = "win64"
-	}
-
-	// For specific versions, use the version-specific download URL
-	product := "firefox"
-	lang := "en-US"
-
-	switch channel {
-	case ChannelBeta:
-		product = "firefox-beta"
-	case ChannelESR:
-		product = "firefox-esr"
-	case ChannelDev:
-		product = "firefox-devedition"
-	case ChannelCanary:
-		product = "firefox-nightly"
-	default:
-		product = "firefox"
-	}
-
-	// Use the standard Mozilla download URL pattern for specific versions:
-	// https://download.mozilla.org/?product=firefox-<version>-SSL&os=<os>&lang=en-US
-	// For "latest" style downloads, Mozilla uses product=firefox-latest-ssl
-	// But for version-specific, we use the version number directly.
-
-	// Clean version: remove esr/b suffixes for the product string
-	cleanVer := strings.TrimSuffix(strings.TrimSuffix(version, "esr"), "b")
-	cleanVer = strings.TrimSuffix(cleanVer, "a")
-
-	return fmt.Sprintf("%s?product=%s-%s-SSL&os=%s&lang=%s",
-		firefoxDownloadBase, product, cleanVer, osParam, lang)
-}
-
-func mapToMozillaOS(platform Platform, arch Arch) string {
-	switch platform {
-	case PlatformWindows:
-		if arch == Arch386 {
-			return "win"
+// parseDirectoryEntries 从 HTML 目录列表中提取目录名。
+// 仅返回以 "/" 结尾的条目，跳过父目录链接。
+func parseDirectoryEntries(html string) []string {
+	matches := dirLinkRegex.FindAllStringSubmatch(html, -1)
+	var dirs []string
+	for _, m := range matches {
+		name := m[2]
+		// 跳过父目录
+		if name == ".." || name == "../" {
+			continue
 		}
-		return "win64"
-	case PlatformMacOS:
-		if arch == ArchARM64 {
-			return "osx"
-		}
-		return "osx"
-	case PlatformLinux:
-		if arch == ArchARM64 {
-			return "linux-aarch64"
-		}
-		return "linux64"
-	default:
-		return "win64"
-	}
-}
-
-// extractMajorVersion extracts the major version number from a version string.
-// e.g., "128.8.0esr" -> "128", "136.0.2" -> "136"
-func extractMajorVersion(ver string) string {
-	parts := strings.Split(ver, ".")
-	if len(parts) == 0 {
-		return ""
-	}
-	// Strip non-numeric suffix
-	major := parts[0]
-	for i, c := range major {
-		if c < '0' || c > '9' {
-			if i > 0 {
-				return major[:i]
-			}
-			return ""
+		// 仅包含目录（以 / 结尾）
+		if strings.HasSuffix(name, "/") {
+			dirs = append(dirs, name)
 		}
 	}
-	return major
+	return dirs
 }
 
-// classifyFirefoxVersion determines the channel of a version string.
-// ESR versions contain "esr" suffix, others are stable.
-func classifyFirefoxVersion(ver string, knownESRBases map[string]bool) Channel {
-	lower := strings.ToLower(ver)
+// classifyFirefoxChannel 根据版本字符串判断渠道。
+// "esr" 后缀 → ESR，"b" + 数字 → Beta，其余 → Stable。
+func classifyFirefoxChannel(version string) Channel {
+	lower := strings.ToLower(version)
 	if strings.Contains(lower, "esr") {
 		return ChannelESR
 	}
-	// Check if this is a patch release for a known ESR base
-	major := extractMajorVersion(ver)
-	if major != "" && knownESRBases[major] {
-		return ChannelESR
+	// 检查是否为 beta 版本（如 "141.0b1"）
+	if idx := strings.IndexByte(lower, 'b'); idx > 0 {
+		if idx+1 < len(lower) && lower[idx+1] >= '0' && lower[idx+1] <= '9' {
+			return ChannelBeta
+		}
 	}
 	return ChannelStable
+}
+
+// buildDownloadURL 构造 Firefox 版本的直接下载 URL。
+// URL 格式: https://ftp.mozilla.org/pub/firefox/releases/<version>/<platform>/en-US/<filename>
+func (s *FirefoxSource) buildDownloadURL(version string, platform Platform, arch Arch) string {
+	platDir := mapToMozillaFTPPlatform(platform, arch)
+	filename := buildFirefoxFilename(version, platform)
+
+	// 对文件名进行 URL 编码（空格 → %20）
+	encodedFilename := url.PathEscape(filename)
+
+	return fmt.Sprintf("%s%s/%s/%s/%s",
+		s.baseURL, version, platDir, firefoxFTPLang, encodedFilename)
+}
+
+// mapToMozillaFTPPlatform 将内部平台/架构映射为 Mozilla FTP 目录名。
+func mapToMozillaFTPPlatform(platform Platform, arch Arch) string {
+	switch platform {
+	case PlatformWindows:
+		switch arch {
+		case Arch386:
+			return "win32"
+		case ArchARM64:
+			return "win64-aarch64"
+		default:
+			return "win64"
+		}
+	case PlatformMacOS:
+		return "mac"
+	case PlatformLinux:
+		switch arch {
+		case Arch386:
+			return "linux-i686"
+		case ArchARM64:
+			return "linux-aarch64"
+		default:
+			return "linux-x86_64"
+		}
+	default:
+		return "win64"
+	}
+}
+
+// buildFirefoxFilename 根据版本和平台构造安装包文件名。
+// Windows: Firefox Setup <version>.exe
+// macOS:   Firefox <version>.dmg
+// Linux:   firefox-<version>.tar.xz
+func buildFirefoxFilename(version string, platform Platform) string {
+	switch platform {
+	case PlatformWindows:
+		return fmt.Sprintf("Firefox Setup %s.exe", version)
+	case PlatformMacOS:
+		return fmt.Sprintf("Firefox %s.dmg", version)
+	case PlatformLinux:
+		return fmt.Sprintf("firefox-%s.tar.xz", version)
+	default:
+		return fmt.Sprintf("Firefox Setup %s.exe", version)
+	}
 }

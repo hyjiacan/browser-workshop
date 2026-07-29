@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"strings"
+	"time"
 )
 
 func runRun(ctx *Context, args []string) error {
@@ -101,5 +102,28 @@ func runRun(ctx *Context, args []string) error {
 		return nil
 	}
 
-	return ctx.Launch.Run(opts)
+	// Verbose: 预览可执行文件路径和完整命令行
+	if ctx.Logger != nil {
+		if exe, args, err := ctx.Launch.PreviewCommand(opts); err == nil {
+			ctx.Logger.Debug("[run] 可执行文件路径: %s", exe)
+			ctx.Logger.Debug("[run] 完整启动命令: %s %s", exe, strings.Join(args, " "))
+		}
+		if opts.Detached {
+			ctx.Logger.Debug("[run] detached 模式：进程将在后台运行")
+		}
+	}
+
+	startTime := time.Now()
+	err = ctx.Launch.Run(opts)
+	if ctx.Logger != nil {
+		if opts.Detached {
+			ctx.Logger.Debug("[run] 进程已启动（detached 模式）")
+		} else if err == nil {
+			ctx.Logger.Debug("[run] 进程已退出：退出码=0 运行时长=%s", formatDuration(time.Since(startTime)))
+		} else {
+			// 非零退出码或启动失败
+			ctx.Logger.Debug("[run] 进程异常：%v 运行时长=%s", err, formatDuration(time.Since(startTime)))
+		}
+	}
+	return err
 }

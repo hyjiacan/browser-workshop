@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
+	"unicode"
 
 	"github.com/bws/bws/internal/i18n"
 	"github.com/bws/bws/internal/install"
@@ -70,13 +72,15 @@ func (ctx *Context) Confirm(prompt string) bool {
 
 // ServeProvider provides the HTTP serve functionality.
 type ServeProvider interface {
-	// StartFromConfig starts the HTTP server using configuration from bws-serve.ini.
-	StartFromConfig(baseDir string) error
+	// StartFromConfig starts the HTTP server using configuration from bws-serve.ini
+	// in the executable directory.
+	StartFromConfig() error
 
 	// ConfigPath returns the path to the serve config file.
 	ConfigPath() string
 
 	// EnsureDefaultConfig creates a default bws-serve.ini if it doesn't exist.
+	// baseDir can be empty to use the executable directory.
 	// Returns the config path and whether it was newly created.
 	EnsureDefaultConfig(baseDir string) (string, bool, error)
 }
@@ -611,16 +615,91 @@ func ErrorExit(msg string) error {
 }
 
 // PrintTable prints a simple formatted table.
+// displayWidth returns the display width of a string, accounting for
+// wide (CJK) and combining characters. Most CJK characters have width 2,
+// ASCII characters have width 1, and combining marks have width 0.
+func displayWidth(s string) int {
+	w := 0
+	for _, r := range s {
+		w += runeWidth(r)
+	}
+	return w
+}
+
+// runeWidth returns the display width of a single rune.
+func runeWidth(r rune) int {
+	if r == 0 || r < 32 {
+		return 0
+	}
+	if unicode.IsControl(r) {
+		return 0
+	}
+	if isWideRune(r) {
+		return 2
+	}
+	return 1
+}
+
+// isWideRune reports whether a rune is a wide (full-width) character
+// that typically occupies 2 columns in a terminal. Covers CJK, Hangul,
+// full-width ASCII, and CJK punctuation.
+func isWideRune(r rune) bool {
+	switch {
+	case r >= 0x1100 && r <= 0x115F: // Hangul Jamo
+		return true
+	case r >= 0x2E80 && r <= 0x303E: // CJK Radicals, Kangxi
+		return true
+	case r >= 0x3041 && r <= 0x33FF: // Hiragana, Katakana, CJK Symbols
+		return true
+	case r >= 0x3400 && r <= 0x4DBF: // CJK Unified Ideographs Extension A
+		return true
+	case r >= 0x4E00 && r <= 0x9FFF: // CJK Unified Ideographs
+		return true
+	case r >= 0xA000 && r <= 0xA4CF: // Yi Syllables, Yi Radicals
+		return true
+	case r >= 0xAC00 && r <= 0xD7A3: // Hangul Syllables
+		return true
+	case r >= 0xF900 && r <= 0xFAFF: // CJK Compatibility Ideographs
+		return true
+	case r >= 0xFE30 && r <= 0xFE4F: // CJK Compatibility Forms
+		return true
+	case r >= 0xFF00 && r <= 0xFF60: // Fullwidth Forms
+		return true
+	case r >= 0xFFE0 && r <= 0xFFE6: // Fullwidth Signs
+		return true
+	case r >= 0x20000 && r <= 0x2FFFD: // CJK Unified Ideographs Extension B-F
+		return true
+	case r >= 0x30000 && r <= 0x3FFFD: // CJK Unified Ideographs Extension G
+		return true
+	}
+	return false
+}
+
+// padRight pads s with spaces on the right to reach the given display width.
+func padRight(s string, width int) string {
+	dw := displayWidth(s)
+	if dw >= width {
+		return s
+	}
+	return s + strings.Repeat(" ", width-dw)
+}
+
+// PrintTable prints a formatted table with aligned columns.
+// Column widths are calculated using display width (not byte length),
+// so CJK characters are correctly aligned in terminals.
 func PrintTable(w io.Writer, headers []string, rows [][]string) {
-	// Calculate column widths
+	// Calculate column widths using display width
 	widths := make([]int, len(headers))
 	for i, h := range headers {
-		widths[i] = len(h)
+		widths[i] = displayWidth(h)
 	}
 	for _, row := range rows {
 		for i, cell := range row {
-			if i < len(widths) && len(cell) > widths[i] {
-				widths[i] = len(cell)
+			if i < len(widths) {
+				dw := displayWidth(cell)
+				if dw > widths[i] {
+					widths[i] = dw
+				}
 			}
 		}
 	}
@@ -630,7 +709,7 @@ func PrintTable(w io.Writer, headers []string, rows [][]string) {
 		if i > 0 {
 			fmt.Fprint(w, "  ")
 		}
-		fmt.Fprintf(w, "%-*s", widths[i], h)
+		fmt.Fprint(w, padRight(h, widths[i]))
 	}
 	fmt.Fprintln(w)
 
@@ -650,7 +729,7 @@ func PrintTable(w io.Writer, headers []string, rows [][]string) {
 				fmt.Fprint(w, "  ")
 			}
 			if i < len(widths) {
-				fmt.Fprintf(w, "%-*s", widths[i], cell)
+				fmt.Fprint(w, padRight(cell, widths[i]))
 			} else {
 				fmt.Fprint(w, cell)
 			}
@@ -671,6 +750,31 @@ func FormatSize(bytes int64) string {
 		exp++
 	}
 	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+// FormatSpeed formats a speed in bytes per second to a human-readable string.
+func FormatSpeed(bps float64) string {
+	if bps < 1024 {
+		return fmt.Sprintf("%.0f B/s", bps)
+	}
+	if bps < 1024*1024 {
+		return fmt.Sprintf("%.1f KB/s", bps/1024)
+	}
+	if bps < 1024*1024*1024 {
+		return fmt.Sprintf("%.1f MB/s", bps/(1024*1024))
+	}
+	return fmt.Sprintf("%.1f GB/s", bps/(1024*1024*1024))
+}
+
+// formatDuration formats a duration in a human-readable way.
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%.1fs", d.Seconds())
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm %ds", int(d.Minutes()), int(d.Seconds())%60)
+	}
+	return fmt.Sprintf("%dh %dm", int(d.Hours()), int(d.Minutes())%60)
 }
 
 // Stdout returns stdout writer (convenience).

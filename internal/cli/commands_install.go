@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func runInstall(ctx *Context, args []string) error {
@@ -83,9 +84,17 @@ func runInstall(ctx *Context, args []string) error {
 
 		// 指定了版本，从目录中查找并安装
 		ctx.Printf("正在从 %s 安装 %s@%s...\n", fromDir, spec.Browser, spec.Version)
+		if ctx.Logger != nil {
+			ctx.Logger.Debug("[install] 开始从目录安装 %s@%s (来源: %s)", spec.Browser, spec.Version, fromDir)
+		}
+		installStart := time.Now()
 		record, err := ctx.Install.InstallFromDir(spec.Browser, spec.Version, fromDir)
 		if err != nil {
 			return fmt.Errorf("安装失败: %w", err)
+		}
+		if ctx.Logger != nil {
+			ctx.Logger.Debug("[install] 安装完成: 路径=%s 版本=%s 总耗时=%s",
+				record.InstallDir, record.Version, formatDuration(time.Since(installStart)))
 		}
 		ctx.Printf("✓ %s@%s 安装成功\n", record.Browser, record.Version)
 		return nil
@@ -94,9 +103,17 @@ func runInstall(ctx *Context, args []string) error {
 	// 本地文件安装
 	if fromFile != "" {
 		ctx.Printf("正在从 %s 安装 %s@%s...\n", fromFile, spec.Browser, spec.Version)
+		if ctx.Logger != nil {
+			ctx.Logger.Debug("[install] 开始从文件安装（解压） %s@%s (来源: %s)", spec.Browser, spec.Version, fromFile)
+		}
+		installStart := time.Now()
 		record, err := ctx.Install.InstallFromFile(spec.Browser, spec.Version, fromFile)
 		if err != nil {
 			return fmt.Errorf("安装失败: %w", err)
+		}
+		if ctx.Logger != nil {
+			ctx.Logger.Debug("[install] 安装完成: 路径=%s 版本=%s 总耗时=%s",
+				record.InstallDir, record.Version, formatDuration(time.Since(installStart)))
 		}
 		ctx.Printf("✓ %s@%s 安装成功\n", record.Browser, record.Version)
 		return nil
@@ -183,10 +200,21 @@ func runInstall(ctx *Context, args []string) error {
 
 	ctx.Printf("正在安装 %s@%s...\n", spec.Browser, versionInfo.Version)
 
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[install] 开始解压并安装 %s@%s", spec.Browser, versionInfo.Version)
+	}
+	installStart := time.Now()
+
 	// Install from the downloaded file
 	record, err := ctx.Install.InstallFromFile(spec.Browser, versionInfo.Version, downloadedPath)
 	if err != nil {
 		return fmt.Errorf("安装失败: %w", err)
+	}
+
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[install] 注册元数据完成: %s@%s", record.Browser, record.Version)
+		ctx.Logger.Debug("[install] 安装完成: 路径=%s 版本=%s 总耗时=%s",
+			record.InstallDir, record.Version, formatDuration(time.Since(installStart)))
 	}
 
 	ctx.Printf("✓ %s@%s 安装成功\n", record.Browser, record.Version)
@@ -210,8 +238,21 @@ func runUninstall(ctx *Context, args []string) error {
 		return nil
 	}
 
+	// 获取安装大小（用于 verbose 日志）
+	var freedSize int64
+	if ctx.Logger != nil {
+		if record, getErr := ctx.Install.GetRecord(spec.Browser, resolvedVersion); getErr == nil {
+			freedSize = record.Size
+		}
+	}
+
 	if err := ctx.Install.Uninstall(spec.Browser, resolvedVersion); err != nil {
 		return fmt.Errorf("卸载失败: %w", err)
+	}
+
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[uninstall] 卸载完成: %s@%s 释放空间 %s",
+			spec.Browser, resolvedVersion, FormatSize(freedSize))
 	}
 
 	ctx.Printf("✓ %s@%s 已卸载\n", spec.Browser, resolvedVersion)

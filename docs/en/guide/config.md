@@ -250,13 +250,13 @@ bws cfg set source-omaha true
 
 ### source-firefox-ftp
 
-Firefox data source switch (reserved, not currently used).
+Firefox data source switch.
 
 | Attribute | Value |
 |------|-----|
 | Default value | `true` |
 | Optional values | `true`, `false` |
-| Description | Whether to enable the Firefox data source (reserved; Firefox currently uses the Mozilla Product Details API instead of FTP) |
+| Description | Whether to enable the Firefox data source. Data is fetched from the HTTPS directory listing at `https://ftp.mozilla.org/pub/firefox/releases/` |
 
 Example:
 

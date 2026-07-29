@@ -318,15 +318,16 @@
     </div>
   </div>
 
+  {{if .SyncEnabled}}
   <!-- Sync Status -->
-  <div class="sync-card" id="syncSection" style="display:none;">
+  <div class="sync-card">
     <div class="sync-row">
-      <span class="sync-indicator" id="syncIndicator"></span>
-      <span class="sync-status-text" id="syncStatusText">正在加载同步状态...</span>
-      <button class="sync-btn" id="syncBtn" onclick="triggerSync()">立即同步</button>
+      <span class="sync-indicator idle"></span>
+      <span class="sync-status-text">同步已开启</span>
     </div>
-    <div class="sync-meta" id="syncMeta"></div>
+    <div class="sync-meta">自动同步和在线回退功能已启用</div>
   </div>
+  {{end}}
 
   <!-- Client Binaries -->
   <div class="section">
@@ -408,82 +409,6 @@ bws run chrome@120 -d</code></pre>
 
 </div>
 
-<script>
-(function() {
-  var syncSection = document.getElementById('syncSection');
-  var syncIndicator = document.getElementById('syncIndicator');
-  var syncStatusText = document.getElementById('syncStatusText');
-  var syncMeta = document.getElementById('syncMeta');
-  var syncBtn = document.getElementById('syncBtn');
 
-  function formatTime(iso) {
-    if (!iso) return '-';
-    try { return new Date(iso).toLocaleString('zh-CN', { hour12: false }); }
-    catch(e) { return iso; }
-  }
-
-  // Sync status polling
-  function updateSyncStatus() {
-    fetch('/api/v1/sync/status')
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        var s = data.data;
-        if (!s || (!s.running && !s.last_sync && !s.progress && !s.last_error)) {
-          syncSection.style.display = 'none';
-          return;
-        }
-        syncSection.style.display = 'block';
-
-        if (s.running) {
-          syncIndicator.className = 'sync-indicator running';
-          syncStatusText.textContent = '同步中...';
-          syncBtn.disabled = true;
-        } else if (s.last_error) {
-          syncIndicator.className = 'sync-indicator error';
-          syncStatusText.textContent = '同步异常';
-          syncBtn.disabled = false;
-        } else {
-          syncIndicator.className = 'sync-indicator idle';
-          syncStatusText.textContent = '同步空闲';
-          syncBtn.disabled = false;
-        }
-
-        var metaParts = [];
-        if (s.progress) {
-          if (s.synced_files > 0 || s.total_files > 0) {
-            metaParts.push(s.progress + ' (' + s.synced_files + '/' + s.total_files + ')');
-          } else {
-            metaParts.push(s.progress);
-          }
-        }
-        if (s.last_sync) metaParts.push('上次同步: ' + formatTime(s.last_sync));
-        if (s.next_sync && !s.running) metaParts.push('下次同步: ' + formatTime(s.next_sync));
-        if (s.last_error) metaParts.push('<span class="sync-error">错误: ' + s.last_error + '</span>');
-        syncMeta.innerHTML = metaParts.join('  |  ');
-      })
-      .catch(function() {
-        syncSection.style.display = 'none';
-      });
-  }
-
-  window.triggerSync = function() {
-    syncBtn.disabled = true;
-    syncBtn.textContent = '触发中...';
-    syncStatusText.textContent = '正在触发同步...';
-    fetch('/api/v1/sync/trigger', { method: 'POST' })
-      .then(function() {
-        setTimeout(updateSyncStatus, 1000);
-      })
-      .catch(function() {
-        syncBtn.disabled = false;
-        syncBtn.textContent = '立即同步';
-        syncStatusText.textContent = '触发失败';
-      });
-  };
-
-  updateSyncStatus();
-  setInterval(updateSyncStatus, 5000);
-})();
-</script>
 </body>
 </html>

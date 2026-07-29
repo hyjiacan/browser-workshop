@@ -37,33 +37,66 @@ type ServeConfig struct {
 
 	// SyncChannels is the list of channels to sync (comma-separated).
 	SyncChannels string
+
+	// OnlineFallback controls whether serve fetches packages from the online
+	// source in real-time when a requested file is not present locally.
+	// When enabled, missing packages are downloaded on demand and served to
+	// the client, and the manifest lists all online-available versions.
+	OnlineFallback bool
+
+	// LogLevel is the console log level for the serve module.
+	// Valid values: trace, debug, info, warn, error, fatal.
+	// Default: info
+	LogLevel string
+
+	// FileLogLevel is the file log level for the serve module.
+	// Valid values: trace, debug, info, warn, error, fatal.
+	// Default: debug
+	FileLogLevel string
+
+	// LogMaxSizeMB is the maximum size in MB for a single log file before rotation.
+	// 0 means no size limit (infinite append).
+	// Default: 10
+	LogMaxSizeMB int
+
+	// LogMaxBackups is the maximum number of backup log files to keep.
+	// 0 means no backups are kept when rotating.
+	// Default: 5
+	LogMaxBackups int
+
+	// ScanWorkers is the number of worker goroutines used for parallel
+	// checksum computation during package scanning. 0 means auto (runtime.NumCPU()).
+	// Values are clamped to the range [1, 32].
+	// Default: 0 (auto)
+	ScanWorkers int
 }
 
 // DefaultServeConfig returns the default serve configuration.
 func DefaultServeConfig() ServeConfig {
 	return ServeConfig{
-		Host:         "0.0.0.0",
-		Port:         "8080",
-		PackagesDir:  "",
-		BinDir:       "",
-		SyncEnabled:  false,
-		SyncInterval: "24h",
-		SyncBrowsers: "",
-		SyncChannels: "stable",
+		Host:           "0.0.0.0",
+		Port:           "8080",
+		PackagesDir:    "",
+		BinDir:         "",
+		SyncEnabled:    false,
+		SyncInterval:   "24h",
+		SyncBrowsers:   "",
+		SyncChannels:   "stable",
+		OnlineFallback: false,
+		LogLevel:       "info",
+		FileLogLevel:   "debug",
+		LogMaxSizeMB:   10,
+		LogMaxBackups:  5,
+		ScanWorkers:    0,
 	}
 }
 
 // ConfigPath returns the path to the bws-serve.ini config file.
-// It's located in the program directory (next to packages/ and bin/).
+// It's located in the bws-data directory (next to config.json and logs/).
+// If baseDir is empty, the default bws-data directory is used.
 func ConfigPath(baseDir string) string {
 	if baseDir == "" {
-		dir, err := paths.ExeDir()
-		if err == nil {
-			baseDir = dir
-		} else {
-			wd, _ := os.Getwd()
-			baseDir = wd
-		}
+		baseDir = paths.Default().Root
 	}
 	return filepath.Join(baseDir, "bws-serve.ini")
 }
@@ -135,6 +168,24 @@ func LoadServeConfig(baseDir string) (ServeConfig, error) {
 			cfg.SyncBrowsers = value
 		case "sync-channels", "syncchannels":
 			cfg.SyncChannels = value
+		case "online-fallback", "onlinefallback":
+			cfg.OnlineFallback = parseBool(value)
+		case "log-level", "loglevel":
+			cfg.LogLevel = value
+		case "file-log-level", "fileloglevel":
+			cfg.FileLogLevel = value
+		case "log-max-size-mb", "logmaxsizemb", "log-max-size":
+			if v, err := strconv.Atoi(value); err == nil {
+				cfg.LogMaxSizeMB = v
+			}
+		case "log-max-backups", "logmaxbackups":
+			if v, err := strconv.Atoi(value); err == nil {
+				cfg.LogMaxBackups = v
+			}
+		case "scan-workers", "scanworkers":
+			if v, err := strconv.Atoi(value); err == nil {
+				cfg.ScanWorkers = v
+			}
 		}
 	}
 
@@ -159,7 +210,7 @@ func SaveServeConfig(baseDir string, cfg ServeConfig) error {
 	var sb strings.Builder
 	sb.WriteString("# ===============================================================\n")
 	sb.WriteString("# bws serve 配置文件\n")
-	sb.WriteString("# 位置: bws-serve.ini（与 bws.exe 同目录，或通过 -d 指定）\n")
+	sb.WriteString("# 位置: bws-data/bws-serve.ini（bws-data 为程序所在目录下的数据目录）\n")
 	sb.WriteString("# ===============================================================\n")
 	sb.WriteString("#\n")
 	sb.WriteString("# 修改此文件后，重新运行 bws serve 即可生效。\n")
@@ -178,14 +229,14 @@ func SaveServeConfig(baseDir string, cfg ServeConfig) error {
 	sb.WriteString("# 浏览器安装包存放目录\n")
 	sb.WriteString("# serve 将从此目录提供浏览器安装包的下载\n")
 	sb.WriteString("# 留空 = 使用程序所在目录下的 packages 子目录\n")
-	sb.WriteString("# 支持绝对路径和相对路径\n")
+	sb.WriteString("# 支持绝对路径和相对路径（相对于程序所在目录）\n")
 	sb.WriteString("# 示例: D:\\bws-packages  或  ..\\shared\\packages\n")
 	sb.WriteString(fmt.Sprintf("packages-dir = %s\n", cfg.PackagesDir))
 	sb.WriteString("\n")
 	sb.WriteString("# 客户端二进制文件存放目录\n")
 	sb.WriteString("# serve 将从此目录提供 bws 客户端二进制的下载\n")
 	sb.WriteString("# 留空 = 使用程序所在目录下的 bin 子目录\n")
-	sb.WriteString("# 支持绝对路径和相对路径\n")
+	sb.WriteString("# 支持绝对路径和相对路径（相对于程序所在目录）\n")
 	sb.WriteString("# 示例: D:\\bws-bin  或  ..\\shared\\bin\n")
 	sb.WriteString(fmt.Sprintf("bin-dir = %s\n", cfg.BinDir))
 	sb.WriteString("\n")
@@ -208,6 +259,41 @@ func SaveServeConfig(baseDir string, cfg ServeConfig) error {
 	sb.WriteString("# 可选值: stable, beta, dev, canary, esr\n")
 	sb.WriteString("# 默认: stable\n")
 	sb.WriteString(fmt.Sprintf("sync-channels = %s\n", cfg.SyncChannels))
+	sb.WriteString("\n")
+	sb.WriteString("# 在线回退开关\n")
+	sb.WriteString("# true  = 当请求的软件包在本地不存在时，自动从在线源实时下载并提供\n")
+	sb.WriteString("#         同时清单（manifest）会列出在线源中所有可用的版本\n")
+	sb.WriteString("# false = 仅提供本地 packages/ 中已有的文件，缺失时返回 404\n")
+	sb.WriteString(fmt.Sprintf("online-fallback = %s\n", boolStr(cfg.OnlineFallback)))
+	sb.WriteString("\n")
+	sb.WriteString("# 日志级别（控制台输出）\n")
+	sb.WriteString("# 可选值: trace, debug, info, warn, error, fatal\n")
+	sb.WriteString("# 默认: info\n")
+	sb.WriteString(fmt.Sprintf("log-level = %s\n", cfg.LogLevel))
+	sb.WriteString("\n")
+	sb.WriteString("# 文件日志级别\n")
+	sb.WriteString("# 可选值: trace, debug, info, warn, error, fatal\n")
+	sb.WriteString("# 默认: debug\n")
+	sb.WriteString("# 文件日志记录到 logs/serve.log\n")
+	sb.WriteString(fmt.Sprintf("file-log-level = %s\n", cfg.FileLogLevel))
+	sb.WriteString("\n")
+	sb.WriteString("# 单个日志文件最大大小（MB）\n")
+	sb.WriteString("# 超过此大小时自动轮转，旧文件保存为 .1, .2, .3 等\n")
+	sb.WriteString("# 0 = 不限制大小（无限追加）\n")
+	sb.WriteString("# 默认: 10\n")
+	sb.WriteString(fmt.Sprintf("log-max-size-mb = %d\n", cfg.LogMaxSizeMB))
+	sb.WriteString("\n")
+	sb.WriteString("# 保留的备份日志文件数量\n")
+	sb.WriteString("# 轮转时保留的旧文件数量，超过此数量的最旧文件将被删除\n")
+	sb.WriteString("# 0 = 不保留备份\n")
+	sb.WriteString("# 默认: 5\n")
+	sb.WriteString(fmt.Sprintf("log-max-backups = %d\n", cfg.LogMaxBackups))
+	sb.WriteString("\n")
+	sb.WriteString("# 扫描软件包时并行计算校验和的线程数\n")
+	sb.WriteString("# 0 = 自动（根据 CPU 核心数自动设置）\n")
+	sb.WriteString("# 有效范围: 1 到 32\n")
+	sb.WriteString("# 默认: 0（自动）\n")
+	sb.WriteString(fmt.Sprintf("scan-workers = %d\n", cfg.ScanWorkers))
 
 	return os.WriteFile(configPath, []byte(sb.String()), 0o644)
 }
@@ -260,6 +346,48 @@ func SetConfigKey(baseDir string, key string, value string) (ServeConfig, error)
 		cfg.SyncBrowsers = value
 	case "sync-channels", "syncchannels":
 		cfg.SyncChannels = value
+	case "online-fallback", "onlinefallback":
+		cfg.OnlineFallback = parseBool(value)
+	case "log-level", "loglevel":
+		// Validate log level
+		normalized := strings.ToLower(strings.TrimSpace(value))
+		validLevels := map[string]bool{
+			"trace": true, "debug": true, "info": true,
+			"warn": true, "warning": true, "error": true, "fatal": true,
+		}
+		if !validLevels[normalized] {
+			return cfg, fmt.Errorf("无效的日志级别: %s（可选值: trace, debug, info, warn, error, fatal）", value)
+		}
+		cfg.LogLevel = value
+	case "file-log-level", "fileloglevel":
+		// Validate file log level
+		normalized := strings.ToLower(strings.TrimSpace(value))
+		validLevels := map[string]bool{
+			"trace": true, "debug": true, "info": true,
+			"warn": true, "warning": true, "error": true, "fatal": true,
+		}
+		if !validLevels[normalized] {
+			return cfg, fmt.Errorf("无效的文件日志级别: %s（可选值: trace, debug, info, warn, error, fatal）", value)
+		}
+		cfg.FileLogLevel = value
+	case "log-max-size-mb", "logmaxsizemb", "log-max-size":
+		v, err := strconv.Atoi(value)
+		if err != nil || v < 0 {
+			return cfg, fmt.Errorf("无效的日志文件大小: %s（必须为非负整数，单位 MB）", value)
+		}
+		cfg.LogMaxSizeMB = v
+	case "log-max-backups", "logmaxbackups":
+		v, err := strconv.Atoi(value)
+		if err != nil || v < 0 {
+			return cfg, fmt.Errorf("无效的备份文件数量: %s（必须为非负整数）", value)
+		}
+		cfg.LogMaxBackups = v
+	case "scan-workers", "scanworkers":
+		v, err := strconv.Atoi(value)
+		if err != nil || v < 0 || v > 32 {
+			return cfg, fmt.Errorf("无效的扫描线程数: %s（必须为 0 到 32 之间的整数，0 表示自动）", value)
+		}
+		cfg.ScanWorkers = v
 	default:
 		return cfg, fmt.Errorf("未知的配置项: %s", key)
 	}
@@ -297,6 +425,18 @@ func GetConfigKey(baseDir string, key string) (string, error) {
 		return cfg.SyncBrowsers, nil
 	case "sync-channels", "syncchannels":
 		return cfg.SyncChannels, nil
+	case "online-fallback", "onlinefallback":
+		return boolStr(cfg.OnlineFallback), nil
+	case "log-level", "loglevel":
+		return cfg.LogLevel, nil
+	case "file-log-level", "fileloglevel":
+		return cfg.FileLogLevel, nil
+	case "log-max-size-mb", "logmaxsizemb", "log-max-size":
+		return strconv.Itoa(cfg.LogMaxSizeMB), nil
+	case "log-max-backups", "logmaxbackups":
+		return strconv.Itoa(cfg.LogMaxBackups), nil
+	case "scan-workers", "scanworkers":
+		return strconv.Itoa(cfg.ScanWorkers), nil
 	default:
 		return "", fmt.Errorf("未知的配置项: %s", key)
 	}

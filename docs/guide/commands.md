@@ -53,6 +53,7 @@ bws ls [浏览器[@版本]] [选项]
 | `--no-system` | - | 不显示系统浏览器 |
 | `--channel <渠道>` | `-c` | 指定渠道（仅远程列表有效） |
 | `--limit <数量>` | `-n` | 限制结果数量（默认 20，仅远程列表有效） |
+| `--refresh` | - | 强制刷新远程源缓存（仅远程列表有效） |
 | `--json` | - | 以 JSON 格式输出 |
 
 ### 示例
@@ -87,7 +88,10 @@ bws ls -R chrome -c beta
 # 限制远程结果数量
 bws ls -R chrome -n 5
 
-# JSON 格式输出
+# 强制刷新远程源缓存（跳过缓存，从网络获取最新数据）
+bws ls -R firefox --refresh
+
+# 以 JSON 格式输出
 bws ls --json
 ```
 
@@ -721,7 +725,7 @@ bws cfg <子命令> [参数]
 | `source` | 离线源地址 | 空 |
 | `source-serve` | Serve 源开关 | `true` |
 | `source-omaha` | Omaha 源开关 | `true` |
-| `source-firefox-ftp` | Firefox 数据源开关（已保留） | `true` |
+| `source-firefox-ftp` | Firefox 数据源开关 | `true` |
 | `disk-threshold` | 磁盘空间告警阈值（GB） | `5` |
 | `proxy` | 代理地址（用于下载和浏览器启动） | 空 |
 

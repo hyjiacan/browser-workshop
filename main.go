@@ -19,11 +19,10 @@ import (
 	"github.com/bws/bws/internal/config"
 	"github.com/bws/bws/internal/download"
 	"github.com/bws/bws/internal/fingerprint"
-	bmlog "github.com/bws/bws/internal/log"
-	"github.com/bws/bws/internal/install"
 	"github.com/bws/bws/internal/i18n"
-	bwversion "github.com/bws/bws/internal/version"
+	"github.com/bws/bws/internal/install"
 	"github.com/bws/bws/internal/launch"
+	bmlog "github.com/bws/bws/internal/log"
 	"github.com/bws/bws/internal/paths"
 	"github.com/bws/bws/internal/plugin"
 	"github.com/bws/bws/internal/repo"
@@ -31,6 +30,7 @@ import (
 	"github.com/bws/bws/internal/shortcut"
 	"github.com/bws/bws/internal/source"
 	"github.com/bws/bws/internal/system"
+	bwversion "github.com/bws/bws/internal/version"
 )
 
 const version = "1.0.0-beta"
@@ -70,12 +70,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize logger (dual output: file at DEBUG level, console at config level)
-	consoleLevel := bmlog.ParseLevel(cfg.LogLevel)
+	// Initialize logger (dual output: file and console with separate levels)
+	consoleLevel := bmlog.ParseLevel(cfg.Log.ConsoleLevel)
 	if verbose {
 		consoleLevel = bmlog.LevelDebug
 	}
-	logger, err := bmlog.NewDualLogger(p.LogFile, bmlog.LevelDebug, consoleLevel, true)
+	fileLevel := bmlog.ParseLevel(cfg.Log.FileLevel)
+	maxSizeBytes := int64(cfg.Log.MaxSizeMB) * 1024 * 1024
+	logger, err := bmlog.NewDualLogger(p.LogFile, fileLevel, consoleLevel, true,
+		bmlog.WithMaxSize(maxSizeBytes),
+		bmlog.WithMaxBackups(cfg.Log.MaxBackups),
+	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "警告: 初始化日志系统失败: %v\n", err)
 		logger = bmlog.Default()
@@ -194,9 +199,14 @@ func main() {
 func resolvePaths() (configPath string, dataRoot string, isNew bool) {
 	// Check for BM_HOME environment variable (highest priority)
 	if home := os.Getenv("BM_HOME"); home != "" {
-		configPath := filepath.Join(home, "config.json")
+		configPath := filepath.Join(home, "config.ini")
 		if _, err := os.Stat(configPath); err == nil {
 			return configPath, home, false
+		}
+		// Backward compatibility: check for legacy config.json
+		legacyPath := filepath.Join(home, "config.json")
+		if _, err := os.Stat(legacyPath); err == nil {
+			return legacyPath, home, false
 		}
 		return configPath, home, true
 	}
@@ -205,9 +215,14 @@ func resolvePaths() (configPath string, dataRoot string, isNew bool) {
 	exeDir, err := paths.ExeDir()
 	if err == nil {
 		dataDir := filepath.Join(exeDir, "bws-data")
-		configPath := filepath.Join(dataDir, "config.json")
+		configPath := filepath.Join(dataDir, "config.ini")
 		if _, err := os.Stat(configPath); err == nil {
 			return configPath, dataDir, false
+		}
+		// Backward compatibility: check for legacy config.json
+		legacyPath := filepath.Join(dataDir, "config.json")
+		if _, err := os.Stat(legacyPath); err == nil {
+			return legacyPath, dataDir, false
 		}
 		// Config doesn't exist yet, but we still use bm-data as default
 		return configPath, dataDir, true
@@ -220,11 +235,16 @@ func resolvePaths() (configPath string, dataRoot string, isNew bool) {
 		home = wd
 	}
 	dataRoot = filepath.Join(home, ".bws")
-	configPath = filepath.Join(dataRoot, "config.json")
+	configPath = filepath.Join(dataRoot, "config.ini")
 
 	// Check if config exists
 	if _, err := os.Stat(configPath); err == nil {
 		return configPath, dataRoot, false
+	}
+	// Backward compatibility: check for legacy config.json
+	legacyPath := filepath.Join(dataRoot, "config.json")
+	if _, err := os.Stat(legacyPath); err == nil {
+		return legacyPath, dataRoot, false
 	}
 
 	return configPath, dataRoot, true
@@ -352,10 +372,11 @@ func (a *configAdapter) SetDefaultChannel(channel string) error {
 }
 
 func (a *configAdapter) GetLogLevel() string {
-	return a.cfg.LogLevel
+	return a.cfg.Log.ConsoleLevel
 }
 
 func (a *configAdapter) SetLogLevel(level string) error {
+	a.cfg.Log.ConsoleLevel = level
 	a.cfg.LogLevel = level
 	return config.Save(a.cfg, a.configPath)
 }
@@ -421,22 +442,22 @@ func (a *configAdapter) ClearRemoteSource() error {
 	return config.Save(a.cfg, a.configPath)
 }
 
-func (a *configAdapter) IsServeSourceEnabled() bool     { return a.cfg.IsServeSourceEnabled() }
+func (a *configAdapter) IsServeSourceEnabled() bool { return a.cfg.IsServeSourceEnabled() }
 func (a *configAdapter) SetServeSourceEnabled(v bool) error {
 	a.cfg.SetServeSourceEnabled(v)
 	return config.Save(a.cfg, a.configPath)
 }
-func (a *configAdapter) IsOmahaSourceEnabled() bool      { return a.cfg.IsOmahaSourceEnabled() }
+func (a *configAdapter) IsOmahaSourceEnabled() bool { return a.cfg.IsOmahaSourceEnabled() }
 func (a *configAdapter) SetOmahaSourceEnabled(v bool) error {
 	a.cfg.SetOmahaSourceEnabled(v)
 	return config.Save(a.cfg, a.configPath)
 }
-func (a *configAdapter) IsFirefoxFTPEnabled() bool       { return a.cfg.IsFirefoxFTPEnabled() }
+func (a *configAdapter) IsFirefoxFTPEnabled() bool { return a.cfg.IsFirefoxFTPEnabled() }
 func (a *configAdapter) SetFirefoxFTPEnabled(v bool) error {
 	a.cfg.SetFirefoxFTPEnabled(v)
 	return config.Save(a.cfg, a.configPath)
 }
-func (a *configAdapter) GetDiskSpaceThresholdGB() int    { return a.cfg.GetDiskSpaceThresholdGB() }
+func (a *configAdapter) GetDiskSpaceThresholdGB() int { return a.cfg.GetDiskSpaceThresholdGB() }
 func (a *configAdapter) SetDiskSpaceThresholdGB(v int) error {
 	a.cfg.SetDiskSpaceThresholdGB(v)
 	return config.Save(a.cfg, a.configPath)
@@ -458,11 +479,13 @@ type pluginAdapter struct {
 	mgr *plugin.Manager
 }
 
-func (a *pluginAdapter) List() []plugin.ManifestEntry                  { return a.mgr.List() }
-func (a *pluginAdapter) GetManifestEntry(name string) (*plugin.ManifestEntry, error) { return a.mgr.GetManifestEntry(name) }
-func (a *pluginAdapter) Install(entry plugin.ManifestEntry) error   { return a.mgr.Install(entry) }
-func (a *pluginAdapter) Uninstall(name string) error                { return a.mgr.Uninstall(name) }
-func (a *pluginAdapter) PluginsDir() string                         { return a.mgr.PluginsDir() }
+func (a *pluginAdapter) List() []plugin.ManifestEntry { return a.mgr.List() }
+func (a *pluginAdapter) GetManifestEntry(name string) (*plugin.ManifestEntry, error) {
+	return a.mgr.GetManifestEntry(name)
+}
+func (a *pluginAdapter) Install(entry plugin.ManifestEntry) error { return a.mgr.Install(entry) }
+func (a *pluginAdapter) Uninstall(name string) error              { return a.mgr.Uninstall(name) }
+func (a *pluginAdapter) PluginsDir() string                       { return a.mgr.PluginsDir() }
 
 type pluginExecutor struct {
 	mgr *plugin.Manager
@@ -822,9 +845,22 @@ func (a *launchAdapter) Run(opts cli.LaunchOptions) error {
 		return err
 	}
 
+	bmlog.Debug("[run] 进程已启动：PID=%d", proc.Pid)
+
 	// If not detached, wait for the process
 	if !opts.Detached {
-		return proc.Wait()
+		waitErr := proc.Wait()
+		if waitErr != nil {
+			// Try to extract exit code
+			if exitErr, ok := waitErr.(interface{ ExitCode() int }); ok {
+				bmlog.Debug("[run] 进程已退出：退出码=%d", exitErr.ExitCode())
+			} else {
+				bmlog.Debug("[run] 进程已退出：%v", waitErr)
+			}
+		} else {
+			bmlog.Debug("[run] 进程已退出：退出码=0")
+		}
+		return waitErr
 	}
 
 	fmt.Printf("已启动 %s@%s (PID: %d)\n", opts.Browser, opts.Version, proc.Pid)
@@ -892,66 +928,106 @@ type serveAdapter struct {
 	source  source.Source // the multi-source for syncing
 }
 
-func (a *serveAdapter) StartFromConfig(baseDir string) error {
-	// Load serve config from bws-serve.ini
-	cfg, err := bmserve.LoadServeConfig(baseDir)
+func (a *serveAdapter) StartFromConfig() error {
+	// dataDir is the bws-data directory (shared with client config, logs, etc.)
+	dataDir := paths.Default().Root
+
+	// exeDir is the executable directory (used for resolving relative packages/bin paths)
+	exeDir, err := paths.ExeDir()
+	if err != nil {
+		wd, _ := os.Getwd()
+		exeDir = wd
+	}
+
+	// Load serve config from bws-serve.ini (in the bws-data directory)
+	cfg, err := bmserve.LoadServeConfig(dataDir)
 	if err != nil {
 		return fmt.Errorf("加载 serve 配置失败: %w", err)
 	}
 
 	addr := cfg.Addr()
 
-	// Resolve effective directories: config value > CLI -d default
-	exeDir, _ := paths.ExeDir()
-	if exeDir == "" {
-		exeDir, _ = os.Getwd()
+	// Resolve packages directory:
+	// If config has an absolute path, use it directly.
+	// If relative, resolve relative to the exe directory.
+	// If empty, default to {exeDir}/packages.
+	packagesDir := resolveServeDir(cfg.PackagesDir, exeDir, "packages")
+
+	// Resolve bin directory (same logic)
+	binDir := resolveServeDir(cfg.BinDir, exeDir, "bin")
+
+	// Create serve logger: dual output (file + console)
+	// File log: at {dataDir}/logs/serve.log (alongside client logs/bws.log)
+	logFile := filepath.Join(dataDir, "logs", "serve.log")
+	consoleLevel := bmlog.ParseLevel(cfg.LogLevel)
+	fileLevel := bmlog.ParseLevel(cfg.FileLogLevel)
+	maxSizeBytes := int64(cfg.LogMaxSizeMB) * 1024 * 1024
+	serveLogger, err := bmlog.NewDualLogger(logFile, fileLevel, consoleLevel, true,
+		bmlog.WithMaxSize(maxSizeBytes),
+		bmlog.WithMaxBackups(cfg.LogMaxBackups),
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "警告: 初始化 serve 日志失败: %v\n", err)
+		serveLogger = nil // fall back to default logger
+	}
+	if serveLogger != nil {
+		defer serveLogger.Close()
 	}
 
-	packagesDir := cfg.PackagesDir
-	if packagesDir == "" {
-		packagesDir = filepath.Join(exeDir, "packages")
+	// The online source adapter is reused for both auto-sync (when enabled)
+	// and on-demand online fallback. serveSyncSource implements SyncSource.
+	var onlineSource bmserve.SyncSource
+	if a.source != nil {
+		onlineSource = &serveSyncSource{src: a.source}
 	}
 
-	binDir := cfg.BinDir
-	if binDir == "" {
-		binDir = filepath.Join(exeDir, "bin")
-	}
+	// Online fallback scope follows the configured sync browsers/channels so
+	// users control which versions are exposed via the manifest.
+	onlineBrowsers := cfg.SyncBrowsersList()
+	onlineChannels := cfg.SyncChannelsList()
 
-	var syncSource bmserve.SyncSource
-
-	if cfg.SyncEnabled && a.source != nil {
+	if cfg.SyncEnabled && onlineSource != nil {
 		// Parse interval
 		interval, err := cfg.SyncDuration()
 		if err != nil {
 			return fmt.Errorf("解析同步间隔失败: %w", err)
 		}
 
-		// Create sync source adapter
-		syncSource = &serveSyncSource{
-			src: a.source,
-		}
-
 		srv := bmserve.NewServerWithOptions(bmserve.ServerOptions{
-			Addr:         addr,
-			Version:      a.version,
-			PackagesDir:  packagesDir,
-			BinDir:       binDir,
-			SyncSource: syncSource,
+			Addr:        addr,
+			Version:     a.version,
+			PackagesDir: packagesDir,
+			BinDir:      binDir,
+			SyncSource:  onlineSource,
 			SyncConfig: bmserve.SyncConfig{
 				Enabled:  true,
 				Interval: interval,
-				Browsers: cfg.SyncBrowsersList(),
-				Channels: cfg.SyncChannelsList(),
+				Browsers: onlineBrowsers,
+				Channels: onlineChannels,
 			},
+			OnlineSource:   onlineSource,
+			OnlineFallback: cfg.OnlineFallback,
+			OnlineBrowsers: onlineBrowsers,
+			OnlineChannels: onlineChannels,
+			ScanWorkers:    cfg.ScanWorkers,
+			ConfigPath:     bmserve.ConfigPath(dataDir),
+			Logger:         serveLogger,
 		})
 		return srv.Start()
 	}
 
 	srv := bmserve.NewServerWithOptions(bmserve.ServerOptions{
-		Addr:        addr,
-		Version:     a.version,
-		PackagesDir: packagesDir,
-		BinDir:      binDir,
+		Addr:           addr,
+		Version:        a.version,
+		PackagesDir:    packagesDir,
+		BinDir:         binDir,
+		OnlineSource:   onlineSource,
+		OnlineFallback: cfg.OnlineFallback,
+		OnlineBrowsers: onlineBrowsers,
+		OnlineChannels: onlineChannels,
+		ScanWorkers:    cfg.ScanWorkers,
+		ConfigPath:     bmserve.ConfigPath(dataDir),
+		Logger:         serveLogger,
 	})
 	return srv.Start()
 }
@@ -962,6 +1038,20 @@ func (a *serveAdapter) ConfigPath() string {
 
 func (a *serveAdapter) EnsureDefaultConfig(baseDir string) (string, bool, error) {
 	return bmserve.EnsureDefaultConfig(baseDir)
+}
+
+// resolveServeDir resolves a directory path from serve config.
+// If the path is absolute, it's used as-is.
+// If relative, it's resolved relative to baseDir.
+// If empty, it defaults to {baseDir}/{defaultName}.
+func resolveServeDir(path string, baseDir string, defaultName string) string {
+	if path == "" {
+		return filepath.Join(baseDir, defaultName)
+	}
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(baseDir, path)
 }
 
 // serveSyncSource adapts source.Source to serve.SyncSource.
@@ -1077,6 +1167,13 @@ func (a *sourceAdapter) ListVersions(browser string, channel string) ([]source.V
 	return a.src.List(context.TODO(), filter)
 }
 
+// ForceRefresh 对所有支持缓存刷新的底层源设置强制刷新标志。
+func (a *sourceAdapter) ForceRefresh() {
+	if ms, ok := a.src.(*source.MultiSource); ok {
+		ms.ForceRefresh()
+	}
+}
+
 func (a *sourceAdapter) Describe() string {
 	name := a.src.Name()
 	if name == "" {
@@ -1119,8 +1216,8 @@ func describeSourceName(name string) string {
 		return "Chrome Omaha 协议"
 	case "chrome-omahaproxy":
 		return "Chrome Omaha Proxy"
-	case "firefox-mozilla":
-		return "Mozilla Product Details"
+	case "firefox-ftp":
+		return "Mozilla FTP 目录"
 	case "http":
 		return "远程 HTTP 源"
 	default:

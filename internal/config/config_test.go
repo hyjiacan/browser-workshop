@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -44,7 +45,7 @@ func TestDefault(t *testing.T) {
 }
 
 func TestLoad_NonExistentFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "nonexistent.json")
+	path := filepath.Join(t.TempDir(), "nonexistent.ini")
 	cfg, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load() error = %v, want nil (non-existent file returns defaults)", err)
@@ -60,7 +61,7 @@ func TestLoad_NonExistentFile(t *testing.T) {
 
 func TestSaveAndLoad(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "config.json")
+	path := filepath.Join(dir, "config.ini")
 
 	original := Default()
 	original.DefaultBrowser = "firefox"
@@ -104,30 +105,38 @@ func TestSaveAndLoad(t *testing.T) {
 	}
 }
 
-func TestLoad_InvalidJSON(t *testing.T) {
+func TestLoad_InvalidINI(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "bad.json")
-	if err := os.WriteFile(path, []byte("not valid json{"), 0o644); err != nil {
+	path := filepath.Join(dir, "bad.ini")
+	if err := os.WriteFile(path, []byte("not valid ini = but also not json"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err := Load(path)
-	if err == nil {
-		t.Error("Load() with invalid JSON returned nil error, expected error")
+	// Should still load defaults (INI parser is lenient)
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg == nil {
+		t.Fatal("Load() returned nil config")
+	}
+	// Should have defaults since no recognized keys were present
+	if cfg.DefaultBrowser != "chrome" {
+		t.Errorf("DefaultBrowser = %q, want 'chrome'", cfg.DefaultBrowser)
 	}
 }
 
 func TestLoad_PartialConfig(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "partial.json")
+	path := filepath.Join(dir, "partial.ini")
 
 	// Only set a few fields, rest should get defaults
-	partial := `{
-		"defaultBrowser": "chromium",
-		"download": {
-			"maxConcurrency": 10
-		}
-	}`
+	partial := `[client]
+default-browser = chromium
+
+[download]
+max-concurrency = 10
+`
 	if err := os.WriteFile(path, []byte(partial), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -205,18 +214,16 @@ func TestGetSources(t *testing.T) {
 
 func TestDurationParsing(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "durations.json")
+	path := filepath.Join(dir, "durations.ini")
 
-	custom := `{
-		"download": {
-			"retryDelay": "5s",
-			"timeout": "1h"
-		},
-		"cache": {
-			"manifestTTL": "12h",
-			"downloadTTL": "48h"
-		}
-	}`
+	custom := `[download]
+retry-delay = 5s
+timeout = 1h
+
+[cache]
+manifest-ttl = 12h
+download-ttl = 48h
+`
 	if err := os.WriteFile(path, []byte(custom), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -242,9 +249,11 @@ func TestDurationParsing(t *testing.T) {
 
 func TestInvalidDuration(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "bad-dur.json")
+	path := filepath.Join(dir, "bad-dur.ini")
 
-	bad := `{"download": {"retryDelay": "not-a-duration"}}`
+	bad := `[download]
+retry-delay = not-a-duration
+`
 	if err := os.WriteFile(path, []byte(bad), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -252,5 +261,157 @@ func TestInvalidDuration(t *testing.T) {
 	_, err := Load(path)
 	if err == nil {
 		t.Error("Load() with invalid duration should return error")
+	}
+}
+
+func TestLogConfig_Defaults(t *testing.T) {
+	cfg := Default()
+
+	if cfg.Log.ConsoleLevel != "info" {
+		t.Errorf("Log.ConsoleLevel = %q, want %q", cfg.Log.ConsoleLevel, "info")
+	}
+	if cfg.Log.FileLevel != "debug" {
+		t.Errorf("Log.FileLevel = %q, want %q", cfg.Log.FileLevel, "debug")
+	}
+	if cfg.Log.MaxSizeMB != 10 {
+		t.Errorf("Log.MaxSizeMB = %d, want 10", cfg.Log.MaxSizeMB)
+	}
+	if cfg.Log.MaxBackups != 5 {
+		t.Errorf("Log.MaxBackups = %d, want 5", cfg.Log.MaxBackups)
+	}
+	// LogLevel should match ConsoleLevel for backward compat
+	if cfg.LogLevel != "info" {
+		t.Errorf("LogLevel = %q, want %q", cfg.LogLevel, "info")
+	}
+}
+
+func TestLogConfig_SaveSyncsLogLevel(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.ini")
+
+	cfg := Default()
+	cfg.Log.ConsoleLevel = "error"
+	// Don't set LogLevel directly - should be synced on save
+
+	if err := Save(cfg, path); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Read raw INI and check fields
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile error = %v", err)
+	}
+
+	content := string(data)
+	if !strings.Contains(content, "log-level = error") {
+		t.Errorf("saved config should have log-level synced to error, got: %s", content)
+	}
+	if !strings.Contains(content, "console-level = error") {
+		t.Errorf("saved config should have console-level set to error, got: %s", content)
+	}
+}
+
+func TestLogConfig_LoadNewStyle(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "new-config.ini")
+
+	// New-style config with full log section
+	newConfig := `[log]
+console-level = trace
+file-level = info
+max-size-mb = 50
+max-backups = 10
+
+[client]
+default-browser = chrome
+`
+	if err := os.WriteFile(path, []byte(newConfig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Log.ConsoleLevel != "trace" {
+		t.Errorf("Log.ConsoleLevel = %q, want %q", cfg.Log.ConsoleLevel, "trace")
+	}
+	if cfg.Log.FileLevel != "info" {
+		t.Errorf("Log.FileLevel = %q, want %q", cfg.Log.FileLevel, "info")
+	}
+	if cfg.Log.MaxSizeMB != 50 {
+		t.Errorf("Log.MaxSizeMB = %d, want 50", cfg.Log.MaxSizeMB)
+	}
+	if cfg.Log.MaxBackups != 10 {
+		t.Errorf("Log.MaxBackups = %d, want 10", cfg.Log.MaxBackups)
+	}
+	// LogLevel should be synced from ConsoleLevel
+	if cfg.LogLevel != "trace" {
+		t.Errorf("LogLevel = %q, want %q (synced from console-level)", cfg.LogLevel, "trace")
+	}
+}
+
+func TestBackwardCompat_JSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "legacy-config.json")
+
+	legacyJSON := `{
+		"defaultBrowser": "firefox",
+		"defaultChannel": "beta",
+		"logLevel": "warn",
+		"download": {
+			"maxConcurrency": 7
+		}
+	}`
+	if err := os.WriteFile(path, []byte(legacyJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.DefaultBrowser != "firefox" {
+		t.Errorf("DefaultBrowser = %q, want 'firefox'", cfg.DefaultBrowser)
+	}
+	if cfg.DefaultChannel != "beta" {
+		t.Errorf("DefaultChannel = %q, want 'beta'", cfg.DefaultChannel)
+	}
+	if cfg.Log.ConsoleLevel != "warn" {
+		t.Errorf("Log.ConsoleLevel = %q, want 'warn'", cfg.Log.ConsoleLevel)
+	}
+	if cfg.Download.MaxConcurrency != 7 {
+		t.Errorf("Download.MaxConcurrency = %d, want 7", cfg.Download.MaxConcurrency)
+	}
+}
+
+func TestAliasRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "alias.ini")
+
+	cfg := Default()
+	cfg.Aliases["dev"] = "chrome@dev"
+	cfg.Aliases["nightly"] = "firefox@nightly"
+
+	if err := Save(cfg, path); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if loaded.Aliases["dev"] != "chrome@dev" {
+		t.Errorf("Aliases['dev'] = %q, want 'chrome@dev'", loaded.Aliases["dev"])
+	}
+	if loaded.Aliases["nightly"] != "firefox@nightly" {
+		t.Errorf("Aliases['nightly'] = %q, want 'firefox@nightly'", loaded.Aliases["nightly"])
+	}
+	if loaded.Aliases["stable"] != "chrome@latest" {
+		t.Errorf("Aliases['stable'] = %q, want 'chrome@latest'", loaded.Aliases["stable"])
 	}
 }

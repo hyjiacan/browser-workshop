@@ -172,6 +172,21 @@ func NewMultiSource(sources ...Source) *MultiSource {
 	return &MultiSource{sources: sources}
 }
 
+// refreshableSource 是一个可选接口，支持强制刷新缓存的源应实现此接口。
+type refreshableSource interface {
+	SetForceRefresh(bool)
+}
+
+// ForceRefresh 对所有支持缓存刷新的底层源设置强制刷新标志。
+// 下一次 List() 调用将跳过缓存，直接从网络获取最新数据。
+func (m *MultiSource) ForceRefresh() {
+	for _, s := range m.sources {
+		if r, ok := s.(refreshableSource); ok {
+			r.SetForceRefresh(true)
+		}
+	}
+}
+
 // Name returns the name of this source.
 func (m *MultiSource) Name() string {
 	names := make([]string, 0, len(m.sources))
@@ -307,12 +322,14 @@ func normalizeVersionAlias(browser, version string) string {
 		}
 
 	case "firefox":
-		// FirefoxSource already handles: latest, beta, dev, devedition, esr, nightly
+		// FirefoxSource already handles: latest, beta, esr, devedition/dev
 		switch v {
 		case "stable", "release":
 			return "latest" // Firefox "stable" is just "latest"
 		case "canary":
 			return "latest" // Firefox uses "nightly", not "canary"
+		case "nightly":
+			return "latest" // nightly builds are not in the releases directory
 		}
 
 	default:

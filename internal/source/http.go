@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
 	"strings"
 	"time"
 )
@@ -42,26 +43,6 @@ type manifestV1Server struct {
 	Name      string `json:"name"`
 	Version   string `json:"version"`
 	FileCount int    `json:"file_count"`
-}
-
-// --- Legacy API types ---
-
-// manifestResponse is the JSON response from the legacy /api/manifest endpoint.
-type manifestResponse struct {
-	GeneratedAt string                              `json:"generatedAt"`
-	RepoDir     string                              `json:"repoDir"`
-	Browsers    map[string][]manifestVersionResponse `json:"browsers"`
-}
-
-type manifestVersionResponse struct {
-	Version   string `json:"version"`
-	Browser   string `json:"browser"`
-	FileName  string `json:"fileName"`
-	Size      int64  `json:"size"`
-	Channel   string `json:"channel,omitempty"`
-	Platform  string `json:"platform,omitempty"`
-	Arch      string `json:"arch,omitempty"`
-	UpdatedAt string `json:"updatedAt,omitempty"`
 }
 
 // browserKeywords maps browser name keywords to canonical browser names.
@@ -171,8 +152,7 @@ func (s *HTTPSource) SupportsBrowser(browser string) bool {
 func (s *HTTPSource) List(ctx context.Context, filter *Filter) ([]VersionInfo, error) {
 	filter = applyDefaults(filter)
 
-	// Try v1 API first, fall back to legacy
-	v1Manifest, legacyManifest, err := s.fetchManifest(ctx)
+	v1Manifest, err := s.fetchManifest(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -181,8 +161,6 @@ func (s *HTTPSource) List(ctx context.Context, filter *Filter) ([]VersionInfo, e
 
 	if v1Manifest != nil {
 		results = s.processV1Manifest(v1Manifest, filter)
-	} else if legacyManifest != nil {
-		results = s.processLegacyManifest(legacyManifest, filter)
 	}
 
 	return results, nil
@@ -233,7 +211,7 @@ func (s *HTTPSource) processV1Manifest(m *manifestV1Response, filter *Filter) []
 			continue
 		}
 
-		downloadURL := fmt.Sprintf("%s/api/v1/download/%s", s.baseURL, f.Filename)
+		downloadURL := fmt.Sprintf("%s/api/v1/download/%s", s.baseURL, neturl.PathEscape(f.Filename))
 
 		results = append(results, VersionInfo{
 			Browser:     browser,
@@ -245,61 +223,6 @@ func (s *HTTPSource) processV1Manifest(m *manifestV1Response, filter *Filter) []
 			Size:        f.Size,
 			SHA256:      f.Checksum,
 		})
-	}
-
-	return results
-}
-
-// processLegacyManifest processes the legacy API response and returns filtered version info.
-func (s *HTTPSource) processLegacyManifest(m *manifestResponse, filter *Filter) []VersionInfo {
-	var results []VersionInfo
-
-	for browser, versions := range m.Browsers {
-		// Filter by browser
-		if filter.Browser != "" && !strings.EqualFold(filter.Browser, browser) {
-			continue
-		}
-
-		for _, v := range versions {
-			// Filter by channel
-			if filter.Channel != "" && filter.Channel != ChannelUnknown && !strings.EqualFold(string(filter.Channel), v.Channel) {
-				continue
-			}
-
-			// Normalize platform
-			platform := normalizePlatform(v.Platform)
-
-			// Filter by platform
-			if filter.Platform != "" && filter.Platform != PlatformUnknown && v.Platform != "" && filter.Platform != platform {
-				continue
-			}
-
-			// Normalize arch
-			arch := normalizeArch(v.Arch)
-
-			// Filter by arch
-			if filter.Arch != "" && filter.Arch != ArchUnknown && v.Arch != "" && filter.Arch != arch {
-				continue
-			}
-
-			// Filter by version prefix
-			if filter.VersionPrefix != "" && !strings.HasPrefix(v.Version, filter.VersionPrefix) {
-				continue
-			}
-
-			downloadURL := fmt.Sprintf("%s/download/%s/%s/%s",
-				s.baseURL, v.Browser, v.Version, v.FileName)
-
-			results = append(results, VersionInfo{
-				Browser:     v.Browser,
-				Version:     v.Version,
-				Channel:     ParseChannel(v.Channel),
-				Platform:    platform,
-				Arch:        arch,
-				DownloadURL: downloadURL,
-				Size:        v.Size,
-			})
-		}
 	}
 
 	return results
@@ -383,55 +306,56 @@ func (s *HTTPSource) Resolve(ctx context.Context, browser string, version string
 }
 
 // fetchManifest fetches the manifest from the server.
-// It tries the v1 API first, and falls back to the legacy API.
-// Returns (v1Manifest, legacyManifest, error).
-func (s *HTTPSource) fetchManifest(ctx context.Context) (*manifestV1Response, *manifestResponse, error) {
-	// Try v1 API first
+// When filter is non-nil, browser/platform/arch/channel query parameters are
+// forwarded to the server so it can narrow the manifest (and, for online
+// fallback servers, only query the requested browser from online sources).
+// Returns (v1Manifest, error).
+func (s *HTTPSource) fetchManifest(ctx context.Context, filter *Filter) (*manifestV1Response, error) {
 	v1URL := s.baseURL + "/api/v1/manifest"
+	if params := buildManifestQuery(filter); len(params) > 0 {
+		v1URL += "?" + params.Encode()
+	}
 
 	v1Resp, v1Body, err := s.fetchJSON(ctx, v1URL)
-	if err == nil && v1Resp.StatusCode == http.StatusOK {
-		var v1 manifestV1Response
-		if err := json.Unmarshal(v1Body, &v1); err == nil {
-			// Validate that this is a bm-serve v1 response
-			if v1.Status == "ok" && v1.Server.Name == "bws-serve" {
-				return &v1, nil, nil
-			}
-			// If it has data field but not server name, still treat as v1
-			if v1.Status == "ok" && v1.Data != nil {
-				return &v1, nil, nil
-			}
-		}
-	}
-
-	// Fall back to legacy API
-	legacyURL := s.baseURL + "/api/manifest"
-
-	_, legacyBody, err := s.fetchJSON(ctx, legacyURL)
 	if err != nil {
-		return nil, nil, fmt.Errorf("fetching manifest (both v1 and legacy APIs failed): %w", err)
+		return nil, fmt.Errorf("fetching manifest: %w", err)
+	}
+	if v1Resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("manifest request returned status %d", v1Resp.StatusCode)
 	}
 
-	var legacy manifestResponse
-	if err := json.Unmarshal(legacyBody, &legacy); err != nil {
-		return nil, nil, fmt.Errorf("decoding legacy manifest: %w", err)
-	}
-
-	// Check if it looks like a legacy response
-	if legacy.Browsers != nil {
-		return nil, &legacy, nil
-	}
-
-	// Also check if the v1 response was valid but just didn't match our criteria
-	// (e.g. different server name). In that case, still use v1 format.
 	var v1 manifestV1Response
-	if v1Resp != nil && v1Resp.StatusCode == http.StatusOK {
-		if json.Unmarshal(v1Body, &v1) == nil && v1.Data != nil {
-			return &v1, nil, nil
-		}
+	if err := json.Unmarshal(v1Body, &v1); err != nil {
+		return nil, fmt.Errorf("decoding manifest: %w", err)
 	}
 
-	return nil, nil, fmt.Errorf("unrecognized manifest format")
+	if v1.Status == "ok" && v1.Data != nil {
+		return &v1, nil
+	}
+
+	return nil, fmt.Errorf("unrecognized manifest format")
+}
+
+// buildManifestQuery builds the query parameters for the manifest API request
+// based on the filter. Returns an empty Values if no filter criteria apply.
+func buildManifestQuery(filter *Filter) neturl.Values {
+	params := neturl.Values{}
+	if filter == nil {
+		return params
+	}
+	if filter.Browser != "" {
+		params.Set("browser", filter.Browser)
+	}
+	if filter.Platform != "" && filter.Platform != PlatformUnknown {
+		params.Set("platform", string(filter.Platform))
+	}
+	if filter.Arch != "" && filter.Arch != ArchUnknown {
+		params.Set("arch", string(filter.Arch))
+	}
+	if filter.Channel != "" && filter.Channel != ChannelUnknown {
+		params.Set("channel", string(filter.Channel))
+	}
+	return params
 }
 
 // maxResponseBodySize is the maximum HTTP response body size (100MB).

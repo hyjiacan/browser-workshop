@@ -198,12 +198,15 @@ func (sm *syncManager) doSync() {
 	sm.status.Progress = "正在启动同步..."
 	sm.mu.Unlock()
 
+	sm.server.logger.Info("开始同步任务")
+
 	defer func() {
 		sm.mu.Lock()
 		sm.running = false
 		sm.status.Running = false
 		sm.status.LastSync = time.Now()
 		sm.mu.Unlock()
+		sm.server.logger.Info("同步任务结束")
 	}()
 
 	if sm.source == nil {
@@ -242,10 +245,12 @@ func (sm *syncManager) doSync() {
 				for _, arch := range arches {
 					key := fmt.Sprintf("%s/%s/%s/%s", browser, ch, platform, arch)
 					sm.setProgress("正在获取 " + key + " 的版本列表...")
+					sm.server.logger.Debug("正在获取 %s 的版本列表", key)
 
 					versions, err := sm.source.ListVersions(browser, ch, platform, arch)
 					if err != nil {
 						sm.setError(fmt.Errorf("listing %s: %w", key, err))
+						sm.server.logger.Warn("获取 %s 版本列表失败: %v", key, err)
 						continue
 					}
 
@@ -270,6 +275,8 @@ func (sm *syncManager) doSync() {
 
 						sm.setProgress(fmt.Sprintf("正在下载 %s %s (%s/%s)...",
 							browser, v.Version, platform, arch))
+						sm.server.logger.Debug("正在下载 %s %s (%s/%s)",
+							browser, v.Version, platform, arch)
 
 						// Download to temp file first
 						_, err := sm.source.Download(v.DownloadURL, sm.server.packagesDir,
@@ -278,6 +285,7 @@ func (sm *syncManager) doSync() {
 							})
 						if err != nil {
 							sm.setError(fmt.Errorf("downloading %s@%s: %w", browser, v.Version, err))
+							sm.server.logger.Warn("下载 %s@%s 失败: %v", browser, v.Version, err)
 							continue
 						}
 
@@ -291,9 +299,11 @@ func (sm *syncManager) doSync() {
 
 	// Rescan packages after sync
 	sm.setProgress("正在刷新文件清单...")
+	sm.server.logger.Debug("正在刷新文件清单...")
 	cache, _ := sm.server.loadCache()
 	if err := sm.server.scanPackages(cache); err != nil {
 		sm.setError(fmt.Errorf("rescanning packages: %w", err))
+		sm.server.logger.Warn("同步后刷新文件清单失败: %v", err)
 		return
 	}
 	sm.server.saveCache(cache)
@@ -301,7 +311,10 @@ func (sm *syncManager) doSync() {
 	sm.setProgress("同步完成")
 	sm.mu.Lock()
 	sm.status.LastError = ""
+	total := sm.status.TotalFiles
+	synced := sm.status.SyncedFiles
 	sm.mu.Unlock()
+	sm.server.logger.Info("同步完成: 共 %d 个文件，已同步 %d 个", total, synced)
 }
 
 func (sm *syncManager) setProgress(msg string) {

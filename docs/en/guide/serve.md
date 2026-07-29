@@ -51,6 +51,7 @@ sync = false
 sync-interval = 24h
 sync-browsers =
 sync-channels = stable
+online-fallback = false
 ```
 
 ```bash
@@ -80,6 +81,7 @@ The `-d` parameter specifies the base directory (parent of packages/ and bin/), 
 | `sync-interval` | `24h` | Sync interval (supports 30d, 24h, 30m format) |
 | `sync-browsers` | All | List of browsers to sync, comma-separated (e.g. chrome,firefox) |
 | `sync-channels` | `stable` | List of channels to sync, comma-separated (e.g. stable,beta) |
+| `online-fallback` | `false` | Online fallback: automatically fetch packages from online sources when not cached locally |
 
 ### Configuration File
 
@@ -109,6 +111,28 @@ sync-channels = stable,beta
 Then rerun `bws sv`.
 
 For detailed instructions on automatic sync, please refer to the [Serve Auto Sync](./serve-sync.md) chapter.
+
+### Enabling Online Fallback
+
+Online fallback allows serve to automatically fetch packages from online sources (e.g. Mozilla FTP, Chrome Omaha) in real-time when a requested package is not found in the local `packages/` directory.
+
+When enabled:
+- **Manifest** merges locally cached files with all available versions from online sources
+- **Download requests** that miss locally are automatically fetched from the online source, cached locally, then served
+- **Concurrent deduplication** — concurrent requests for the same file trigger only one actual download
+
+Edit the `bws-serve.ini` configuration file:
+
+```ini
+[serve]
+online-fallback = true
+sync-browsers = chrome,firefox
+sync-channels = stable,beta
+```
+
+> The browser and channel scope for online fallback follows the `sync-browsers` and `sync-channels` settings, ensuring the manifest only exposes the version range you intend.
+
+Then rerun `bws sv`.
 
 ## Directory Structure
 

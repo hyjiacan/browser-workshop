@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 func runDownload(ctx *Context, args []string) error {
@@ -47,10 +48,14 @@ func runDownload(ctx *Context, args []string) error {
 	ctx.Printf("正在解析 %s@%s...\n", spec.Browser, spec.Version)
 	versionInfo, err := ctx.Source.ResolveVersion(spec.Browser, spec.Version)
 	if err != nil {
-		// Try channel name
-		versions, listErr := ctx.Source.ListVersions(spec.Browser, channel)
-		if listErr == nil && len(versions) > 0 {
-			versionInfo = versions[0]
+		// 仅对别名（latest/beta/esr 等）回退到渠道列表
+		if spec.IsAlias {
+			versions, listErr := ctx.Source.ListVersions(spec.Browser, channel)
+			if listErr == nil && len(versions) > 0 {
+				versionInfo = versions[0]
+			} else {
+				return fmt.Errorf("解析版本失败: %w", err)
+			}
 		} else {
 			return fmt.Errorf("解析版本失败: %w", err)
 		}
@@ -87,8 +92,26 @@ func runDownload(ctx *Context, args []string) error {
 		ctx.Logger.Debug("[download] 目标文件: %s", destPath)
 	}
 
+	// 检查本地缓存（文件已存在且非空则视为命中缓存）
+	if info, err := os.Stat(destPath); err == nil && info.Size() > 0 {
+		if ctx.Logger != nil {
+			ctx.Logger.Debug("[download] 命中本地缓存，跳过下载: %s (大小: %s)", destPath, FormatSize(info.Size()))
+		}
+		ctx.Printf("✓ 下载完成: %s\n", destPath)
+		return nil
+	}
+
+	if ctx.Logger != nil {
+		if versionInfo.Size > 0 {
+			ctx.Logger.Debug("[download] 开始下载: %s (预期大小: %s)", versionInfo.DownloadURL, FormatSize(versionInfo.Size))
+		} else {
+			ctx.Logger.Debug("[download] 开始下载: %s (文件大小未知)", versionInfo.DownloadURL)
+		}
+	}
+
 	ctx.Printf("正在下载 %s@%s 到 %s...\n", spec.Browser, versionInfo.Version, outputDir)
 
+	startTime := time.Now()
 	_, err = ctx.Download.Download(versionInfo.DownloadURL, destPath, func(downloaded, total int64, percent float64) {
 		if total > 0 {
 			ctx.Printf("\r  下载进度: %.1f%%", percent)
@@ -100,6 +123,23 @@ func runDownload(ctx *Context, args []string) error {
 
 	if err != nil {
 		return fmt.Errorf("下载失败: %w", err)
+	}
+
+	if ctx.Logger != nil {
+		elapsed := time.Since(startTime)
+		var speedStr string
+		if elapsed.Seconds() > 0 {
+			if info, statErr := os.Stat(destPath); statErr == nil {
+				speed := float64(info.Size()) / elapsed.Seconds()
+				speedStr = FormatSpeed(speed)
+				ctx.Logger.Debug("[download] 下载完成: 大小=%s 耗时=%s 速度=%s",
+					FormatSize(info.Size()), formatDuration(elapsed), speedStr)
+			} else {
+				ctx.Logger.Debug("[download] 下载完成: 耗时=%s", formatDuration(elapsed))
+			}
+		} else {
+			ctx.Logger.Debug("[download] 下载完成: 耗时极短")
+		}
 	}
 
 	ctx.Printf("✓ 下载完成: %s\n", destPath)

@@ -476,11 +476,31 @@ func (m *Manager) ListInstalled() (version.List, error) {
 // ListInstalledByBrowser returns installed versions for a specific browser.
 func (m *Manager) ListInstalledByBrowser(browserName string) (version.List, error) {
 	log.Debug("正在列出 %s 的已安装版本", browserName)
-	all, err := m.ListInstalled()
+
+	browserDir := filepath.Join(m.paths.VersionsDir, browserName)
+	versionDirs, err := os.ReadDir(browserDir)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, os.ErrNotExist) {
+			log.Debug("浏览器目录不存在: %s", browserDir)
+			return nil, nil
+		}
+		log.Debug("读取浏览器目录失败 %s: %v", browserDir, err)
+		return nil, nil
 	}
-	result := all.Filter(version.Filter{Browser: browserName})
+
+	var result version.List
+	for _, vEntry := range versionDirs {
+		if !vEntry.IsDir() {
+			continue
+		}
+		record, err := m.readRecord(browserName, vEntry.Name())
+		if err != nil {
+			log.Debug("读取记录失败 %s@%s: %v", browserName, vEntry.Name(), err)
+			continue
+		}
+		result = append(result, record.ToVersion())
+	}
+
 	log.Debug("发现 %d 个 %s 的已安装版本", len(result), browserName)
 	return result, nil
 }

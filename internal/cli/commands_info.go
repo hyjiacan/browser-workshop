@@ -17,6 +17,9 @@ func runInfo(ctx *Context, args []string) error {
 	// Resolve partial / alias versions against installed + system versions.
 	resolvedVersion, localErr := ctx.Install.ResolveInstalledVersion(spec.Browser, spec.Version)
 	if localErr == nil {
+		if ctx.Logger != nil {
+			ctx.Logger.Debug("[info] 查询来源：本地（已安装/系统集成）")
+		}
 		// Local version found — show installed or system info
 		isSystem := ctx.Install.IsSystemVersion(spec.Browser, resolvedVersion)
 		if record, err := ctx.Install.GetRecord(spec.Browser, resolvedVersion); err == nil && !isSystem {
@@ -44,6 +47,9 @@ func runInfo(ctx *Context, args []string) error {
 		// Check remote for update
 		if ctx.Source != nil {
 			if versionInfo, err := ctx.Source.ResolveVersion(spec.Browser, spec.Version); err == nil && versionInfo.Version != "" && versionInfo.Version != resolvedVersion {
+				if ctx.Logger != nil {
+					ctx.Logger.Debug("[info] 发现远程更新版本: %s", versionInfo.Version)
+				}
 				ctx.Printf("\n%s@%s（远程更新可用）\n", versionInfo.Browser, versionInfo.Version)
 				ctx.Printf("  渠道:         %s\n", versionInfo.Channel)
 				ctx.Printf("  平台:         %s\n", versionInfo.Platform)
@@ -61,6 +67,9 @@ func runInfo(ctx *Context, args []string) error {
 	if ctx.Source != nil {
 		versionInfo, err := ctx.Source.ResolveVersion(spec.Browser, spec.Version)
 		if err == nil && versionInfo.Version != "" {
+			if ctx.Logger != nil {
+				ctx.Logger.Debug("[info] 查询来源：远程源")
+			}
 			ctx.Printf("%s@%s（远程）\n", versionInfo.Browser, versionInfo.Version)
 			ctx.Printf("  渠道:         %s\n", versionInfo.Channel)
 			ctx.Printf("  平台:         %s\n", versionInfo.Platform)

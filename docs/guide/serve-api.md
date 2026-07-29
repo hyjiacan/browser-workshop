@@ -116,7 +116,7 @@ GET /api/v1/manifest
     }
   ],
   "server": {
-    "name": "Browser Workshop",
+    "name": "bws-serve",
     "version": "1.0.0",
     "file_count": 2
   }
@@ -219,7 +219,7 @@ GET /api/v1/status
 {
   "status": "ok",
   "server": {
-    "name": "Browser Workshop",
+    "name": "bws-serve",
     "version": "1.0.0",
     "uptime": 88215,
     "file_count": 15,

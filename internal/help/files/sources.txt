@@ -4,7 +4,7 @@
 
 【概述】
   bws 支持从多个数据源获取浏览器版本信息及安装包。数据源分为
-  离线源（serve）和在线源（Omaha / Firefox Product Details）两类。
+  离线源（serve）和在线源（Omaha / Firefox FTP）两类。
 
 【数据源类型】
 
@@ -13,7 +13,7 @@
   ├───────────────────┼──────────┼──────────────────────────────────────────┤
   │ Serve 离线源       │ 离线源   │ 通过 bws serve 搭建的本地/局域网 HTTP 源 │
   │ Omaha 协议         │ 在线源   │ Chrome/Chromium 官方更新协议             │
-  │ Firefox 在线源     │ 在线源   │ Mozilla Product Details API              │
+  │ Firefox 在线源     │ 在线源   │ Mozilla FTP HTTPS 目录列表               │
   └───────────────────┴──────────┴──────────────────────────────────────────┘
 
 【数据源详情】
@@ -41,7 +41,8 @@
   * chromium
 
   --- Firefox 在线源 ---
-  Mozilla Product Details API，获取 Firefox 版本信息。
+  Mozilla FTP HTTPS 目录列表，获取 Firefox 版本信息。
+  数据来源：https://ftp.mozilla.org/pub/firefox/releases/
 
   配置方法：
     bws cfg set source-firefox-ftp true

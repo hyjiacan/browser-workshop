@@ -88,18 +88,20 @@ const colorReset = "\x1b[0m"
 
 // writerConfig holds configuration for a single output writer.
 type writerConfig struct {
-	writer    io.Writer
-	level     Level
-	useColor  bool
-	showSrc   bool
-	showTime  bool
+	writer   io.Writer
+	level    Level
+	useColor bool
+	showSrc  bool
+	showTime bool
+	isFile   bool // whether this writer is the file writer (for SetFileLevel etc.)
 }
 
 // Logger is the main logger struct.
 type Logger struct {
-	mu      sync.Mutex
-	writers []writerConfig
-	file    *os.File
+	mu       sync.Mutex
+	writers  []writerConfig
+	file     io.WriteCloser // the file writer (could be *os.File or *RotatingFileWriter), used for Close
+	filePath string         // path of the log file, used to identify the file writer
 }
 
 var (
@@ -151,31 +153,93 @@ func New(level Level, writer io.Writer) *Logger {
 	}
 }
 
+// DualLoggerOption is a function that configures the dual logger.
+type DualLoggerOption func(*dualLoggerConfig)
+
+// dualLoggerConfig holds optional configuration for NewDualLogger.
+type dualLoggerConfig struct {
+	maxSize    int64 // max bytes before rotation, 0 = no rotation
+	maxBackups int   // max number of backup files, 0 = no backups
+	showSrc    bool  // whether to show source file/line in file output
+}
+
+// WithMaxSize sets the maximum log file size in bytes before rotation.
+// 0 means no rotation (infinite append).
+func WithMaxSize(maxSize int64) DualLoggerOption {
+	return func(c *dualLoggerConfig) {
+		c.maxSize = maxSize
+	}
+}
+
+// WithMaxBackups sets the maximum number of backup log files to keep.
+// 0 means no backups are kept when rotating.
+func WithMaxBackups(maxBackups int) DualLoggerOption {
+	return func(c *dualLoggerConfig) {
+		c.maxBackups = maxBackups
+	}
+}
+
+// WithShowSource controls whether source file and line info is shown in file output.
+// Default is true for file output.
+func WithShowSource(show bool) DualLoggerOption {
+	return func(c *dualLoggerConfig) {
+		c.showSrc = show
+	}
+}
+
 // NewDualLogger creates a logger that writes to both file and console with separate levels.
 // fileLevel controls what goes to the file, consoleLevel controls what goes to stderr.
 // consoleColor enables colored output on the console.
-func NewDualLogger(logFile string, fileLevel Level, consoleLevel Level, consoleColor bool) (*Logger, error) {
+// Use DualLoggerOption functions to configure optional settings like log rotation.
+func NewDualLogger(logFile string, fileLevel Level, consoleLevel Level, consoleColor bool, opts ...DualLoggerOption) (*Logger, error) {
+	// Apply default options
+	cfg := &dualLoggerConfig{
+		maxSize:    0,
+		maxBackups: 0,
+		showSrc:    true,
+	}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
 	// Ensure log directory exists
 	logDir := filepath.Dir(logFile)
 	if err := os.MkdirAll(logDir, 0o755); err != nil {
-		return nil, fmt.Errorf("creating log directory: %w", err)
+		return nil, fmt.Errorf("创建日志目录失败: %w", err)
 	}
 
-	// Open log file in append mode
-	f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return nil, fmt.Errorf("opening log file: %w", err)
+	var fileWriter io.WriteCloser
+	var writer io.Writer
+
+	if cfg.maxSize > 0 {
+		// Use rotating file writer
+		rfw, err := NewRotatingFileWriter(logFile, cfg.maxSize, cfg.maxBackups)
+		if err != nil {
+			return nil, fmt.Errorf("创建轮转日志文件失败: %w", err)
+		}
+		fileWriter = rfw
+		writer = rfw
+	} else {
+		// Use plain file
+		f, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		if err != nil {
+			return nil, fmt.Errorf("打开日志文件失败: %w", err)
+		}
+		fileWriter = f
+		writer = f
 	}
 
 	logger := &Logger{
-		file: f,
+		file:     fileWriter,
+		filePath: logFile,
 		writers: []writerConfig{
 			{
-				writer:   f,
+				writer:   writer,
 				level:    fileLevel,
 				useColor: false,
-				showSrc:  true,
+				showSrc:  cfg.showSrc,
 				showTime: true,
+				isFile:   true,
 			},
 			{
 				writer:   os.Stderr,
@@ -200,6 +264,11 @@ func (l *Logger) Close() error {
 	return nil
 }
 
+// Close closes the default logger.
+func Close() error {
+	return Default().Close()
+}
+
 // SetConsoleLevel sets the log level for the console (stderr) writer.
 func (l *Logger) SetConsoleLevel(level Level) {
 	l.mu.Lock()
@@ -217,7 +286,7 @@ func (l *Logger) SetFileLevel(level Level) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	for i := range l.writers {
-		if l.writers[i].writer == l.file {
+		if l.writers[i].isFile {
 			l.writers[i].level = level
 			break
 		}
@@ -229,7 +298,7 @@ func (l *Logger) SetShowSource(show bool) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	for i := range l.writers {
-		if l.writers[i].writer == l.file {
+		if l.writers[i].isFile {
 			l.writers[i].showSrc = show
 			break
 		}
@@ -399,17 +468,158 @@ func Fatal(msg string, args ...interface{}) {
 	Default().Fatal(msg, args...)
 }
 
+// --- RotatingFileWriter ---
+
+// RotatingFileWriter writes to a log file and rotates it when it reaches a size limit.
+// Old log files are kept as .1, .2, .3, etc.
+type RotatingFileWriter struct {
+	path        string
+	maxSize     int64 // max bytes before rotation
+	maxBackups  int   // max number of backup files to keep
+	file        *os.File
+	currentSize int64
+	mu          sync.Mutex
+}
+
+// NewRotatingFileWriter creates a new RotatingFileWriter.
+// path is the path to the log file.
+// maxSize is the maximum size in bytes before rotation (0 = no rotation).
+// maxBackups is the maximum number of backup files to keep (0 = no backups).
+func NewRotatingFileWriter(path string, maxSize int64, maxBackups int) (*RotatingFileWriter, error) {
+	w := &RotatingFileWriter{
+		path:       path,
+		maxSize:    maxSize,
+		maxBackups: maxBackups,
+	}
+
+	// Ensure directory exists
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("创建日志目录失败: %w", err)
+	}
+
+	// Open or create the file
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return nil, fmt.Errorf("打开日志文件失败: %w", err)
+	}
+	w.file = f
+
+	// Get current file size
+	fi, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, fmt.Errorf("获取日志文件信息失败: %w", err)
+	}
+	w.currentSize = fi.Size()
+
+	return w, nil
+}
+
+// Write writes data to the log file, rotating if necessary.
+func (w *RotatingFileWriter) Write(p []byte) (n int, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.file == nil {
+		return 0, fmt.Errorf("日志文件已关闭")
+	}
+
+	// Check if rotation is needed
+	if w.maxSize > 0 && w.currentSize+int64(len(p)) > w.maxSize {
+		if err := w.rotate(); err != nil {
+			return 0, fmt.Errorf("轮转日志文件失败: %w", err)
+		}
+	}
+
+	n, err = w.file.Write(p)
+	w.currentSize += int64(n)
+	return n, err
+}
+
+// Close closes the log file.
+func (w *RotatingFileWriter) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.file != nil {
+		err := w.file.Close()
+		w.file = nil
+		return err
+	}
+	return nil
+}
+
+// rotate rotates the log file.
+// Current file is renamed to .1, .1 to .2, etc.
+// If maxBackups is 0, the current file is simply truncated.
+// Caller must hold w.mu.
+func (w *RotatingFileWriter) rotate() error {
+	// Close current file
+	if w.file != nil {
+		w.file.Close()
+		w.file = nil
+	}
+
+	if w.maxBackups <= 0 {
+		// No backups: just truncate the file
+		f, err := os.Create(w.path)
+		if err != nil {
+			return fmt.Errorf("创建日志文件失败: %w", err)
+		}
+		w.file = f
+		w.currentSize = 0
+		return nil
+	}
+
+	// Delete the oldest backup (slot maxBackups)
+	oldest := fmt.Sprintf("%s.%d", w.path, w.maxBackups)
+	os.Remove(oldest)
+
+	// Shift backups: move from slot i-1 to slot i, from high to low
+	// This way we don't overwrite files we still need to move
+	for i := w.maxBackups; i > 1; i-- {
+		src := fmt.Sprintf("%s.%d", w.path, i-1)
+		dst := fmt.Sprintf("%s.%d", w.path, i)
+		if _, err := os.Stat(src); err == nil {
+			// Remove destination if it exists (shouldn't after deleting oldest)
+			os.Remove(dst)
+			if err := os.Rename(src, dst); err != nil {
+				return fmt.Errorf("重命名备份文件失败: %w", err)
+			}
+		}
+	}
+
+	// Shift current log file to .1
+	backup1 := fmt.Sprintf("%s.1", w.path)
+	if _, err := os.Stat(w.path); err == nil {
+		os.Remove(backup1)
+		if err := os.Rename(w.path, backup1); err != nil {
+			return fmt.Errorf("重命名当前日志文件失败: %w", err)
+		}
+	}
+
+	// Create new log file
+	f, err := os.Create(w.path)
+	if err != nil {
+		return fmt.Errorf("创建新日志文件失败: %w", err)
+	}
+	w.file = f
+	w.currentSize = 0
+
+	return nil
+}
+
 // --- Progress logging ---
 
 // ProgressLogger provides progress logging for long-running operations.
 type ProgressLogger struct {
-	logger    *Logger
-	prefix    string
-	total     int64
-	current   int64
-	lastPct   float64
-	lastTime  time.Time
-	interval  time.Duration // minimum time between progress logs
+	logger   *Logger
+	prefix   string
+	total    int64
+	current  int64
+	lastPct  float64
+	lastTime time.Time
+	interval time.Duration // minimum time between progress logs
 }
 
 // NewProgressLogger creates a new progress logger.

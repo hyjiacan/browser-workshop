@@ -53,6 +53,7 @@ bws ls [browser[@version]] [options]
 | `--no-system` | - | Do not show system browsers |
 | `--channel <channel>` | `-c` | Specify channel (only valid for remote listing) |
 | `--limit <number>` | `-n` | Limit the number of results (default 20, only valid for remote listing) |
+| `--refresh` | - | Force refresh remote source cache (only valid for remote listing) |
 | `--json` | - | Output in JSON format |
 
 ### Examples
@@ -86,6 +87,9 @@ bws ls -R chrome -c beta
 
 # Limit the number of remote results
 bws ls -R chrome -n 5
+
+# Force refresh remote source cache (bypass cache, fetch latest from network)
+bws ls -R firefox --refresh
 
 # Output in JSON format
 bws ls --json
@@ -721,7 +725,7 @@ bws cfg <subcommand> [arguments]
 | `source` | Offline source address | Empty |
 | `source-serve` | Serve source switch | `true` |
 | `source-omaha` | Omaha source switch | `true` |
-| `source-firefox-ftp` | Firefox data source switch (reserved) | `true` |
+| `source-firefox-ftp` | Firefox data source switch | `true` |
 | `disk-threshold` | Disk space alert threshold (GB) | `5` |
 | `proxy` | Proxy URL (for downloads and browser launching) | empty |
 

@@ -15,6 +15,7 @@ func runLs(ctx *Context, args []string) error {
 		{Name: "system", Short: "s", Usage: "包含系统安装的浏览器", HasValue: false, Default: "true"},
 		{Name: "no-system", Usage: "隐藏系统安装的浏览器", HasValue: false, Default: "false"},
 		{Name: "remote", Short: "R", Usage: "列出远程源中的可用版本", HasValue: false, Default: "false"},
+		{Name: "refresh", Usage: "强制刷新远程源缓存（远程模式）", HasValue: false, Default: "false"},
 		{Name: "channel", Short: "c", Usage: "远程模式：按渠道过滤", HasValue: true, Default: "stable"},
 		{Name: "limit", Short: "n", Usage: "远程模式：限制结果数量", HasValue: true, Default: "20"},
 	})
@@ -66,6 +67,20 @@ func runLs(ctx *Context, args []string) error {
 		return fmt.Errorf("获取版本列表失败: %w", err)
 	}
 
+	// 统计本地版本和系统集成版本数量（用于 verbose 日志）
+	if ctx.Logger != nil {
+		localCount := 0
+		sysCount := 0
+		for _, v := range versions {
+			if v.IsSystem {
+				sysCount++
+			} else {
+				localCount++
+			}
+		}
+		ctx.Logger.Debug("[list] 找到本地版本 %d 个，系统集成版本 %d 个", localCount, sysCount)
+	}
+
 	// 按版本前缀筛选
 	if spec.Version != "" && !spec.IsAlias {
 		var filtered []version.Version
@@ -75,6 +90,9 @@ func runLs(ctx *Context, args []string) error {
 			}
 		}
 		versions = filtered
+		if ctx.Logger != nil {
+			ctx.Logger.Debug("[list] 按版本前缀 %q 筛选后剩余 %d 个版本", spec.Version, len(versions))
+		}
 	}
 
 	if len(versions) == 0 {
@@ -148,9 +166,17 @@ func runRemoteQuery(ctx *Context, args []string) error {
 		{Name: "channel", Short: "c", Usage: "按渠道过滤", HasValue: true, Default: "stable"},
 		{Name: "limit", Short: "n", Usage: "限制结果数量", HasValue: true, Default: "20"},
 		{Name: "all", Short: "a", Usage: "显示所有版本（所有渠道）", HasValue: false, Default: "false"},
+		{Name: "refresh", Usage: "强制刷新远程源缓存", HasValue: false, Default: "false"},
 	})
 	if err != nil {
 		return err
+	}
+
+	// 如果指定了 --refresh，对所有支持缓存刷新的源设置强制刷新
+	if flagVals["refresh"] == "true" {
+		if r, ok := ctx.Source.(interface{ ForceRefresh() }); ok {
+			r.ForceRefresh()
+		}
 	}
 
 	// 解析参数，支持 chrome@79 这样的语法
@@ -168,6 +194,11 @@ func runRemoteQuery(ctx *Context, args []string) error {
 
 	channels := []string{channel}
 	if showAll {
+		channels = []string{"stable", "beta", "esr", "dev", "canary"}
+	}
+	// 当用户指定了具体版本前缀（非别名）时，自动搜索所有渠道，
+	// 避免遗漏 ESR 等非默认渠道中的匹配版本。
+	if spec.Version != "" && !spec.IsAlias && !showAll {
 		channels = []string{"stable", "beta", "esr", "dev", "canary"}
 	}
 
@@ -195,14 +226,14 @@ func runRemoteQuery(ctx *Context, args []string) error {
 		}
 		if ctx.Cfg.Source.IsFirefoxFTPEnabled() {
 			if spec.Browser == "firefox" {
-				activeSources = append(activeSources, "Mozilla Product Details")
+				activeSources = append(activeSources, "Mozilla FTP 目录")
 			}
 		}
 	} else {
 		// 无配置时默认显示所有
 		activeSources = append(activeSources, "远程 HTTP 源", "Chrome Omaha 协议", "Chrome Omaha Proxy")
 		if spec.Browser == "firefox" {
-			activeSources = append(activeSources, "Mozilla Product Details")
+			activeSources = append(activeSources, "Mozilla FTP 目录")
 		}
 	}
 
@@ -261,12 +292,22 @@ func runRemoteQuery(ctx *Context, args []string) error {
 		versions, err := ctx.Source.ListVersions(spec.Browser, ch)
 		if err != nil {
 			ctx.Printf(" 失败 (%v)\n", err)
+			if ctx.Logger != nil {
+				ctx.Logger.Debug("[list] 源调用失败: channel=%s error=%v", ch, err)
+			}
 			continue
 		}
 
 		if len(versions) == 0 {
 			ctx.Println(" 无结果")
+			if ctx.Logger != nil {
+				ctx.Logger.Debug("[list] 源调用成功: channel=%s 返回 0 个版本", ch)
+			}
 			continue
+		}
+
+		if ctx.Logger != nil {
+			ctx.Logger.Debug("[list] 源调用成功: channel=%s 返回 %d 个版本", ch, len(versions))
 		}
 
 		// 按版本前缀筛选
@@ -297,7 +338,7 @@ func runRemoteQuery(ctx *Context, args []string) error {
 
 		for i := 0; i < showCount; i++ {
 			v := filtered[i]
-			status := ""
+			status := "—"
 			if installedMap[v.Version] {
 				status = "已安装"
 				installedCount++
@@ -311,6 +352,10 @@ func runRemoteQuery(ctx *Context, args []string) error {
 	ctx.Println()
 	ctx.Println("----------------------------------------")
 	ctx.Println()
+
+	if ctx.Logger != nil {
+		ctx.Logger.Debug("[list] 远程查询完成: 共 %d 个匹配版本，%d 个渠道有结果", totalResults, len(channelResults))
+	}
 
 	// 结果标题
 	title := ""

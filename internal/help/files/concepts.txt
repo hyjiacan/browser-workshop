@@ -55,7 +55,7 @@
   提供版本列表和安装包的来源：
   * Serve 离线源：通过 bws serve 搭建的局域网 HTTP 源
   * Omaha 协议：Chrome/Chromium 官方更新协议
-  * Firefox API：Mozilla Product Details API
+  * Firefox API：Mozilla FTP 目录列表
 
   参见 "bws help sources" 获取详细信息。
 

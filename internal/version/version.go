@@ -39,6 +39,17 @@ type List []Version
 
 // --- Parsing ---
 
+// stripBetaSuffix removes the Firefox beta numeric suffix from a version string.
+// "141.0b1" → "141.0", "141.0.2b3" → "141.0.2", "141.0" → "141.0" (unchanged).
+func stripBetaSuffix(s string) string {
+	for i := 0; i < len(s); i++ {
+		if s[i] == 'b' && i > 0 && i+1 < len(s) && s[i+1] >= '0' && s[i+1] <= '9' {
+			return s[:i]
+		}
+	}
+	return s
+}
+
 // Parse parses a version string like "120.0.6099.109" into its numeric segments.
 // Returns the segments as []int.
 func Parse(version string) ([]int, error) {
@@ -48,6 +59,8 @@ func Parse(version string) ([]int, error) {
 	clean = strings.TrimSuffix(clean, "beta")
 	clean = strings.TrimSuffix(clean, "dev")
 	clean = strings.TrimSuffix(clean, "canary")
+	// Strip Firefox beta suffix: "141.0b1" → "141.0"
+	clean = stripBetaSuffix(clean)
 	clean = strings.TrimPrefix(clean, "v")
 	clean = strings.TrimPrefix(clean, "V")
 

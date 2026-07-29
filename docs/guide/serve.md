@@ -51,6 +51,7 @@ sync = false
 sync-interval = 24h
 sync-browsers =
 sync-channels = stable
+online-fallback = false
 ```
 
 ```bash
@@ -80,6 +81,7 @@ bws sv
 | `sync-interval` | `24h` | 同步间隔（支持 30d、24h、30m 格式） |
 | `sync-browsers` | 全部 | 同步的浏览器列表，逗号分隔（如 chrome,firefox） |
 | `sync-channels` | `stable` | 同步的渠道列表，逗号分隔（如 stable,beta） |
+| `online-fallback` | `false` | 在线回退：本地未命中的包自动从在线源实时下载 |
 
 ### 配置文件
 
@@ -109,6 +111,28 @@ sync-channels = stable,beta
 然后重新运行 `bws sv` 即可。
 
 自动同步的详细说明请参考 [Serve 自动同步](./serve-sync.md) 章节。
+
+### 启用在线回退
+
+在线回退功能允许 serve 在本地 `packages/` 目录中找不到请求的安装包时，自动从在线源（如 Mozilla FTP、Chrome Omaha）实时下载并提供给客户端。
+
+启用后：
+- **清单（manifest）** 会合并本地已有文件和在线源中所有可用的版本
+- **下载请求** 本地未命中时，自动从在线源下载到本地缓存后返回
+- **并发去重** 同一文件的并发请求只会触发一次实际下载
+
+编辑 `bws-serve.ini` 配置文件：
+
+```ini
+[serve]
+online-fallback = true
+sync-browsers = chrome,firefox
+sync-channels = stable,beta
+```
+
+> 在线回退的浏览器和渠道范围沿用 `sync-browsers` 和 `sync-channels` 配置，确保清单只暴露用户期望的版本范围。
+
+然后重新运行 `bws sv` 即可。
 
 ## 目录结构
 

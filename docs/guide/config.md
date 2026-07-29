@@ -250,13 +250,13 @@ bws cfg set source-omaha true
 
 ### source-firefox-ftp
 
-Firefox 数据源开关（已保留，当前未使用）。
+Firefox 数据源开关。
 
 | 属性 | 值 |
 |------|-----|
 | 默认值 | `true` |
 | 可选值 | `true`, `false` |
-| 说明 | 是否启用 Firefox 数据源（已保留，当前 Firefox 已改用 Mozilla Product Details API，不再使用 FTP） |
+| 说明 | 是否启用 Firefox 数据源。数据来自 `https://ftp.mozilla.org/pub/firefox/releases/` 的 HTTPS 目录列表 |
 
 示例：
 

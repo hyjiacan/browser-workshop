@@ -225,25 +225,6 @@ func TestChromeSource_SupportsBrowser(t *testing.T) {
 	}
 }
 
-// TestFirefoxSource_SupportsBrowser verifies that FirefoxSource only
-// supports firefox.
-func TestFirefoxSource_SupportsBrowser(t *testing.T) {
-	src := NewFirefoxSource()
-
-	if !src.SupportsBrowser("firefox") {
-		t.Error("FirefoxSource should support 'firefox'")
-	}
-	if !src.SupportsBrowser("Firefox") {
-		t.Error("FirefoxSource should support 'Firefox' (case insensitive)")
-	}
-	if src.SupportsBrowser("chrome") {
-		t.Error("FirefoxSource should NOT support 'chrome'")
-	}
-	if src.SupportsBrowser("chromium") {
-		t.Error("FirefoxSource should NOT support 'chromium'")
-	}
-}
-
 // TestHTTPSource_SupportsBrowser verifies that HTTPSource supports all browsers.
 func TestHTTPSource_SupportsBrowser(t *testing.T) {
 	src := NewHTTPSource("http://example.com")

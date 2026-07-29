@@ -52,11 +52,22 @@ func (m *Manager) ListWithSystem() (version.List, error) {
 
 // ListWithSystemByBrowser returns installed + system versions for one browser.
 func (m *Manager) ListWithSystemByBrowser(browserName string) (version.List, error) {
-	all, err := m.ListWithSystem()
+	installed, err := m.ListInstalledByBrowser(browserName)
 	if err != nil {
 		return nil, err
 	}
-	return all.Filter(version.Filter{Browser: browserName}), nil
+
+	if m.systemDetector == nil {
+		return installed, nil
+	}
+
+	// Get system browsers for this browser only
+	systemBrowsers := m.systemDetector.DetectAllForBrowser(browserName)
+	for _, sb := range systemBrowsers {
+		installed = append(installed, systemBrowserToVersion(sb))
+	}
+
+	return installed, nil
 }
 
 // GetRecordWithSystem returns an install record for a version,

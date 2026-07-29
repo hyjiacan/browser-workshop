@@ -32,7 +32,7 @@
   │ source (remote)      │ 空           │ 离线源 URL                       │
   │ source-serve         │ true         │ Serve 源开关                     │
   │ source-omaha         │ true         │ Omaha 源开关                     │
-  │ source-firefox-ftp   │ true         │ Firefox 数据源开关（已保留）     │
+  │ source-firefox-ftp   │ true         │ Firefox 数据源开关               │
   │ disk-threshold       │ 5            │ 磁盘空间告警阈值（GB）           │
   │ proxy                │ 空           │ 代理地址                         │
   └──────────────────────┴──────────────┴──────────────────────────────────┘
