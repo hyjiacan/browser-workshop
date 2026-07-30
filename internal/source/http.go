@@ -12,8 +12,7 @@ import (
 )
 
 // HTTPSource provides browser versions from a bm serve HTTP endpoint.
-// It queries the manifest API of a bm serve instance.
-// Supports both the new API v1 format and the legacy format.
+// It queries the manifest API of a bm serve instance using the API v1 format.
 type HTTPSource struct {
 	baseURL    string
 	name       string

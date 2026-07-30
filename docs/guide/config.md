@@ -1,6 +1,6 @@
 ﻿# 配置管理
 
-bws 的所有配置通过 `bws cfg` 命令统一管理。本章介绍配置的查看、设置以及各配置项的详细说明。
+bws 的所有配置通过 `bws cfg` 命令统一管理，以 INI 格式存储。本章介绍配置的查看、设置以及各配置项的详细说明。
 
 ## 查看所有配置
 
@@ -15,7 +15,7 @@ bws cfg show
 ```
 配置信息：
 
-  配置文件:       D:\bws-data\config.json
+  配置文件:       D:\bws-data\config.ini
   数据目录:       D:\bws-data
   默认浏览器:     chrome
   默认渠道:       stable
@@ -43,7 +43,7 @@ bws cfg show
 
 ```bash
 bws cfg get default-browser
-bws cfg get log-level
+bws cfg get log.console-level
 bws cfg get source
 ```
 
@@ -65,7 +65,7 @@ bws cfg get
 
 ```bash
 bws cfg set default-browser firefox
-bws cfg set log-level debug
+bws cfg set log.console-level debug
 bws cfg set data-dir D:\browser-data
 bws cfg set source http://server:8080
 ```
@@ -86,7 +86,7 @@ bws cfg set
 |--------|----------|
 | `default-browser` | `default`, `browser` |
 | `default-channel` | `channel` |
-| `log-level` | `log` |
+| `log.console-level` | `log-level`, `log` |
 | `data-dir` | `datadir`, `data` |
 | `repo-path` | `repo` |
 | `source` | `remote-source`, `remote` |
@@ -98,7 +98,7 @@ bws cfg set
 | `language` | `lang` |
 | `path` | `config-path`, `config` |
 
-例如 `bws cfg get log` 等同于 `bws cfg get log-level`，`bws cfg set browser firefox` 等同于 `bws cfg set default-browser firefox`。
+例如 `bws cfg get log` 等同于 `bws cfg get log.console-level`，`bws cfg set browser firefox` 等同于 `bws cfg set default-browser firefox`。
 
 ### default-browser
 
@@ -140,27 +140,62 @@ bws cfg set default-channel beta
 bws i chrome@latest
 ```
 
-### log-level
+### log.console-level
 
 控制台日志级别。
 
 | 属性 | 值 |
 |------|-----|
 | 默认值 | `info` |
-| 可选值 | `debug`, `info`, `warn`, `warning`, `error` |
+| 可选值 | `trace`, `debug`, `info`, `warn`, `error`, `fatal` |
 | 说明 | 控制控制台输出的日志详细程度 |
 
 示例：
 
 ```bash
 # 设置为 debug 级别，输出更多调试信息
-bws cfg set log-level debug
+bws cfg set log.console-level debug
 
 # 设置为 warn 级别，只显示警告和错误
-bws cfg set log-level warn
+bws cfg set log.console-level warn
 ```
 
-> **注意**：此配置仅影响控制台输出。文件日志始终使用 `debug` 级别，不受此配置影响。更多信息请参考 [日志系统](./logging.md) 章节。
+### log.file-level
+
+文件日志级别。
+
+| 属性 | 值 |
+|------|-----|
+| 默认值 | `debug` |
+| 可选值 | `trace`, `debug`, `info`, `warn`, `error`, `fatal` |
+| 说明 | 控制文件日志的详细程度 |
+
+示例：
+
+```bash
+# 文件日志只记录 warn 及以上级别
+bws cfg set log.file-level warn
+```
+
+### log.max-size-mb
+
+单个日志文件最大大小。
+
+| 属性 | 值 |
+|------|-----|
+| 默认值 | `10` |
+| 可选值 | 正整数（单位 MB） |
+| 说明 | 单个日志文件达到此大小后自动轮转 |
+
+### log.max-backups
+
+保留的备份日志文件数量。
+
+| 属性 | 值 |
+|------|-----|
+| 默认值 | `5` |
+| 可选值 | 正整数 |
+| 说明 | 轮转时保留的历史日志文件数量 |
 
 ### data-dir
 
@@ -225,8 +260,6 @@ bws cfg get source
 # 清除离线源配置
 bws cfg set source ""
 ```
-
-`source` 和 `remote-source` 是等效的，设置任意一个都可以。
 
 ### source-omaha
 
@@ -377,14 +410,55 @@ bws i -d D:\chrome-120-win64 chrome@120
 
 ## 配置文件
 
-配置以 JSON 格式存储在数据目录下的 `config.json` 文件中：
+配置以 INI 格式存储在数据目录下的 `config.ini` 文件中：
 
 ```
 bws-data/
-└── config.json
+└── config.ini
 ```
 
 通常不需要手动编辑配置文件，建议使用 `bws cfg` 命令进行管理。
+
+### INI 格式示例
+
+```ini
+[client]
+default-browser = chrome
+default-channel = stable
+language = zh
+data-dir =
+repo-path =
+remote-source =
+
+[log]
+console-level = info
+file-level = debug
+max-size-mb = 10
+max-backups = 5
+
+[download]
+max-concurrency = 3
+retry-count = 3
+retry-delay = 2s
+timeout = 30m
+
+[cache]
+manifest-ttl = 24h
+download-ttl = 168h
+
+[source-switches]
+enable-serve-source = true
+enable-omaha-source = true
+enable-firefox-ftp = true
+
+[network]
+proxy =
+disk-space-threshold-gb = 5
+
+[alias]
+stable = chrome@latest
+beta = chrome@beta
+```
 
 ## 配置命令汇总
 

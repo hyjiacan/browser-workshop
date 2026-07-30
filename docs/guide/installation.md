@@ -60,11 +60,12 @@ bws 默认采用便携模式，所有数据都存储在程序同级的 `bws-data
 bws/
 ├── bws.exe
 └── bws-data/              # 所有数据都在这里
-    ├── config.json       # 配置文件
-    ├── logs/             # 日志目录
-    ├── cache/            # 下载缓存
-    ├── versions/         # 安装的浏览器版本
-    └── runtime/          # 运行时数据（Profile 等）
+    ├── config.ini         # 客户端配置文件（INI 格式）
+    ├── bws-serve.ini      # serve 服务配置文件
+    ├── logs/              # 日志目录
+    ├── cache/             # 下载缓存
+    ├── versions/          # 安装的浏览器版本
+    └── runtime/           # 运行时数据（Profile 等）
 ```
 
 ### 便携模式的优势

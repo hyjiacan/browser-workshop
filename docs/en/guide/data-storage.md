@@ -12,7 +12,7 @@ By default, bws uses portable mode, storing data in the `bws-data/` directory at
 bws/
 ├── bws.exe                    # Main program file
 └── bws-data/                  # Data root directory
-    ├── config.json            # Configuration file
+    ├── config.ini             # Configuration file
     ├── logs/                  # Log directory
     │   └── bws.log            # Main log file
     ├── cache/                 # Download cache
@@ -46,19 +46,26 @@ bws/
 
 ## Directory Descriptions
 
-### config.json
+### config.ini
 
-Configuration file, storing all user configuration items. JSON format.
+Configuration file, storing all user configuration items. INI format.
 
-```json
-{
-  "default-browser": "chrome",
-  "default-channel": "stable",
-  "log-level": "info",
-  "dataDir": "",
-  "repo-path": "",
-  "source": ""
-}
+```ini
+[client]
+default-browser = chrome
+default-channel = stable
+language = zh
+
+[log]
+console-level = info
+file-level = debug
+max-size-mb = 10
+max-backups = 5
+
+[source-switches]
+enable-serve-source = true
+enable-omaha-source = true
+enable-firefox-ftp = true
 ```
 
 Usually no manual editing is needed; use the `bws cfg` command to manage.
@@ -192,12 +199,12 @@ bws pf clean
 | `runtime/` | Medium | Each Profile is approximately tens to hundreds of MB |
 | `cache/downloads/` | Medium | Each installer package is approximately 50-100MB |
 | `logs/` | Very small | Usually tens of MB |
-| `config.json` | Extremely small | A few KB |
+| `config.ini` | Extremely small | A few KB |
 
 ## Notes
 
-1. **Backup recommendation**: Regularly back up `config.json` and important Profile data
-2. **Manual editing**: It is not recommended to manually edit `config.json`; use the `bws cfg` command
+1. **Backup recommendation**: Regularly back up `config.ini` and important Profile data
+2. **Manual editing**: It is not recommended to manually edit `config.ini`; use the `bws cfg` command
 3. **Deletion safety**: Uninstalling a version does not delete the Profile, preventing accidental loss of important data
 4. **Permissions**: Ensure bws has read/write permissions for the data directory
 5. **Antivirus**: Some antivirus software may falsely flag browser files; it is recommended to add the `versions/` directory to the whitelist

@@ -643,29 +643,27 @@ bws alias remove mychrome
 ### 用法
 
 ```bash
-bws sv [-d <目录>]
+bws sv
 ```
 
-### 选项
-
-| 选项 | 说明 |
-|------|------|
-| `-d, --dir` | 基础目录（包含 packages/ 和 bin/），默认程序所在目录 |
+`bws sv` 不接受额外的命令行参数，所有配置通过 `bws-serve.ini` 文件管理。
 
 ### 配置文件 (bws-serve.ini)
 
-首次运行 `bws sv` 会自动创建配置文件，编辑后重新运行即可启动服务。
+首次运行 `bws sv` 会自动在 `bws-data/` 目录下创建配置文件，编辑后重新运行即可启动服务。
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | `host` | `0.0.0.0` | 监听主机地址 |
 | `port` | `8080` | 监听端口 |
-| `packages-dir` | 程序目录/packages | 浏览器安装包存放目录 |
-| `bin-dir` | 程序目录/bin | 客户端二进制存放目录 |
+| `packages-dir` | 程序目录/packages | 浏览器安装包存放目录（支持绝对/相对路径） |
+| `bin-dir` | 程序目录/bin | 客户端二进制存放目录（支持绝对/相对路径） |
 | `sync` | `false` | 是否启用自动同步 |
 | `sync-interval` | `24h` | 同步间隔（支持 30d、24h、30m 格式） |
 | `sync-browsers` | 全部 | 同步的浏览器列表，逗号分隔 |
 | `sync-channels` | `stable` | 同步的渠道列表，逗号分隔 |
+| `online-fallback` | `false` | 在线回退：本地未命中的包自动从在线源实时下载 |
+| `scan-workers` | `0` | 并行扫描线程数，`0` 表示自动（CPU 核心数） |
 
 ### 示例
 
@@ -674,14 +672,11 @@ bws sv [-d <目录>]
 ```bash
 # 首次运行（自动创建配置文件）
 bws sv
-# 输出: 配置文件已创建: D:\bws\bws-serve.ini
+# 输出: 配置文件已创建: bws-data/bws-serve.ini
 # 编辑配置文件后重新运行
 
 # 编辑配置后启动服务
 bws sv
-
-# 指定基础目录
-bws sv -d D:\bws-data
 
 # 使用 server 别名
 bws server
@@ -720,7 +715,10 @@ bws cfg <子命令> [参数]
 | `default-browser` | 默认浏览器 | `chrome` |
 | `default-channel` | 默认渠道 | `stable` |
 | `language` | 界面语言（zh/en） | 自动检测 |
-| `log-level` | 控制台日志级别 | `info` |
+| `log.console-level` | 控制台日志级别 | `info` |
+| `log.file-level` | 文件日志级别 | `debug` |
+| `log.max-size-mb` | 单个日志文件最大大小（MB） | `10` |
+| `log.max-backups` | 保留的备份日志文件数量 | `5` |
 | `repo-path` | 本地仓库路径 | 空 |
 | `source` | 离线源地址 | 空 |
 | `source-serve` | Serve 源开关 | `true` |
@@ -742,7 +740,7 @@ bws cfg get default-browser
 
 # 设置配置项
 bws cfg set default-browser firefox
-bws cfg set log-level debug
+bws cfg set log.console-level debug
 bws cfg set source http://server:8080
 
 # 设置代理
@@ -750,7 +748,7 @@ bws cfg set proxy socks5://127.0.0.1:1080
 bws cfg set proxy http://proxy.example.com:8080
 
 # 清除代理
-bws cfg set proxy none
+bws cfg set proxy ""
 
 # 显示配置文件路径
 bws cfg path

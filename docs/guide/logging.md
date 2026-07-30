@@ -131,24 +131,31 @@ bws-data/logs/bws.log
 
 日志文件会自动轮转，防止单个文件过大：
 
-- 单个日志文件达到一定大小时自动创建新文件
-- 保留一定数量的历史日志文件
-- 旧日志文件会被自动清理
+- 单个日志文件达到 `log.max-size-mb` 配置的大小后自动创建新文件
+- 保留 `log.max-backups` 数量的历史日志文件
+- 超过数量的旧日志文件会被自动清理
 
-## 修改控制台日志级别
+## 修改日志级别
 
-使用 `bws cfg` 命令修改控制台日志级别。
+使用 `bws cfg` 命令修改日志级别。
 
-### 设置日志级别
+### 设置控制台日志级别
 
 ```bash
-bws cfg set log-level debug
+bws cfg set log.console-level debug
+```
+
+### 设置文件日志级别
+
+```bash
+bws cfg set log.file-level warn
 ```
 
 ### 查看当前级别
 
 ```bash
-bws cfg get log-level
+bws cfg get log.console-level
+bws cfg get log.file-level
 ```
 
 ### 级别选择建议
@@ -169,7 +176,7 @@ bws cfg get log-level
 
 ```bash
 # 设置为 debug 级别
-bws cfg set log-level debug
+bws cfg set log.console-level debug
 
 # 重新执行有问题的命令
 bws i chrome@120
@@ -183,23 +190,13 @@ bws i chrome@120
 
 ```bash
 # 设置为 error 级别，只输出错误
-bws cfg set log-level error
+bws cfg set log.console-level error
 
 # 或者设置为 fatal，几乎不输出
-bws cfg set log-level fatal
+bws cfg set log.console-level fatal
 ```
 
-## 文件日志级别
-
-文件日志默认使用 `DEBUG` 级别，始终记录详细信息，不受控制台日志级别配置的影响。
-
-### 为什么文件日志固定为 DEBUG
-
-- 便于问题排查：出问题时总能找到详细日志
-- 占用空间小：文本日志压缩比很高
-- 自动轮转：不用担心文件无限增大
-
-### 查看文件日志
+## 查看文件日志
 
 ```bash
 # 查看最新日志
@@ -222,6 +219,32 @@ Get-Content bws-data\logs\bws.log -Tail 50
 Get-Content bws-data\logs\bws.log -Wait -Tail 50
 ```
 
+## Serve 日志
+
+`bws sv` 服务也有独立的日志系统：
+
+- **控制台输出**：启动进度、HTTP 请求摘要（跳过 `/api/v1/status` 健康检查）
+- **文件日志**：`bws-data/logs/serve.log`，记录完整的 HTTP 请求信息（方法、路径、状态码、耗时、客户端 IP）
+
+Serve 日志同样支持轮转，配置与客户端日志共享 `log.max-size-mb` 和 `log.max-backups`（通过 `bws-serve.ini` 中的独立配置项，或沿用客户端配置）。
+
+## 客户端详细日志（--verbose / -V）
+
+客户端命令支持 `--verbose`（简写 `-V`）选项，在单次执行时输出更多调试信息，无需修改配置。
+
+```bash
+# 列出远程版本时显示详细日志
+bws ls -R chrome -V
+
+# 安装时显示详细日志
+bws i chrome@120 --verbose
+
+# 运行浏览器时显示详细日志
+bws r chrome@120 -V
+```
+
+`-V` 选项会临时降低日志级别到 `debug`，便于排查单次命令的问题，不影响持久化配置。
+
 ## 日志与问题排查
 
 当遇到问题时，日志是排查问题的重要依据。
@@ -229,7 +252,7 @@ Get-Content bws-data\logs\bws.log -Wait -Tail 50
 ### 一般排查步骤
 
 1. **复现问题**：确保能稳定复现
-2. **提高日志级别**：设置控制台为 debug 级别
+2. **提高日志级别**：设置控制台为 debug 级别，或使用 `-V` 选项
 3. **查看输出**：观察控制台输出中的错误信息
 4. **查看文件日志**：在日志文件中搜索错误和警告
 5. **定位问题**：根据日志中的源码位置和错误信息判断原因
@@ -261,8 +284,8 @@ Get-Content bws-data\logs\bws.log -Wait -Tail 50
 
 ## 注意事项
 
-1. **日志级别只影响控制台**：`log-level` 配置只影响控制台输出，文件日志始终是 DEBUG 级别
-2. **日志自动轮转**：不用担心日志文件无限增大，系统会自动轮转和清理
+1. **日志级别独立控制**：`log.console-level` 只影响控制台输出，`log.file-level` 控制文件日志
+2. **日志自动轮转**：通过 `log.max-size-mb` 和 `log.max-backups` 配置，不用担心日志文件无限增大
 3. **日志包含敏感信息**：日志中可能包含文件路径等信息，分享日志前注意脱敏
 4. **性能影响**：提高日志级别（如 trace）可能会略微影响性能，调试后建议改回 info
 5. **日志目录位置**：日志位于数据目录下的 `logs/` 文件夹中，可通过 `bws cfg get data-dir` 查看数据目录路径。

@@ -60,7 +60,7 @@ Place `bws.exe` in any directory. The `bws-data/` folder will be automatically g
 bws/
 ├── bws.exe
 └── bws-data/              # All data is here
-    ├── config.json       # Configuration file
+    ├── config.ini        # Configuration file
     ├── logs/             # Log directory
     ├── cache/            # Download cache
     ├── versions/         # Installed browser versions

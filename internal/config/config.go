@@ -3,7 +3,6 @@ package config
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,10 +33,6 @@ type Config struct {
 	// Empty means no remote source is configured.
 	RemoteSource string
 
-	// LogLevel is the minimum log level to write (deprecated, use Log.ConsoleLevel).
-	// Kept for backward compatibility.
-	LogLevel string
-
 	// Log configures logging behavior.
 	Log LogConfig
 
@@ -52,7 +47,6 @@ type Config struct {
 	Cache CacheConfig
 
 	// Source switches control which data sources are active.
-	// All default to true for backward compatibility.
 	EnableServeSource bool // serve HTTP source
 	EnableOmahaSource bool // Chrome Omaha protocol
 	EnableFirefoxFTP  bool // Firefox FTP releases (reserved)
@@ -123,7 +117,6 @@ func Default() *Config {
 	return &Config{
 		DefaultBrowser: "chrome",
 		DefaultChannel: "stable",
-		LogLevel:       "info",
 		Log: LogConfig{
 			ConsoleLevel: "info",
 			FileLevel:    "debug",
@@ -177,7 +170,6 @@ func Default() *Config {
 
 // Load reads a config file from the given path.
 // If the file doesn't exist, it returns a default config and no error.
-// Supports both INI and legacy JSON formats for backward compatibility.
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -187,51 +179,7 @@ func Load(path string) (*Config, error) {
 		return nil, err
 	}
 
-	// Detect format: if the first non-whitespace character is '{', treat as legacy JSON.
-	trimmed := strings.TrimSpace(string(data))
-	if len(trimmed) > 0 && trimmed[0] == '{' {
-		return loadJSON(data)
-	}
-
 	return loadINI(data)
-}
-
-// loadJSON loads the legacy JSON format (for backward compatibility).
-func loadJSON(data []byte) (*Config, error) {
-	// First, unmarshal into a raw map to detect which top-level keys are present.
-	var raw map[string]any
-	if err := unmarshalJSON(data, &raw); err != nil {
-		return nil, err
-	}
-
-	cfg := Default()
-	if err := unmarshalJSON(data, cfg); err != nil {
-		return nil, err
-	}
-
-	// Backward compatibility: sync LogLevel and Log.ConsoleLevel.
-	_, hasLogSection := raw["log"]
-	_, hasLogLevel := raw["logLevel"]
-	if hasLogLevel && !hasLogSection {
-		cfg.Log.ConsoleLevel = cfg.LogLevel
-	}
-	if hasLogSection && !hasLogLevel {
-		cfg.LogLevel = cfg.Log.ConsoleLevel
-	}
-
-	if err := cfg.parseDurations(); err != nil {
-		return nil, err
-	}
-	cfg.applyDefaults()
-
-	// Sync LogLevel with Log.ConsoleLevel for backward compatibility.
-	if cfg.Log.ConsoleLevel != "" {
-		cfg.LogLevel = cfg.Log.ConsoleLevel
-	} else if cfg.LogLevel != "" {
-		cfg.Log.ConsoleLevel = cfg.LogLevel
-	}
-
-	return cfg, nil
 }
 
 // loadINI loads the INI format.
@@ -279,13 +227,6 @@ func loadINI(data []byte) (*Config, error) {
 	}
 	cfg.applyDefaults()
 
-	// Sync LogLevel with Log.ConsoleLevel for backward compatibility.
-	if cfg.Log.ConsoleLevel != "" {
-		cfg.LogLevel = cfg.Log.ConsoleLevel
-	} else if cfg.LogLevel != "" {
-		cfg.Log.ConsoleLevel = cfg.LogLevel
-	}
-
 	return cfg, nil
 }
 
@@ -306,8 +247,6 @@ func (c *Config) setINIValue(section, key, value string) {
 			c.RepoPath = value
 		case "remote-source", "remotesource":
 			c.RemoteSource = value
-		case "log-level", "loglevel":
-			c.LogLevel = value
 		}
 	case "alias":
 		if c.Aliases == nil {
@@ -410,13 +349,6 @@ func (c *Config) setINIValue(section, key, value string) {
 
 // Save writes the config to the given path as INI.
 func Save(cfg *Config, path string) error {
-	// Keep LogLevel in sync with Log.ConsoleLevel for backward compatibility.
-	if cfg.Log.ConsoleLevel != "" {
-		cfg.LogLevel = cfg.Log.ConsoleLevel
-	} else if cfg.LogLevel != "" {
-		cfg.Log.ConsoleLevel = cfg.LogLevel
-	}
-
 	// Convert durations to strings for serialization.
 	cfg.Download.RetryDelayStr = cfg.Download.RetryDelay.String()
 	cfg.Download.TimeoutStr = cfg.Download.Timeout.String()
@@ -457,9 +389,6 @@ func Save(cfg *Config, path string) error {
 	sb.WriteString("# 远程 bws serve 源地址\n")
 	sb.WriteString("# 示例: http://192.168.1.100:8080\n")
 	sb.WriteString(fmt.Sprintf("remote-source = %s\n", cfg.RemoteSource))
-	sb.WriteString("\n")
-	sb.WriteString("# 日志级别（向后兼容字段）\n")
-	sb.WriteString(fmt.Sprintf("log-level = %s\n", cfg.LogLevel))
 	sb.WriteString("\n")
 
 	// [alias]
@@ -620,16 +549,9 @@ func (c *Config) applyDefaults() {
 	if c.DefaultChannel == "" {
 		c.DefaultChannel = def.DefaultChannel
 	}
-	if c.LogLevel == "" {
-		c.LogLevel = def.LogLevel
-	}
 	// Log config defaults
 	if c.Log.ConsoleLevel == "" {
 		c.Log.ConsoleLevel = def.Log.ConsoleLevel
-		// Keep LogLevel in sync
-		if c.LogLevel == "" {
-			c.LogLevel = def.Log.ConsoleLevel
-		}
 	}
 	if c.Log.FileLevel == "" {
 		c.Log.FileLevel = def.Log.FileLevel
@@ -773,7 +695,3 @@ func boolStr(b bool) string {
 	return "false"
 }
 
-// unmarshalJSON is a thin wrapper around json.Unmarshal for backward compatibility.
-func unmarshalJSON(data []byte, v any) error {
-	return json.Unmarshal(data, v)
-}

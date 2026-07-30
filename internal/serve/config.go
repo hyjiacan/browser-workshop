@@ -82,7 +82,7 @@ func DefaultServeConfig() ServeConfig {
 		SyncInterval:   "24h",
 		SyncBrowsers:   "",
 		SyncChannels:   "stable",
-		OnlineFallback: false,
+		OnlineFallback: true,
 		LogLevel:       "info",
 		FileLogLevel:   "debug",
 		LogMaxSizeMB:   10,
@@ -92,7 +92,7 @@ func DefaultServeConfig() ServeConfig {
 }
 
 // ConfigPath returns the path to the bws-serve.ini config file.
-// It's located in the bws-data directory (next to config.json and logs/).
+// It's located in the bws-data directory (next to config.ini and logs/).
 // If baseDir is empty, the default bws-data directory is used.
 func ConfigPath(baseDir string) string {
 	if baseDir == "" {
@@ -160,29 +160,29 @@ func LoadServeConfig(baseDir string) (ServeConfig, error) {
 			cfg.PackagesDir = value
 		case "bin-dir", "bindir":
 			cfg.BinDir = value
-		case "sync", "sync-enabled", "syncenabled":
+		case "sync":
 			cfg.SyncEnabled = parseBool(value)
-		case "sync-interval", "syncinterval", "schedule":
+		case "sync-interval":
 			cfg.SyncInterval = value
-		case "sync-browsers", "syncbrowsers":
+		case "sync-browsers":
 			cfg.SyncBrowsers = value
-		case "sync-channels", "syncchannels":
+		case "sync-channels":
 			cfg.SyncChannels = value
-		case "online-fallback", "onlinefallback":
+		case "online-fallback":
 			cfg.OnlineFallback = parseBool(value)
-		case "log-level", "loglevel":
+		case "log-level":
 			cfg.LogLevel = value
-		case "file-log-level", "fileloglevel":
+		case "file-log-level":
 			cfg.FileLogLevel = value
-		case "log-max-size-mb", "logmaxsizemb", "log-max-size":
+		case "log-max-size-mb":
 			if v, err := strconv.Atoi(value); err == nil {
 				cfg.LogMaxSizeMB = v
 			}
-		case "log-max-backups", "logmaxbackups":
+		case "log-max-backups":
 			if v, err := strconv.Atoi(value); err == nil {
 				cfg.LogMaxBackups = v
 			}
-		case "scan-workers", "scanworkers":
+		case "scan-workers":
 			if v, err := strconv.Atoi(value); err == nil {
 				cfg.ScanWorkers = v
 			}
@@ -334,21 +334,21 @@ func SetConfigKey(baseDir string, key string, value string) (ServeConfig, error)
 		cfg.PackagesDir = value
 	case "bin-dir", "bindir":
 		cfg.BinDir = value
-	case "sync", "sync-enabled", "syncenabled":
+	case "sync":
 		cfg.SyncEnabled = parseBool(value)
-	case "sync-interval", "syncinterval", "schedule":
+	case "sync-interval":
 		// Validate duration format
 		if _, err := parseDuration(value); err != nil {
 			return cfg, fmt.Errorf("无效的时间间隔格式: %s（例如 24h、30m、7d）", value)
 		}
 		cfg.SyncInterval = value
-	case "sync-browsers", "syncbrowsers":
+	case "sync-browsers":
 		cfg.SyncBrowsers = value
-	case "sync-channels", "syncchannels":
+	case "sync-channels":
 		cfg.SyncChannels = value
-	case "online-fallback", "onlinefallback":
+	case "online-fallback":
 		cfg.OnlineFallback = parseBool(value)
-	case "log-level", "loglevel":
+	case "log-level":
 		// Validate log level
 		normalized := strings.ToLower(strings.TrimSpace(value))
 		validLevels := map[string]bool{
@@ -359,7 +359,7 @@ func SetConfigKey(baseDir string, key string, value string) (ServeConfig, error)
 			return cfg, fmt.Errorf("无效的日志级别: %s（可选值: trace, debug, info, warn, error, fatal）", value)
 		}
 		cfg.LogLevel = value
-	case "file-log-level", "fileloglevel":
+	case "file-log-level":
 		// Validate file log level
 		normalized := strings.ToLower(strings.TrimSpace(value))
 		validLevels := map[string]bool{
@@ -370,19 +370,19 @@ func SetConfigKey(baseDir string, key string, value string) (ServeConfig, error)
 			return cfg, fmt.Errorf("无效的文件日志级别: %s（可选值: trace, debug, info, warn, error, fatal）", value)
 		}
 		cfg.FileLogLevel = value
-	case "log-max-size-mb", "logmaxsizemb", "log-max-size":
+	case "log-max-size-mb":
 		v, err := strconv.Atoi(value)
 		if err != nil || v < 0 {
 			return cfg, fmt.Errorf("无效的日志文件大小: %s（必须为非负整数，单位 MB）", value)
 		}
 		cfg.LogMaxSizeMB = v
-	case "log-max-backups", "logmaxbackups":
+	case "log-max-backups":
 		v, err := strconv.Atoi(value)
 		if err != nil || v < 0 {
 			return cfg, fmt.Errorf("无效的备份文件数量: %s（必须为非负整数）", value)
 		}
 		cfg.LogMaxBackups = v
-	case "scan-workers", "scanworkers":
+	case "scan-workers":
 		v, err := strconv.Atoi(value)
 		if err != nil || v < 0 || v > 32 {
 			return cfg, fmt.Errorf("无效的扫描线程数: %s（必须为 0 到 32 之间的整数，0 表示自动）", value)
@@ -417,25 +417,25 @@ func GetConfigKey(baseDir string, key string) (string, error) {
 		return cfg.PackagesDir, nil
 	case "bin-dir", "bindir":
 		return cfg.BinDir, nil
-	case "sync", "sync-enabled", "syncenabled":
+	case "sync":
 		return boolStr(cfg.SyncEnabled), nil
-	case "sync-interval", "syncinterval", "schedule":
+	case "sync-interval":
 		return cfg.SyncInterval, nil
-	case "sync-browsers", "syncbrowsers":
+	case "sync-browsers":
 		return cfg.SyncBrowsers, nil
-	case "sync-channels", "syncchannels":
+	case "sync-channels":
 		return cfg.SyncChannels, nil
-	case "online-fallback", "onlinefallback":
+	case "online-fallback":
 		return boolStr(cfg.OnlineFallback), nil
-	case "log-level", "loglevel":
+	case "log-level":
 		return cfg.LogLevel, nil
-	case "file-log-level", "fileloglevel":
+	case "file-log-level":
 		return cfg.FileLogLevel, nil
-	case "log-max-size-mb", "logmaxsizemb", "log-max-size":
+	case "log-max-size-mb":
 		return strconv.Itoa(cfg.LogMaxSizeMB), nil
-	case "log-max-backups", "logmaxbackups":
+	case "log-max-backups":
 		return strconv.Itoa(cfg.LogMaxBackups), nil
-	case "scan-workers", "scanworkers":
+	case "scan-workers":
 		return strconv.Itoa(cfg.ScanWorkers), nil
 	default:
 		return "", fmt.Errorf("未知的配置项: %s", key)

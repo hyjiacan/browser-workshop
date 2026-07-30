@@ -318,14 +318,26 @@
     </div>
   </div>
 
-  {{if .SyncEnabled}}
+  {{if or .SyncEnabled .OnlineFallback}}
   <!-- Sync Status -->
   <div class="sync-card">
     <div class="sync-row">
+      {{if .SyncEnabled}}
       <span class="sync-indicator idle"></span>
-      <span class="sync-status-text">同步已开启</span>
+      <span class="sync-status-text">自动同步已开启</span>
+      <button class="sync-btn" onclick="syncNow()">立即同步</button>
+      {{else}}
+      <span class="sync-indicator idle"></span>
+      <span class="sync-status-text">在线回退已启用</span>
+      {{end}}
     </div>
-    <div class="sync-meta">自动同步和在线回退功能已启用</div>
+    {{if and .SyncEnabled .OnlineFallback}}
+    <div class="sync-meta">自动同步和在线回退功能均已启用</div>
+    {{else if .SyncEnabled}}
+    <div class="sync-meta">定时从在线源下载最新版本到本地</div>
+    {{else}}
+    <div class="sync-meta">请求的软件包本地不存在时，自动从在线源实时下载</div>
+    {{end}}
   </div>
   {{end}}
 
@@ -409,6 +421,56 @@ bws run chrome@120 -d</code></pre>
 
 </div>
 
+<script>
+// 同步状态指示器动态更新
+(function() {
+  var indicator = document.querySelector('.sync-indicator');
+  var statusText = document.querySelector('.sync-status-text');
+  if (!indicator) return;
+
+  function updateStatus() {
+    fetch('/api/v1/sync/status')
+      .then(function(r) { return r.json(); })
+      .then(function(resp) {
+        if (!resp || !resp.data) return;
+        var s = resp.data;
+        if (s.running) {
+          indicator.className = 'sync-indicator running';
+          if (s.progress) statusText.textContent = s.progress;
+        } else if (s.error) {
+          indicator.className = 'sync-indicator error';
+        } else {
+          indicator.className = 'sync-indicator idle';
+        }
+      })
+      .catch(function() {});
+  }
+
+  updateStatus();
+  setInterval(updateStatus, 5000);
+})();
+
+// 立即同步
+function syncNow() {
+  var btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '同步中...';
+  fetch('/api/v1/sync/trigger', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function() {
+      btn.textContent = '已触发';
+      setTimeout(function() {
+        btn.disabled = false;
+        btn.textContent = '立即同步';
+      }, 3000);
+    })
+    .catch(function() {
+      btn.disabled = false;
+      btn.textContent = '同步失败';
+      setTimeout(function() { btn.textContent = '立即同步'; }, 3000);
+    });
+}
+</script>
 
 </body>
 </html>

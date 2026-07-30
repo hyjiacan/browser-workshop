@@ -88,6 +88,12 @@ const zhThemeConfig = {
           { text: '版本变更记录', link: '/guide/changelog' },
         ],
       },
+      {
+        text: '设计文档',
+        items: [
+          { text: '架构设计', link: '/guide/design' },
+        ],
+      },
     ],
   },
 

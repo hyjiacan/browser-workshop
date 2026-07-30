@@ -12,13 +12,13 @@ import (
 func TestOnlineFallback_ConfigRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 
-	// Default should be false.
+	// Default should be true.
 	cfg, err := LoadServeConfig(dir)
 	if err != nil {
 		t.Fatalf("LoadServeConfig: %v", err)
 	}
-	if cfg.OnlineFallback {
-		t.Fatalf("default OnlineFallback = true, want false")
+	if !cfg.OnlineFallback {
+		t.Fatalf("default OnlineFallback = false, want true")
 	}
 
 	// Set it to true via the key API.
@@ -48,19 +48,10 @@ func TestOnlineFallback_ConfigRoundTrip(t *testing.T) {
 		t.Errorf("GetConfigKey online-fallback = %q, want %q", got, "true")
 	}
 
-	// The alternate (no-dash) key should also work.
-	got2, err := GetConfigKey(dir, "onlinefallback")
+	// Set it back to false.
+	_, err = SetConfigKey(dir, "online-fallback", "false")
 	if err != nil {
-		t.Errorf("GetConfigKey onlinefallback: %v", err)
-	}
-	if got2 != "true" {
-		t.Errorf("GetConfigKey onlinefallback = %q, want %q", got2, "true")
-	}
-
-	// Setting false via alternate key.
-	_, err = SetConfigKey(dir, "onlinefallback", "false")
-	if err != nil {
-		t.Fatalf("SetConfigKey onlinefallback false: %v", err)
+		t.Fatalf("SetConfigKey online-fallback false: %v", err)
 	}
 	cfg, _ = LoadServeConfig(dir)
 	if cfg.OnlineFallback {

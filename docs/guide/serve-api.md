@@ -75,8 +75,9 @@ GET /
 - 可用浏览器版本列表
 - 文件下载链接
 - 服务状态信息
-- 同步控制（如果启用了同步）
 - 客户端二进制下载（如果 bin 目录存在）
+
+> **注意**：同步控制仅在启用了自动同步时显示。未启用同步时，界面不会展示同步相关的内容。
 
 ---
 
@@ -89,6 +90,19 @@ GET /
 ```
 GET /api/v1/manifest
 ```
+
+### 查询参数
+
+支持通过查询参数筛选清单内容，客户端请求时会自动带上这些参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `browser` | string | 浏览器名称（如 `chrome`、`firefox`） |
+| `platform` | string | 平台（`windows`、`linux`、`macos`） |
+| `arch` | string | 架构（`amd64`、`386`、`arm64`） |
+| `channel` | string | 发布渠道（`stable`、`beta`、`dev`、`canary`、`esr`） |
+
+当 `online-fallback` 启用时，serve 会根据这些参数向在线源查询，只获取请求中指定的浏览器类型，避免不必要的网络请求。
 
 ### 响应示例
 
@@ -146,6 +160,12 @@ GET /api/v1/manifest
 ```bash
 # 获取完整清单
 curl http://localhost:8080/api/v1/manifest
+
+# 按浏览器筛选
+curl "http://localhost:8080/api/v1/manifest?browser=chrome"
+
+# 按平台和架构筛选
+curl "http://localhost:8080/api/v1/manifest?browser=firefox&platform=windows&arch=amd64"
 ```
 
 ---
@@ -245,6 +265,8 @@ GET /api/v1/status
 ```bash
 curl http://localhost:8080/api/v1/status
 ```
+
+> **注意**：此端点被 serve 日志系统排除，访问时不会记录 HTTP 请求日志，避免健康检查请求污染日志。
 
 ---
 

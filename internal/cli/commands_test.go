@@ -59,7 +59,7 @@ func (m *mockConfig) SetDataDir(path string) error {
 }
 func (m *mockConfig) ConfigPath() string {
 	if m.configPath == "" {
-		return "/tmp/bm-data/config.json"
+		return "/tmp/bm-data/config.ini"
 	}
 	return m.configPath
 }
@@ -366,7 +366,6 @@ func setupTestApp(t *testing.T) (*App, *bytes.Buffer, *mockInstall, *mockLaunch)
 	ctx := &Context{
 		Stdout: &buf,
 		Stderr: &buf,
-		Config: cfg,
 		Cfg: &Settings{
 			Aliases:  cfg,
 			Repo:     cfg,
@@ -683,7 +682,7 @@ func TestRepoCommand(t *testing.T) {
 			t.Errorf("expected '仓库路径已设置为', got: %s", buf.String())
 		}
 		// Verify path was set
-		cfg := app.Context.Config.(*mockConfig)
+		cfg := app.Context.Cfg.Repo.(*mockConfig)
 		if cfg.repoPath != "/tmp/browsers" {
 			t.Errorf("repoPath = %q, want '/tmp/browsers'", cfg.repoPath)
 		}
@@ -699,7 +698,7 @@ func TestRepoCommand(t *testing.T) {
 
 	t.Run("repo path - with path set", func(t *testing.T) {
 		// Set a path first
-		cfg := app.Context.Config.(*mockConfig)
+		cfg := app.Context.Cfg.Repo.(*mockConfig)
 		cfg.repoPath = "/tmp/test-repo"
 
 		buf.Reset()
@@ -713,7 +712,7 @@ func TestRepoCommand(t *testing.T) {
 	})
 
 	t.Run("repo scan - no repo provider", func(t *testing.T) {
-		cfg := app.Context.Config.(*mockConfig)
+		cfg := app.Context.Cfg.Repo.(*mockConfig)
 		cfg.repoPath = "/tmp/test-repo"
 
 		buf.Reset()
@@ -724,7 +723,7 @@ func TestRepoCommand(t *testing.T) {
 	})
 
 	t.Run("repo import - no repo provider", func(t *testing.T) {
-		cfg := app.Context.Config.(*mockConfig)
+		cfg := app.Context.Cfg.Repo.(*mockConfig)
 		cfg.repoPath = "/tmp/test-repo"
 
 		buf.Reset()

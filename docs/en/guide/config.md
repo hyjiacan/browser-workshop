@@ -15,7 +15,7 @@ Example output:
 ```
 Configuration information:
 
-  Config file:       D:\bws-data\config.json
+  Config file:       D:\bws-data\config.ini
   Data directory:       D:\bws-data
   Default browser:     chrome
   Default channel:       stable
@@ -377,11 +377,11 @@ When executing `bws i` or `bws ls --remote`:
 
 ## Configuration File
 
-Configurations are stored in the `config.json` file under the data directory in JSON format:
+Configurations are stored in the `config.ini` file under the data directory in INI format:
 
 ```
 bws-data/
-└── config.json
+└── config.ini
 ```
 
 It is usually not necessary to manually edit the configuration file; it is recommended to use the `bws cfg` command for management.

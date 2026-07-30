@@ -62,7 +62,7 @@ func Default() *Paths {
 func New(root string) *Paths {
 	p := &Paths{
 		Root:             root,
-		Config:           filepath.Join(root, "config.json"),
+		Config:           filepath.Join(root, "config.ini"),
 		LogDir:           filepath.Join(root, "logs"),
 		LogFile:          filepath.Join(root, "logs", "bws.log"),
 		VersionsDir:      filepath.Join(root, "versions"),

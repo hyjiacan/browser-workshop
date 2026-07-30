@@ -36,7 +36,7 @@ func runInstall(ctx *Context, args []string) error {
 
 	// Check disk space before any install operation
 	dataDir := "."
-	if ctx.Config != nil {
+	if ctx.Cfg != nil {
 		dataDir = ctx.Cfg.Data.GetDataDir()
 	}
 	if err := checkDiskSpace(ctx, dataDir); err != nil {

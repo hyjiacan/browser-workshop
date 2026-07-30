@@ -12,11 +12,15 @@ bws 将所有数据（配置、版本、缓存、日志、Profile 等）统一�
 bws/
 ├── bws.exe                    # 程序主文件
 └── bws-data/                  # 数据根目录
-    ├── config.json            # 配置文件
+    ├── config.ini             # 配置文件（INI 格式）
+    ├── bws-serve.ini          # serve 服务配置文件（首次运行 serve 时创建）
+    ├── .serve-cache.json      # serve 校验和缓存
     ├── logs/                  # 日志目录
-    │   └── bws.log            # 主日志文件
+    │   ├── bws.log            # 客户端主日志文件
+    │   └── serve.log          # serve 服务日志文件
     ├── cache/                 # 下载缓存
     │   ├── manifests/         # 版本清单缓存
+    │   │   └── firefox-ftp-cache.json  # Firefox FTP 源缓存
     │   └── downloads/         # 下载文件缓存
     ├── versions/              # 安装的浏览器版本
     │   ├── chrome/
@@ -46,19 +50,25 @@ bws/
 
 ## 各目录说明
 
-### config.json
+### config.ini
 
-配置文件，存储所有用户配置项。JSON 格式。
+配置文件，存储所有用户配置项。INI 格式。
 
-```json
-{
-  "default-browser": "chrome",
-  "default-channel": "stable",
-  "log-level": "info",
-  "dataDir": "",
-  "repo-path": "",
-  "source": ""
-}
+```ini
+[client]
+default-browser = chrome
+default-channel = stable
+
+[log]
+console-level = info
+file-level = debug
+max-size-mb = 10
+max-backups = 5
+
+[source-switches]
+enable-serve-source = true
+enable-omaha-source = true
+enable-firefox-ftp = true
 ```
 
 通常不需要手动编辑，使用 `bws cfg` 命令管理。
@@ -69,11 +79,30 @@ bws/
 bws cfg set data-dir D:\browser-data
 ```
 
+### bws-serve.ini
+
+Serve 服务的配置文件，首次运行 `bws sv` 时自动在 `bws-data/` 目录下创建。
+
+```ini
+[serve]
+host = 0.0.0.0
+port = 8080
+packages-dir =
+bin-dir =
+sync = false
+sync-interval = 24h
+sync-browsers =
+sync-channels = stable
+online-fallback = false
+scan-workers = 0
+```
+
 ### logs/
 
 日志目录，存储 bws 的运行日志。
 
-- `bws.log`：主日志文件，记录所有操作
+- `bws.log`：客户端主日志文件，记录所有操作
+- `serve.log`：serve 服务日志文件，记录 HTTP 请求和启动信息
 - 文件日志默认 DEBUG 级别，详细记录所有操作
 - 日志会自动轮转，防止单个文件过大
 
@@ -89,6 +118,8 @@ bws cfg set data-dir D:\browser-data
 
 - 加速 `ls --remote` 等命令的响应
 - 有过期时间，过期后自动重新获取
+- Firefox FTP 源缓存存储为 `firefox-ftp-cache.json`，默认 24 小时有效期
+- 可以通过 `bws ls -R --refresh` 强制刷新缓存
 - 可以通过 `bws cc clear` 清理
 
 #### cache/downloads/
@@ -192,12 +223,12 @@ bws pf clean
 | `runtime/` | 中等 | 每个 Profile 约几十到几百 MB |
 | `cache/downloads/` | 中等 | 每个安装包约 50-100MB |
 | `logs/` | 很小 | 通常几十 MB |
-| `config.json` | 极小 | 几 KB |
+| `config.ini` | 极小 | 几 KB |
 
 ## 注意事项
 
-1. **备份建议**：定期备份 `config.json` 和重要的 Profile 数据
-2. **手动编辑**：不建议手动编辑 `config.json`，使用 `bws cfg` 命令
+1. **备份建议**：定期备份 `config.ini` 和重要的 Profile 数据
+2. **手动编辑**：不建议手动编辑 `config.ini`，使用 `bws cfg` 命令
 3. **删除安全**：卸载版本不会删除 Profile，防止误删重要数据
 4. **权限**：确保 bws 对数据目录有读写权限
 5. **防病毒**：某些杀毒软件可能会误报浏览器文件，建议将 `versions/` 目录加入白名单

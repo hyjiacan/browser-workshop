@@ -15,7 +15,7 @@ func TestNew(t *testing.T) {
 	if p.Root != root {
 		t.Errorf("Root = %q, want %q", p.Root, root)
 	}
-	if p.Config != filepath.Join(root, "config.json") {
+	if p.Config != filepath.Join(root, "config.ini") {
 		t.Errorf("Config path incorrect")
 	}
 	if p.VersionsDir != filepath.Join(root, "versions") {
@@ -220,7 +220,7 @@ func TestDefault(t *testing.T) {
 	}
 
 	// Verify that all expected sub-paths are set correctly relative to Root
-	if p.Config != filepath.Join(p.Root, "config.json") {
+	if p.Config != filepath.Join(p.Root, "config.ini") {
 		t.Errorf("Default().Config path incorrect")
 	}
 	if p.VersionsDir != filepath.Join(p.Root, "versions") {

@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -279,37 +278,6 @@ func TestLogConfig_Defaults(t *testing.T) {
 	if cfg.Log.MaxBackups != 5 {
 		t.Errorf("Log.MaxBackups = %d, want 5", cfg.Log.MaxBackups)
 	}
-	// LogLevel should match ConsoleLevel for backward compat
-	if cfg.LogLevel != "info" {
-		t.Errorf("LogLevel = %q, want %q", cfg.LogLevel, "info")
-	}
-}
-
-func TestLogConfig_SaveSyncsLogLevel(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "config.ini")
-
-	cfg := Default()
-	cfg.Log.ConsoleLevel = "error"
-	// Don't set LogLevel directly - should be synced on save
-
-	if err := Save(cfg, path); err != nil {
-		t.Fatalf("Save() error = %v", err)
-	}
-
-	// Read raw INI and check fields
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("ReadFile error = %v", err)
-	}
-
-	content := string(data)
-	if !strings.Contains(content, "log-level = error") {
-		t.Errorf("saved config should have log-level synced to error, got: %s", content)
-	}
-	if !strings.Contains(content, "console-level = error") {
-		t.Errorf("saved config should have console-level set to error, got: %s", content)
-	}
 }
 
 func TestLogConfig_LoadNewStyle(t *testing.T) {
@@ -346,45 +314,6 @@ default-browser = chrome
 	}
 	if cfg.Log.MaxBackups != 10 {
 		t.Errorf("Log.MaxBackups = %d, want 10", cfg.Log.MaxBackups)
-	}
-	// LogLevel should be synced from ConsoleLevel
-	if cfg.LogLevel != "trace" {
-		t.Errorf("LogLevel = %q, want %q (synced from console-level)", cfg.LogLevel, "trace")
-	}
-}
-
-func TestBackwardCompat_JSON(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "legacy-config.json")
-
-	legacyJSON := `{
-		"defaultBrowser": "firefox",
-		"defaultChannel": "beta",
-		"logLevel": "warn",
-		"download": {
-			"maxConcurrency": 7
-		}
-	}`
-	if err := os.WriteFile(path, []byte(legacyJSON), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
-
-	if cfg.DefaultBrowser != "firefox" {
-		t.Errorf("DefaultBrowser = %q, want 'firefox'", cfg.DefaultBrowser)
-	}
-	if cfg.DefaultChannel != "beta" {
-		t.Errorf("DefaultChannel = %q, want 'beta'", cfg.DefaultChannel)
-	}
-	if cfg.Log.ConsoleLevel != "warn" {
-		t.Errorf("Log.ConsoleLevel = %q, want 'warn'", cfg.Log.ConsoleLevel)
-	}
-	if cfg.Download.MaxConcurrency != 7 {
-		t.Errorf("Download.MaxConcurrency = %d, want 7", cfg.Download.MaxConcurrency)
 	}
 }
 

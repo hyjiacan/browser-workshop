@@ -54,7 +54,7 @@ This page records feature changes for each version of Browser Workshop, listed i
 #### Configuration Management
 
 - All configuration managed uniformly via `bws cfg` command
-- Config file automatically created in data directory (`config.json`)
+- Config file automatically created in data directory (`config.ini`)
 - First-run setup guides data storage directory selection
 - `bws cfg get` (no arguments) lists all readable configuration keys and their aliases
 - `bws cfg set` (no arguments or key only) lists all writable configuration keys with example values

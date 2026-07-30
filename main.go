@@ -149,7 +149,6 @@ func main() {
 	ctx := cli.DefaultContext()
 	ctx.Paths = &pathsAdapter{p: p}
 	ca := &configAdapter{cfg: cfg, configPath: configPath, dataDir: dataDir}
-	ctx.Config = ca
 	ctx.Cfg = &cli.Settings{
 		Aliases:  ca,
 		Repo:     ca,
@@ -203,11 +202,6 @@ func resolvePaths() (configPath string, dataRoot string, isNew bool) {
 		if _, err := os.Stat(configPath); err == nil {
 			return configPath, home, false
 		}
-		// Backward compatibility: check for legacy config.json
-		legacyPath := filepath.Join(home, "config.json")
-		if _, err := os.Stat(legacyPath); err == nil {
-			return legacyPath, home, false
-		}
 		return configPath, home, true
 	}
 
@@ -218,11 +212,6 @@ func resolvePaths() (configPath string, dataRoot string, isNew bool) {
 		configPath := filepath.Join(dataDir, "config.ini")
 		if _, err := os.Stat(configPath); err == nil {
 			return configPath, dataDir, false
-		}
-		// Backward compatibility: check for legacy config.json
-		legacyPath := filepath.Join(dataDir, "config.json")
-		if _, err := os.Stat(legacyPath); err == nil {
-			return legacyPath, dataDir, false
 		}
 		// Config doesn't exist yet, but we still use bm-data as default
 		return configPath, dataDir, true
@@ -240,11 +229,6 @@ func resolvePaths() (configPath string, dataRoot string, isNew bool) {
 	// Check if config exists
 	if _, err := os.Stat(configPath); err == nil {
 		return configPath, dataRoot, false
-	}
-	// Backward compatibility: check for legacy config.json
-	legacyPath := filepath.Join(dataRoot, "config.json")
-	if _, err := os.Stat(legacyPath); err == nil {
-		return legacyPath, dataRoot, false
 	}
 
 	return configPath, dataRoot, true
@@ -377,7 +361,6 @@ func (a *configAdapter) GetLogLevel() string {
 
 func (a *configAdapter) SetLogLevel(level string) error {
 	a.cfg.Log.ConsoleLevel = level
-	a.cfg.LogLevel = level
 	return config.Save(a.cfg, a.configPath)
 }
 
@@ -981,10 +964,14 @@ func (a *serveAdapter) StartFromConfig() error {
 		onlineSource = &serveSyncSource{src: a.source}
 	}
 
-	// Online fallback scope follows the configured sync browsers/channels so
-	// users control which versions are exposed via the manifest.
-	onlineBrowsers := cfg.SyncBrowsersList()
-	onlineChannels := cfg.SyncChannelsList()
+	// Sync uses the user-configured browsers/channels.
+	syncBrowsers := cfg.SyncBrowsersList()
+	syncChannels := cfg.SyncChannelsList()
+
+	// Online fallback always queries all channels so that ESR, beta, etc.
+	// versions are discoverable even when sync-channels only lists "stable".
+	onlineBrowsers := syncBrowsers
+	onlineChannels := []string{"stable", "beta", "esr", "dev", "canary"}
 
 	if cfg.SyncEnabled && onlineSource != nil {
 		// Parse interval
@@ -1002,8 +989,8 @@ func (a *serveAdapter) StartFromConfig() error {
 			SyncConfig: bmserve.SyncConfig{
 				Enabled:  true,
 				Interval: interval,
-				Browsers: onlineBrowsers,
-				Channels: onlineChannels,
+				Browsers: syncBrowsers,
+				Channels: syncChannels,
 			},
 			OnlineSource:   onlineSource,
 			OnlineFallback: cfg.OnlineFallback,

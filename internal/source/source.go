@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	bmlog "github.com/bws/bws/internal/log"
 	"github.com/bws/bws/internal/version"
 )
 
@@ -240,7 +241,8 @@ func (m *MultiSource) List(ctx context.Context, filter *Filter) ([]VersionInfo, 
 	for _, src := range sources {
 		versions, err := src.List(ctx, filter)
 		if err != nil {
-			// Skip sources that fail, continue with others
+			// 记录失败日志，避免源错误被静默吞掉
+			bmlog.Debug("[source] 源 %s 查询失败: %v", src.Name(), err)
 			continue
 		}
 		for _, v := range versions {

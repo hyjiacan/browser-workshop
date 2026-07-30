@@ -104,4 +104,4 @@ bws cfg set proxy socks5h://127.0.0.1:1080
 
 1. **TLS 证书**：bws 的下载请求默认跳过 TLS 证书验证（`InsecureSkipVerify: true`），以兼容自签名证书的 bws serve 实例。浏览器本身的证书验证不受此设置影响。
 2. **代理认证**：支持在 URL 中包含用户名密码，如 `http://user:pass@proxy:8080`。
-3. **配置持久化**：全局代理通过 `bws cfg set proxy` 设置，保存在 `config.json` 中，重启后生效。
+3. **配置持久化**：全局代理通过 `bws cfg set proxy` 设置，保存在 `config.ini` 中，重启后生效。

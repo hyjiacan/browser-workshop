@@ -79,9 +79,13 @@ bws i chrome@85
 在安装之前，你可以先查看远程源中有哪些可用版本：
 
 ```bash
+# 查看远程可用版本
 bws ls --remote chrome
 bws ls -R gc@79
 bws ls -R chrome --channel beta
+
+# 强制刷新远程源缓存
+bws ls -R firefox --refresh
 ```
 
 远程列表会标记本地已安装的版本：
@@ -91,12 +95,14 @@ chrome 的可用版本：
 
 版本              渠道      平台       架构      状态
 --------------  ------  -------  ------  ------
-150.0.7871.115  stable  windows  amd64
+150.0.7871.115  stable  windows  amd64   —
 120.0.6099.109  stable  windows  x64     已安装
   79.0.3945.79  stable  windows  x64     已安装
 
   已安装 2 个版本。
 ```
+
+> **注意**：未安装的版本状态列显示 `—`（破折号），已安装的版本显示 `已安装`。
 
 ## 4. 运行浏览器
 
@@ -136,6 +142,9 @@ bws r chrome@120 https://example.com
 
 # 传递浏览器原生参数
 bws r chrome@120 -- --disable-gpu --no-sandbox
+
+# 使用详细日志模式
+bws r chrome@120 -V
 ```
 
 > **提示**：部分版本号匹配时，会列出所有匹配版本并自动选择最新版本。更多运行选项请参考 [运行浏览器](./run.md) 章节。
@@ -154,6 +163,27 @@ bws u chrome@120
 bws r chrome
 ```
 
+## 6. 使用 Serve 服务（团队共享）
+
+如果你需要在团队内共享浏览器版本，可以搭建 Serve 服务：
+
+```bash
+# 首次运行，自动创建配置文件
+bws sv
+
+# 编辑 bws-data/bws-serve.ini 配置文件
+# 启动服务
+bws sv
+```
+
+客户端配置离线源地址：
+
+```bash
+bws cfg set source http://server-ip:8080
+```
+
+详细说明请参考 [Serve 服务](./serve.md) 章节。
+
 ## 下一步
 
 恭喜你完成了 bws 的快速上手！接下来你可以：
@@ -163,3 +193,4 @@ bws r chrome
 - 探索 [Profile 管理](./profile.md) 功能
 - 配置 [离线源](./config.md)，加速下载
 - 搭建 [Serve 服务](./serve.md)，实现团队共享
+- 了解 [日志系统](./logging.md)，排查问题

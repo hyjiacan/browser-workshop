@@ -7,11 +7,14 @@
 bws sv 是一个轻量级的 HTTP 服务，主要功能包括：
 
 - **浏览器版本分发**：将本地存储的浏览器安装包提供给局域网内的客户端下载
-- **文件清单管理**：自动扫描目录、识别文件、生成清单和校验和
+- **文件清单管理**：自动扫描目录、识别文件、生成清单和校验和，支持并行扫描加速
+- **扩展名过滤**：仅处理支持的安装包格式，跳过无关文件
 - **断点续传**：支持 HTTP Range 请求，大文件下载可断点续传
 - **自动同步**：可配置自动从在线源同步最新版本到本地
+- **在线回退**：本地缺失时自动从在线源实时下载并提供给客户端
 - **Web 管理界面**：内置 HTML 页面，方便查看和操作
 - **REST API**：提供完整的 API 接口，便于集成
+- **双日志输出**：控制台 + 文件（`logs/serve.log`），支持日志轮转
 
 ### 适用场景
 
@@ -22,14 +25,14 @@ bws sv 是一个轻量级的 HTTP 服务，主要功能包括：
 
 ## 快速开始
 
-serve 的配置通过 `bws-serve.ini` 文件管理。首次运行 `bws sv` 时会自动创建默认配置文件，编辑后重新运行即可启动服务。
+serve 的配置通过 `bws-serve.ini` 文件管理。首次运行 `bws sv` 时会自动在 `bws-data/` 目录下创建默认配置文件，编辑后重新运行即可启动服务。
 
 ### 基本用法
 
 ```bash
 # 1. 首次运行（自动创建配置文件）
 bws sv
-# 输出: 配置文件已创建: D:\bws\bws-serve.ini
+# 输出: 配置文件已创建: bws-data/bws-serve.ini
 # 编辑配置文件后重新运行
 
 # 2. 编辑 bws-serve.ini 后启动服务
@@ -52,6 +55,7 @@ sync-interval = 24h
 sync-browsers =
 sync-channels = stable
 online-fallback = false
+scan-workers = 0
 ```
 
 ```bash
@@ -59,42 +63,20 @@ online-fallback = false
 bws sv
 ```
 
-### 命令行参数
-
-`bws sv`（别名 `bws server`）支持以下命令行参数：
-
-| 参数 | 缩写 | 默认值 | 说明 |
-|------|------|--------|------|
-| `--dir` | `-d` | 程序目录 | 指定基础目录（packages/ 和 bin/ 的父目录） |
-
-`-d` 参数用于指定基础目录（packages/ 和 bin/ 的父目录），配置文件将在该目录下查找和创建。
-
 ### 配置项说明
 
 | 配置项 | 默认值 | 说明 |
 |--------|--------|------|
 | `host` | `0.0.0.0` | 监听主机地址 |
 | `port` | `8080` | 监听端口 |
-| `packages-dir` | 程序目录/packages | 浏览器安装包存放目录 |
-| `bin-dir` | 程序目录/bin | 客户端二进制存放目录 |
+| `packages-dir` | 程序目录/packages | 浏览器安装包存放目录（支持绝对/相对路径，留空使用默认值） |
+| `bin-dir` | 程序目录/bin | 客户端二进制存放目录（支持绝对/相对路径，留空使用默认值） |
 | `sync` | `false` | 是否启用自动同步 |
 | `sync-interval` | `24h` | 同步间隔（支持 30d、24h、30m 格式） |
-| `sync-browsers` | 全部 | 同步的浏览器列表，逗号分隔（如 chrome,firefox） |
-| `sync-channels` | `stable` | 同步的渠道列表，逗号分隔（如 stable,beta） |
+| `sync-browsers` | 全部 | 同步的浏览器列表，逗号分隔 |
+| `sync-channels` | `stable` | 同步的渠道列表，逗号分隔 |
 | `online-fallback` | `false` | 在线回退：本地未命中的包自动从在线源实时下载 |
-
-### 配置文件
-
-配置保存在程序所在目录的 `bws-serve.ini` 文件中：
-
-```ini
-[serve]
-host = 0.0.0.0
-port = 8080
-sync = true
-sync-interval = 30d
-sync-channels = stable
-```
+| `scan-workers` | `0` | 并行扫描线程数，`0` 表示自动（使用 CPU 核心数），范围 `[1, 32]` |
 
 ### 启用自动同步
 
@@ -141,29 +123,42 @@ sync-channels = stable,beta
 ### 完整目录结构
 
 ```
-serve-root/
-├── packages/               # 安装包存放目录（必需）
+程序目录/
+├── bws.exe
+├── bws-data/                # serve 内部文件（与客户端共享数据目录）
+│   ├── bws-serve.ini        # serve 配置文件
+│   ├── .serve-cache.json    # 校验和缓存（自动生成）
+│   └── logs/
+│       └── serve.log        # serve 日志文件
+├── packages/                # 安装包存放目录（必需，可通过配置指定其他位置）
 │   ├── Chrome_120.0.6099.109_Windows_x64.exe
 │   ├── Chrome_121.0.6167.85_Windows_x64.zip
 │   ├── Firefox_121.0_Windows_x64.exe
 │   └── ...
-├── bin/                    # 客户端二进制（可选）
-│   ├── bws-windows-amd64.exe
-│   └── bws-linux-amd64
-└── .serve-cache.json       # 校验和缓存（自动生成）
+└── bin/                     # 客户端二进制（可选，可通过配置指定其他位置）
+    ├── bws-windows-amd64.exe
+    └── bws-linux-amd64
 ```
 
 ### packages 目录
 
 `packages/` 目录是必需的，存放所有浏览器安装包文件。文件名会被自动识别，支持的格式和识别规则与本地导入一致。
 
+可通过 `packages-dir` 配置项指定其他位置（绝对路径或相对路径均可）。
+
 ### bin 目录
 
 `bin/` 目录是可选的，用于存放 bws 客户端二进制文件。客户端可以通过 Web 页面直接下载 bws 程序。
 
-### .serve-cache.json
+可通过 `bin-dir` 配置项指定其他位置。
 
-`.serve-cache.json` 是服务自动生成的缓存文件，存储文件的校验和（XXH3）和元数据，用于加速清单生成。不需要手动编辑。
+### bws-data 目录
+
+`bws-data/` 目录用于存放 serve 的内部文件：
+
+- `bws-serve.ini`：serve 的配置文件
+- `.serve-cache.json`：校验和缓存，加速清单生成
+- `logs/serve.log`：serve 的日志文件
 
 ## 文件名识别规则
 
@@ -186,7 +181,6 @@ Chrome_120.0.6099.109_Windows_x64.exe
 GoogleChrome_148.0.7778.167_Windows_x64_Offline.exe
 firefox-115.0esr-win64.zip
 Chrome_121.0.6167.85_Windows_x64.zip
-chromium-85.0.4183.121-linux-x64.tar.gz
 chromium-85.0.4183.121-linux-x64.tar.gz
 44.0.2403.107_chrome64_stable_windows_installer.exe
 ```
@@ -310,7 +304,8 @@ bws 选择不内置系统服务安装功能，原因如下：
 
 Web 界面提供以下功能：
 
-- 查看统计信息（已缓存的版本数量等）
-- 同步控制（手动触发同步、查看同步状态）
+- 查看统计信息（已缓存的版本数量、总大小等）
 - 下载 bws 客户端二进制（如果 bin 目录存在）
 - API 参考
+
+> **注意**：同步状态仅在启用自动同步时显示。未启用同步时，界面不会展示同步相关的内容。

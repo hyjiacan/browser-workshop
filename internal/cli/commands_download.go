@@ -36,7 +36,7 @@ func runDownload(ctx *Context, args []string) error {
 	checkPath := outputDir
 	if checkPath == "" {
 		checkPath = "."
-		if ctx.Config != nil {
+		if ctx.Cfg != nil {
 			checkPath = ctx.Cfg.Data.GetDataDir()
 		}
 	}

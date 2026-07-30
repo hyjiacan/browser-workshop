@@ -78,15 +78,16 @@ var defaultOnlineCombos = []struct {
 
 // pageData holds the data for rendering the HTML page template.
 type pageData struct {
-	Version     string
-	ServerName  string
-	Description string
-	Features    []string
-	FileCount   int
-	TotalSize   string
-	BinFiles    []binFileView
-	BaseURL     string
-	SyncEnabled bool
+	Version        string
+	ServerName     string
+	Description    string
+	Features       []string
+	FileCount      int
+	TotalSize      string
+	BinFiles       []binFileView
+	BaseURL        string
+	SyncEnabled    bool
+	OnlineFallback bool
 }
 
 // binFileView represents a bin file for template rendering.
@@ -199,7 +200,7 @@ type ServerOptions struct {
 	Version string
 
 	// BaseDir is the base directory for all serve-related paths.
-	// If empty, the executable directory is used (backward compatible).
+	// If empty, the executable directory is used.
 	// All relative paths (packages, bin, cache) are resolved relative to BaseDir.
 	BaseDir string
 
@@ -1156,9 +1157,9 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := pageData{
-		Version:     s.version,
-		ServerName:  serverName,
-		Description: "多版本浏览器管理工具，支持本地导入、远程下载、版本切换、隔离运行。",
+		Version:        s.version,
+		ServerName:     serverName,
+		Description:    "多版本浏览器管理工具，支持本地导入、远程下载、版本切换、隔离运行。",
 		Features: []string{
 			"多版本管理：同时安装和管理多个浏览器版本，支持版本前缀快速筛选",
 			"本地导入：支持 zip、7z、tar.gz 等多种格式自动识别导入",
@@ -1167,11 +1168,12 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 			"隔离运行：每个版本独立 Profile，互不干扰",
 			"便携模式：数据存储在 bws-data/ 子目录，U 盘随身携带",
 		},
-		FileCount:   fileCount,
-		TotalSize:   formatSize(totalSize),
-		BinFiles:    binFileViews,
-		BaseURL:     baseURL,
-		SyncEnabled: s.syncMgr != nil || s.onlineFallback,
+		FileCount:      fileCount,
+		TotalSize:      formatSize(totalSize),
+		BinFiles:       binFileViews,
+		BaseURL:        baseURL,
+		SyncEnabled:    s.syncMgr != nil,
+		OnlineFallback: s.onlineFallback,
 	}
 
 	// Parse and execute template

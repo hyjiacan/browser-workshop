@@ -45,8 +45,7 @@ type Context struct {
 	Stderr   io.Writer
 	Stdin    io.Reader
 	Paths    PathsProvider
-	Config   ConfigProvider // full config (kept for backward compatibility)
-	Cfg      *Settings      // role-based config interfaces (preferred)
+	Cfg      *Settings // role-based config interfaces
 	Browsers BrowserProvider
 	Install  InstallProvider
 	Profile  ProfileProvider

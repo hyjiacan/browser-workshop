@@ -210,7 +210,7 @@ func runRemoteQuery(ctx *Context, args []string) error {
 	// 确定当前浏览器相关的源
 	var activeSources []string
 	var hasServe bool
-	if ctx.Config != nil {
+	if ctx.Cfg != nil {
 		if ctx.Cfg.Source.IsServeSourceEnabled() {
 			remoteURL := ctx.Cfg.Source.GetRemoteSource()
 			if remoteURL != "" {
@@ -244,7 +244,7 @@ func runRemoteQuery(ctx *Context, args []string) error {
 
 	if len(activeSources) == 0 {
 		ctx.Printf("没有为 %s 配置可用的远程源。\n", spec.Browser)
-		if ctx.Config != nil {
+		if ctx.Cfg != nil {
 			if (spec.Browser == "chrome" || spec.Browser == "chromium") && !ctx.Cfg.Source.IsOmahaSourceEnabled() {
 				ctx.Println("提示: Omaha 源已禁用，使用 'bws cfg set source-omaha true' 启用。")
 			}
@@ -260,7 +260,7 @@ func runRemoteQuery(ctx *Context, args []string) error {
 
 	// 打印交互过程
 	ctx.Printf("正在从 %s 请求 %s 版本列表...\n", strings.Join(activeSources, "、"), spec.Browser)
-	if hasServe && ctx.Config != nil {
+	if hasServe && ctx.Cfg != nil {
 		remoteURL := ctx.Cfg.Source.GetRemoteSource()
 		if remoteURL != "" {
 			ctx.Printf("  远程源地址: %s\n", remoteURL)
