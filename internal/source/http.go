@@ -27,7 +27,11 @@ type HTTPSource struct {
 	// payload 5 times. The cache is valid for manifestCacheTTL.
 	manifestCache    *manifestV1Response
 	manifestCacheAge time.Time
-	manifestCacheMu  sync.Mutex
+	// manifestFetchCh implements single-flight: when non-nil, a fetch is
+	// in progress and concurrent callers should wait on it instead of
+	// initiating their own HTTP request.
+	manifestFetchCh chan struct{}
+	manifestCacheMu sync.Mutex
 }
 
 // manifestCacheTTL is how long a cached manifest is considered fresh.
@@ -93,6 +97,12 @@ func detectBrowserFromFilename(filename string) string {
 }
 
 // detectChannelFromFilename extracts the channel from a filename.
+// 关键词匹配顺序很重要：更具体的关键词（canary、dev、beta、esr）
+// 必须在更通用的 stable（默认分支）之前检查，以避免误检测。
+// 当前顺序 canary -> dev -> beta -> esr -> stable 是正确的：
+// - canary 最为特殊，不会与其他频道关键词冲突
+// - dev 在 beta 之前检查，因为 dev 文件名不会包含 "beta"
+// - esr 仅用于 Firefox，不会与 Chromium 系列冲突
 func detectChannelFromFilename(filename string) Channel {
 	lower := strings.ToLower(filename)
 	switch {
@@ -302,17 +312,14 @@ func (s *HTTPSource) Resolve(ctx context.Context, browser string, version string
 	return latest, nil
 }
 
-// fetchManifest fetches the manifest from the server, with a short-lived
-// in-memory cache to avoid redundant requests when the client iterates
-// over multiple channels (each channel triggers a separate List() call
-// that would otherwise re-fetch the same full manifest).
-// The server returns all entries (local + online cache merged); query
-// parameters are sent for informational purposes but the server does not
-// filter by them. Filtering is performed client-side after receiving the
-// full manifest.
-// Returns (v1Manifest, error).
+// fetchManifest fetches the manifest from the server, using a single-flight
+// pattern with a short-lived cache. When the client iterates over multiple
+// channels (each triggering a separate List() call), only the first call
+// performs the HTTP request; concurrent calls wait and reuse the result.
+// The cache is valid for manifestCacheTTL (30s) so rapid re-queries also
+// benefit.
 func (s *HTTPSource) fetchManifest(ctx context.Context, filter *Filter) (*manifestV1Response, error) {
-	// Check cache first — if we have a fresh manifest, reuse it.
+	// Fast path: check cache.
 	s.manifestCacheMu.Lock()
 	if s.manifestCache != nil && time.Since(s.manifestCacheAge) < manifestCacheTTL {
 		cached := s.manifestCache
@@ -321,7 +328,38 @@ func (s *HTTPSource) fetchManifest(ctx context.Context, filter *Filter) (*manife
 			len(cached.Data), time.Since(s.manifestCacheAge).Round(time.Millisecond))
 		return cached, nil
 	}
+
+	// Single-flight: if a fetch is already in progress, wait for it.
+	if s.manifestFetchCh != nil {
+		ch := s.manifestFetchCh
+		s.manifestCacheMu.Unlock()
+		bmlog.Debug("[http-source] 等待并发 manifest 请求完成...")
+		<-ch
+		// Re-check cache after the in-flight fetch completes.
+		s.manifestCacheMu.Lock()
+		cached := s.manifestCache
+		s.manifestCacheMu.Unlock()
+		if cached != nil {
+			bmlog.Debug("[http-source] 复用并发请求结果 (条目数=%d)", len(cached.Data))
+			return cached, nil
+		}
+		// In-flight fetch failed — retry directly instead of returning an error.
+		bmlog.Debug("[http-source] 并发请求失败，重试...")
+		return s.fetchManifest(ctx, filter)
+	}
+
+	// No cache, no in-flight fetch — this call does the actual work.
+	fetchCh := make(chan struct{})
+	s.manifestFetchCh = fetchCh
 	s.manifestCacheMu.Unlock()
+
+	// Ensure we signal completion and clean up regardless of outcome.
+	defer func() {
+		s.manifestCacheMu.Lock()
+		s.manifestFetchCh = nil
+		s.manifestCacheMu.Unlock()
+		close(fetchCh)
+	}()
 
 	v1URL := s.baseURL + "/api/v1/manifest"
 	if params := buildManifestQuery(filter); len(params) > 0 {

@@ -1,8 +1,21 @@
 package cli
 
-import "fmt"
+import (
+	"fmt"
+)
 
 func runServe(ctx *Context, args []string) error {
+	// Parse flags
+	flags := []*Flag{
+		{Name: "dir", Short: "d", Usage: "基础目录（包含 packages/ 和 bin/ 子目录，默认: 程序所在目录）", HasValue: true, Default: ""},
+	}
+	flagVals, _, err := ParseFlags(args, flags)
+	if err != nil {
+		return err
+	}
+
+	baseDir := flagVals["dir"]
+
 	// Ensure the config file exists (create a default one if missing).
 	configPath, created, err := ctx.Serve.EnsureDefaultConfig("")
 	if err != nil {
@@ -15,7 +28,7 @@ func runServe(ctx *Context, args []string) error {
 	}
 
 	// Startup logging is handled by the serve package itself.
-	if err := ctx.Serve.StartFromConfig(); err != nil {
+	if err := ctx.Serve.StartFromConfig(baseDir); err != nil {
 		return fmt.Errorf("启动服务端失败: %w", err)
 	}
 

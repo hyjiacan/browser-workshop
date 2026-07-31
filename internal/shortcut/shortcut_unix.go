@@ -17,6 +17,31 @@ func defaultDesktopDir() string {
 	return "/tmp"
 }
 
+// escapeDesktopValue escapes a string for safe use in a .desktop file value
+// field (e.g., Name=, Icon=, Path=). Newlines and other control characters
+// are stripped to prevent header injection.
+func escapeDesktopValue(s string) string {
+	// Strip newlines and carriage returns to prevent header injection
+	s = strings.ReplaceAll(s, "\n", "")
+	s = strings.ReplaceAll(s, "\r", "")
+	return s
+}
+
+// escapeDesktopExecArg escapes a single argument for the Exec= field of a
+// .desktop file per the freedesktop.org Desktop Entry Spec.
+// Reserved characters are escaped with a backslash.
+func escapeDesktopExecArg(arg string) string {
+	var b strings.Builder
+	for _, r := range arg {
+		switch r {
+		case ' ', '\t', '\n', '"', '\'', '\\', '>', '<', '~', '|', '&', ';', '$', '*', '?', '#', '(', ')', '`':
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
 // createShortcut creates a .desktop file on Linux.
 func createShortcut(desktopDir string, opts Options) error {
 	name := sanitizeName(opts.Name)
@@ -42,23 +67,23 @@ func createShortcut(desktopDir string, opts Options) error {
 }
 
 func buildDesktopEntry(name string, opts Options) string {
-	execLine := escapeArg(opts.Target)
+	execLine := escapeDesktopExecArg(opts.Target)
 	for _, arg := range opts.Args {
-		execLine += " " + escapeArg(arg)
+		execLine += " " + escapeDesktopExecArg(arg)
 	}
 
 	var b strings.Builder
 	b.WriteString("[Desktop Entry]\n")
-	b.WriteString("Name=" + name + "\n")
+	b.WriteString("Name=" + escapeDesktopValue(name) + "\n")
 	b.WriteString("Comment=Browser launched by BrowserWorkshop\n")
 	b.WriteString("Exec=" + execLine + "\n")
 	b.WriteString("Type=Application\n")
 	b.WriteString("Terminal=false\n")
 	if opts.IconPath != "" {
-		b.WriteString("Icon=" + opts.IconPath + "\n")
+		b.WriteString("Icon=" + escapeDesktopValue(opts.IconPath) + "\n")
 	}
 	if opts.WorkingDir != "" {
-		b.WriteString("Path=" + opts.WorkingDir + "\n")
+		b.WriteString("Path=" + escapeDesktopValue(opts.WorkingDir) + "\n")
 	}
 	return b.String()
 }

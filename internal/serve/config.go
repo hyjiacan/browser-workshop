@@ -44,6 +44,12 @@ type ServeConfig struct {
 	// the client, and the manifest lists all online-available versions.
 	OnlineFallback bool
 
+	// AuthToken is an optional bearer token for API authentication.
+	// When set, all API requests must include "Authorization: Bearer <token>".
+	// When empty, the API is open (no authentication).
+	// The root HTML page is always accessible without authentication.
+	AuthToken string
+
 	// LogLevel is the console log level for the serve module.
 	// Valid values: trace, debug, info, warn, error, fatal.
 	// Default: info
@@ -186,6 +192,8 @@ func LoadServeConfig(baseDir string) (ServeConfig, error) {
 			if v, err := strconv.Atoi(value); err == nil {
 				cfg.ScanWorkers = v
 			}
+		case "auth-token", "authtoken":
+			cfg.AuthToken = value
 		}
 	}
 
@@ -294,6 +302,12 @@ func SaveServeConfig(baseDir string, cfg ServeConfig) error {
 	sb.WriteString("# 有效范围: 1 到 32\n")
 	sb.WriteString("# 默认: 0（自动）\n")
 	sb.WriteString(fmt.Sprintf("scan-workers = %d\n", cfg.ScanWorkers))
+	sb.WriteString("\n")
+	sb.WriteString("# API 认证 Token\n")
+	sb.WriteString("# 设置后，所有 /api/ 请求需携带 Authorization: Bearer <token> 头\n")
+	sb.WriteString("# 留空 = 不启用认证（API 完全开放）\n")
+	sb.WriteString("# 根页面 (/) 始终无需认证\n")
+	sb.WriteString(fmt.Sprintf("auth-token = %s\n", cfg.AuthToken))
 
 	return os.WriteFile(configPath, []byte(sb.String()), 0o644)
 }

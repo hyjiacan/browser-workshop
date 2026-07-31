@@ -4,10 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/bws/bws/internal/archive"
-	"github.com/bws/bws/internal/paths"
+	"github.com/bws/bws/internal/util"
 	"github.com/bws/bws/internal/version"
 )
 
@@ -44,7 +43,7 @@ func (m *Manager) InstallFromFile(browserName, version, filePath string) (*versi
 	}
 
 	// Find the content directory containing the browser
-	contentDir, err := findContentDir(tmpDir, browserName)
+	contentDir, err := util.FindContentDir(tmpDir, browserName)
 	if err != nil {
 		return nil, fmt.Errorf("finding browser in extracted archive: %w", err)
 	}
@@ -56,38 +55,4 @@ func (m *Manager) InstallFromFile(browserName, version, filePath string) (*versi
 		Source:    "file",
 		SourceDir: contentDir,
 	}, nil)
-}
-
-// findContentDir finds the browser executable directory within an extracted archive.
-func findContentDir(root string, browserName string) (string, error) {
-	exeCandidates := browserExecutableCandidates(browserName)
-	return archive.FindContentDir(root, browserName, paths.Platform(), paths.Arch(), exeCandidates)
-}
-
-// browserExecutableCandidates returns common executable names for a browser.
-func browserExecutableCandidates(browserName string) []string {
-	lower := strings.ToLower(browserName)
-	exeExt := ""
-	if paths.Platform() == "windows" {
-		exeExt = ".exe"
-	}
-
-	switch lower {
-	case "chrome", "google chrome", "google-chrome":
-		return []string{"chrome" + exeExt, "chrome.exe", "Google Chrome" + exeExt}
-	case "firefox", "mozilla firefox":
-		return []string{"firefox" + exeExt, "firefox.exe"}
-	case "chromium":
-		return []string{"chromium" + exeExt, "chromium.exe", "chrome" + exeExt}
-	case "edge", "microsoft edge", "msedge":
-		return []string{"msedge" + exeExt, "msedge.exe", "edge" + exeExt}
-	case "brave":
-		return []string{"brave" + exeExt, "brave.exe", "brave-browser" + exeExt}
-	case "opera":
-		return []string{"opera" + exeExt, "opera.exe"}
-	case "safari":
-		return []string{"Safari" + exeExt}
-	default:
-		return []string{lower + exeExt, lower + ".exe"}
-	}
 }

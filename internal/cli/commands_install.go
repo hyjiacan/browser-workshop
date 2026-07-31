@@ -156,14 +156,6 @@ func runInstall(ctx *Context, args []string) error {
 		return nil
 	}
 
-	// 强制模式：先卸载
-	if force && ctx.Install.IsInstalled(spec.Browser, versionInfo.Version) {
-		if err := ctx.Install.Uninstall(spec.Browser, versionInfo.Version); err != nil {
-			return fmt.Errorf("卸载现有版本失败: %w", err)
-		}
-		ctx.Printf("已移除现有版本 %s@%s\n", spec.Browser, versionInfo.Version)
-	}
-
 	ctx.Printf("正在下载 %s@%s...\n", spec.Browser, versionInfo.Version)
 
 	// Create temp directory for download
@@ -196,6 +188,14 @@ func runInstall(ctx *Context, args []string) error {
 
 	if err != nil {
 		return fmt.Errorf("下载失败: %w", err)
+	}
+
+	// 强制模式：下载成功后再卸载旧版本，确保下载失败时不会丢失已安装的版本
+	if force && ctx.Install.IsInstalled(spec.Browser, versionInfo.Version) {
+		if err := ctx.Install.Uninstall(spec.Browser, versionInfo.Version); err != nil {
+			return fmt.Errorf("卸载现有版本失败: %w", err)
+		}
+		ctx.Printf("已移除现有版本 %s@%s\n", spec.Browser, versionInfo.Version)
 	}
 
 	ctx.Printf("正在安装 %s@%s...\n", spec.Browser, versionInfo.Version)
@@ -279,6 +279,9 @@ func runUse(ctx *Context, args []string) error {
 	// Set default browser first, then the default version
 	if err := ctx.Cfg.Defaults.SetDefaultBrowser(spec.Browser); err != nil {
 		return fmt.Errorf("设置默认浏览器失败: %w", err)
+	}
+	if err := ctx.Cfg.Defaults.SetDefaultVersion(resolvedVersion); err != nil {
+		return fmt.Errorf("设置默认版本失败: %w", err)
 	}
 
 	ctx.Printf("当前使用: %s@%s\n", spec.Browser, resolvedVersion)

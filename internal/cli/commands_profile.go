@@ -2,7 +2,7 @@ package cli
 
 import (
 	"fmt"
-	"strings"
+	"os"
 
 	"github.com/bws/bws/internal/install"
 )
@@ -77,7 +77,8 @@ func runProfilePath(ctx *Context, args []string) error {
 	profileName := ""
 
 	if len(args) > 0 {
-		browser = args[0]
+		spec := resolveSpec(ctx, args[0], ctx.Cfg.Defaults.DefaultBrowser())
+		browser = spec.Browser
 	}
 	if len(args) > 1 {
 		profileName = args[1]
@@ -138,14 +139,7 @@ func runProfileReset(ctx *Context, args []string) error {
 
 	// 确认提示
 	if !force {
-		ctx.Printf("确定要重置此 profile 吗？此操作不可恢复。(y/N): ")
-		reader := bufioNewReader(ctx.Stdin)
-		line, err := reader.ReadString('\n')
-		if err != nil {
-			return fmt.Errorf("读取输入失败: %w", err)
-		}
-		line = strings.TrimSpace(strings.ToLower(line))
-		if line != "y" && line != "yes" {
+		if !ctx.Confirm("确定要重置此 profile 吗？此操作不可恢复。") {
 			ctx.Println("已取消。")
 			return nil
 		}
@@ -190,16 +184,21 @@ func runProfileClean(ctx *Context, args []string) error {
 
 	force := flags["force"] == "true"
 	if !force {
-		ctx.Printf("确认清理这些 profile？[y/N] ")
-		var answer string
-		fmt.Scanln(&answer)
-		if strings.ToLower(answer) != "y" && strings.ToLower(answer) != "yes" {
+		if !ctx.Confirm("确认清理这些 profile？") {
 			ctx.Println("已取消。")
 			return nil
 		}
 	}
 
-	// Actually clean
-	ctx.Println("清理完成。")
+	// Delete orphaned profile directories
+	deleted := 0
+	for _, p := range orphaned {
+		if err := os.RemoveAll(p); err != nil {
+			ctx.Printf("警告: 删除 %s 失败: %v\n", p, err)
+			continue
+		}
+		deleted++
+	}
+	ctx.Printf("清理完成，已删除 %d/%d 个孤立 profile。\n", deleted, len(orphaned))
 	return nil
 }

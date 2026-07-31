@@ -6,15 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bws/bws/internal/browser"
 	"github.com/bws/bws/internal/log"
 	"github.com/bws/bws/internal/paths"
+	"github.com/bws/bws/internal/util"
 	"github.com/bws/bws/internal/version"
 )
 
@@ -23,6 +24,7 @@ type Manager struct {
 	paths          *paths.Paths
 	browsers       *browser.Registry
 	systemDetector SystemDetector
+	mu             sync.RWMutex
 }
 
 // NewManager creates a new install manager.
@@ -127,7 +129,7 @@ func (m *Manager) InstallFromDir(opts InstallOptions, onProgress ProgressCallbac
 			// Estimate progress based on files copied + bytes
 			// We don't precompute total size (too slow for large dirs),
 			// so show incremental progress instead
-			onProgress(0.2+0.6*0.5, fmt.Sprintf("正在复制... %d 个文件, %s", copiedFiles, formatBytes(copiedBytes)))
+			onProgress(0.2+0.6*0.5, fmt.Sprintf("正在复制... %d 个文件, %s", copiedFiles, util.FormatSize(copiedBytes)))
 		}
 	})
 	if err != nil {
@@ -136,7 +138,7 @@ func (m *Manager) InstallFromDir(opts InstallOptions, onProgress ProgressCallbac
 		return nil, fmt.Errorf("copying files: %w", err)
 	}
 
-	log.Debug("复制完成: %d 个文件, %s", copiedFiles, formatBytes(copiedBytes))
+	log.Debug("复制完成: %d 个文件, %s", copiedFiles, util.FormatSize(copiedBytes))
 
 	if onProgress != nil {
 		onProgress(0.85, "正在验证安装...")
@@ -194,7 +196,7 @@ func (m *Manager) InstallFromDir(opts InstallOptions, onProgress ProgressCallbac
 		onProgress(1.0, "安装完成")
 	}
 
-	log.Info("成功安装 %s@%s (大小: %s)", opts.Browser, opts.Version, formatBytes(installSize))
+	log.Info("成功安装 %s@%s (大小: %s)", opts.Browser, opts.Version, util.FormatSize(installSize))
 
 	return record, nil
 }
@@ -370,8 +372,8 @@ func (m *Manager) ListProfiles(browser string) ([]ProfileInfo, error) {
 	return result, nil
 }
 
-// CleanOrphanedProfiles removes profile directories for versions that are no longer installed.
-// Returns the list of removed profiles.
+// CleanOrphanedProfiles finds profile directories for versions that are no longer installed.
+// Returns the list of orphaned profile paths. Actual deletion is handled by the caller.
 func (m *Manager) CleanOrphanedProfiles(browser string) ([]string, error) {
 	var removed []string
 
@@ -539,7 +541,10 @@ func (m *Manager) ResolveInstalledVersion(browserName string, ver string) (strin
 
 	// Handle "system" special version
 	if ver == "system" {
-		if m.systemDetector != nil {
+		m.mu.RLock()
+		detector := m.systemDetector
+		m.mu.RUnlock()
+		if detector != nil {
 			sb, found := m.GetSystemDefault(browserName)
 			if found {
 				log.Debug("已解析系统版本 %s: %s", browserName, sb.Version)
@@ -606,7 +611,10 @@ func (m *Manager) FindMatchingVersions(browserName string, ver string) (version.
 
 	// Handle "system" special version
 	if ver == "system" {
-		if m.systemDetector != nil {
+		m.mu.RLock()
+		detector := m.systemDetector
+		m.mu.RUnlock()
+		if detector != nil {
 			sb, found := m.GetSystemDefault(browserName)
 			if found {
 				log.Debug("发现系统版本 %s: %s", browserName, sb.Version)
@@ -704,20 +712,6 @@ func dirSize(path string) (int64, error) {
 	return size, err
 }
 
-// formatBytes formats a byte count into a human-readable string.
-func formatBytes(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
-}
-
 // copyDir copies a directory recursively.
 // The callback is called for each file with the file name and size.
 func copyDir(src string, dst string, onFile func(fileName string, size int64)) error {
@@ -743,7 +737,7 @@ func copyDir(src string, dst string, onFile func(fileName string, size int64)) e
 				return err
 			}
 		} else {
-			size, err := copyFile(srcPath, dstPath)
+			size, err := util.CopyFile(srcPath, dstPath)
 			if err != nil {
 				return err
 			}
@@ -754,31 +748,4 @@ func copyDir(src string, dst string, onFile func(fileName string, size int64)) e
 	}
 
 	return nil
-}
-
-// copyFile copies a single file, preserving permissions.
-func copyFile(src string, dst string) (int64, error) {
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return 0, err
-	}
-	defer srcFile.Close()
-
-	srcInfo, err := srcFile.Stat()
-	if err != nil {
-		return 0, err
-	}
-
-	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, srcInfo.Mode())
-	if err != nil {
-		return 0, err
-	}
-	defer dstFile.Close()
-
-	n, err := io.Copy(dstFile, srcFile)
-	if err != nil {
-		return n, err
-	}
-
-	return n, nil
 }

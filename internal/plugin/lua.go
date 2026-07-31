@@ -28,14 +28,21 @@ func NewLuaRuntime() *LuaRuntime {
 	return &LuaRuntime{L: L}
 }
 
-// Close releases the Lua state.
+// Close 在关闭 Lua 状态前调用 on_exit 钩子，然后释放底层资源。
+// on_exit 钩子的错误会被忽略，因为此时无法再进行有意义的恢复。
 func (r *LuaRuntime) Close() {
-	if r != nil && r.L != nil {
-		r.L.Close()
+	if r == nil || r.L == nil {
+		return
 	}
+	// 关闭前尽力调用 on_exit 钩子（忽略错误）
+	_ = r.callHook(string(HookOnExit))
+	r.L.Close()
 }
 
 // RunScript executes a Lua plugin script with the given context.
+// 该方法仅负责加载脚本并调用 pre_run 钩子。
+// post_run 和 on_exit 等其他生命周期钩子由插件管理器通过 CallHook
+// 在合适的时机调用（on_exit 会在 Close 时自动调用）。
 func (r *LuaRuntime) RunScript(scriptPath string, ctx *ScriptContext) error {
 	registerCtx(r.L, ctx)
 
@@ -43,11 +50,18 @@ func (r *LuaRuntime) RunScript(scriptPath string, ctx *ScriptContext) error {
 		return fmt.Errorf("running plugin %s: %w", filepath.Base(scriptPath), err)
 	}
 
-	if err := r.callHook("pre_run"); err != nil {
+	if err := r.callHook(string(HookPreRun)); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// CallHook 调用指定名称的 Lua 钩子函数（若存在）。
+// 这是 callHook 的公开接口，供插件管理器在生命周期节点
+// 调用 post_run 和 on_exit 等钩子。若钩子未定义则返回 nil。
+func (r *LuaRuntime) CallHook(name string) error {
+	return r.callHook(name)
 }
 
 // callHook invokes a named Lua function if it exists.

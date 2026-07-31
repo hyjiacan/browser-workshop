@@ -227,6 +227,7 @@ func runRemoteQuery(ctx *Context, args []string) error {
 	}
 
 	// 确定当前浏览器相关的源
+	// 当 serve 源启用时，客户端仅通过 HTTPSource 访问 serve，不直接查询在线源。
 	var activeSources []string
 	var hasServe bool
 	if ctx.Cfg != nil {
@@ -237,7 +238,8 @@ func runRemoteQuery(ctx *Context, args []string) error {
 				hasServe = true
 			}
 		}
-		if ctx.Cfg.Source.IsFirefoxFTPEnabled() {
+		// 仅在未启用 serve 源时才直接查询 Firefox FTP
+		if !hasServe && ctx.Cfg.Source.IsFirefoxFTPEnabled() {
 			if spec.Browser == "firefox" {
 				activeSources = append(activeSources, "Mozilla FTP 目录")
 			}
@@ -557,11 +559,4 @@ func extractMajorVersion(ver string) string {
 		return ""
 	}
 	return parts[0]
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // BrowserFeatures describes which features a browser supports.
@@ -57,6 +58,7 @@ type BrowserDescriptor struct {
 
 // Registry holds all registered browser descriptors.
 type Registry struct {
+	mu       sync.RWMutex
 	browsers map[string]*BrowserDescriptor
 	aliases  map[string]string // alias -> canonical name
 }
@@ -71,12 +73,16 @@ func NewRegistry() *Registry {
 
 // Register adds a browser descriptor to the registry.
 func (r *Registry) Register(desc *BrowserDescriptor) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.browsers[desc.Name] = desc
 }
 
 // RegisterAlias adds a short alias for a browser name.
 // The alias is case-insensitive.
 func (r *Registry) RegisterAlias(alias string, canonicalName string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.aliases[strings.ToLower(alias)] = strings.ToLower(canonicalName)
 }
 
@@ -84,6 +90,8 @@ func (r *Registry) RegisterAlias(alias string, canonicalName string) {
 // Returns the canonical name and true if found, otherwise returns the input and false.
 func (r *Registry) ResolveName(name string) (string, bool) {
 	lower := strings.ToLower(name)
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	// Check if it's already a canonical name
 	if _, ok := r.browsers[lower]; ok {
 		return lower, true
@@ -98,11 +106,15 @@ func (r *Registry) ResolveName(name string) (string, bool) {
 // Get returns the descriptor for the given browser name (or alias), or nil if not found.
 func (r *Registry) Get(name string) *BrowserDescriptor {
 	canonical, _ := r.ResolveName(name)
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	return r.browsers[canonical]
 }
 
 // List returns all registered browser descriptors.
 func (r *Registry) List() []*BrowserDescriptor {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	result := make([]*BrowserDescriptor, 0, len(r.browsers))
 	for _, b := range r.browsers {
 		result = append(result, b)
@@ -112,6 +124,8 @@ func (r *Registry) List() []*BrowserDescriptor {
 
 // Names returns the names of all registered browsers.
 func (r *Registry) Names() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	result := make([]string, 0, len(r.browsers))
 	for name := range r.browsers {
 		result = append(result, name)
@@ -169,6 +183,8 @@ func (r *Registry) FindExecutable(browser string, dir string, platform string, a
 // DetectBrowser tries to identify which browser is installed in dir
 // by checking executable files. Returns the browser name.
 func (r *Registry) DetectBrowser(dir string, platform string, arch string) (string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	for _, desc := range r.browsers {
 		candidates := desc.ExecutableCandidates[platform]
 		if candidates == nil {

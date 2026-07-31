@@ -9,13 +9,20 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 // Config is the top-level configuration for bws.
 type Config struct {
+	mu sync.RWMutex
+
 	// DefaultBrowser is the default browser to use when not specified.
 	DefaultBrowser string
+
+	// DefaultVersion is the default version for the default browser.
+	// Empty means no specific version is set (use latest/system).
+	DefaultVersion string
 
 	// DefaultChannel is the default release channel.
 	DefaultChannel string
@@ -235,6 +242,8 @@ func (c *Config) setINIValue(section, key, value string) {
 		switch key {
 		case "default-browser", "defaultbrowser":
 			c.DefaultBrowser = value
+		case "default-version", "defaultversion":
+			c.DefaultVersion = value
 		case "default-channel", "defaultchannel":
 			c.DefaultChannel = value
 		case "language":
@@ -344,12 +353,14 @@ func (c *Config) setINIValue(section, key, value string) {
 }
 
 // Save writes the config to the given path as INI.
+// Note: Save reads fields under the config's mutex to ensure thread safety.
 func Save(cfg *Config, path string) error {
-	// Convert durations to strings for serialization.
-	cfg.Download.RetryDelayStr = cfg.Download.RetryDelay.String()
-	cfg.Download.TimeoutStr = cfg.Download.Timeout.String()
-	cfg.Cache.ManifestTTLStr = cfg.Cache.ManifestTTL.String()
-	cfg.Cache.DownloadTTLStr = cfg.Cache.DownloadTTL.String()
+	cfg.mu.RLock()
+	// Convert durations to strings for serialization (local copies, don't mutate cfg).
+	retryDelayStr := cfg.Download.RetryDelay.String()
+	timeoutStr := cfg.Download.Timeout.String()
+	manifestTTLStr := cfg.Cache.ManifestTTL.String()
+	downloadTTLStr := cfg.Cache.DownloadTTL.String()
 
 	var sb strings.Builder
 	sb.WriteString("# ===============================================================\n")
@@ -365,8 +376,11 @@ func Save(cfg *Config, path string) error {
 	sb.WriteString("[client]\n")
 	sb.WriteString("\n")
 	sb.WriteString("# 默认浏览器\n")
-	sb.WriteString("# 可选值: chrome, firefox, chromium, edge, brave, opera, vivaldi\n")
+	sb.WriteString("# 可选值: chrome, firefox, chromium\n")
 	sb.WriteString(fmt.Sprintf("default-browser = %s\n", cfg.DefaultBrowser))
+	sb.WriteString("\n")
+	sb.WriteString("# 默认版本（留空则使用最新或系统版本）\n")
+	sb.WriteString(fmt.Sprintf("default-version = %s\n", cfg.DefaultVersion))
 	sb.WriteString("\n")
 	sb.WriteString("# 默认发布渠道\n")
 	sb.WriteString("# 可选值: stable, beta, dev, canary, esr\n")
@@ -431,20 +445,20 @@ func Save(cfg *Config, path string) error {
 	sb.WriteString(fmt.Sprintf("retry-count = %d\n", cfg.Download.RetryCount))
 	sb.WriteString("\n")
 	sb.WriteString("# 重试间隔（示例: 2s, 1m）\n")
-	sb.WriteString(fmt.Sprintf("retry-delay = %s\n", cfg.Download.RetryDelayStr))
+	sb.WriteString(fmt.Sprintf("retry-delay = %s\n", retryDelayStr))
 	sb.WriteString("\n")
 	sb.WriteString("# 下载超时（示例: 30m, 1h）\n")
-	sb.WriteString(fmt.Sprintf("timeout = %s\n", cfg.Download.TimeoutStr))
+	sb.WriteString(fmt.Sprintf("timeout = %s\n", timeoutStr))
 	sb.WriteString("\n")
 
 	// [cache]
 	sb.WriteString("[cache]\n")
 	sb.WriteString("\n")
 	sb.WriteString("# 清单缓存有效期\n")
-	sb.WriteString(fmt.Sprintf("manifest-ttl = %s\n", cfg.Cache.ManifestTTLStr))
+	sb.WriteString(fmt.Sprintf("manifest-ttl = %s\n", manifestTTLStr))
 	sb.WriteString("\n")
 	sb.WriteString("# 下载缓存有效期\n")
-	sb.WriteString(fmt.Sprintf("download-ttl = %s\n", cfg.Cache.DownloadTTLStr))
+	sb.WriteString(fmt.Sprintf("download-ttl = %s\n", downloadTTLStr))
 	sb.WriteString("\n")
 
 	// [source-switches]
@@ -490,6 +504,8 @@ func Save(cfg *Config, path string) error {
 			}
 		}
 	}
+
+	cfg.mu.RUnlock()
 
 	// Ensure directory exists.
 	configDir := filepath.Dir(path)
@@ -584,69 +600,111 @@ func (c *Config) applyDefaults() {
 
 // SetRepoPath sets the repository path and persists the config.
 func (c *Config) SetRepoPath(path string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.RepoPath = path
 }
 
 // GetRepoPath returns the configured repository path.
 func (c *Config) GetRepoPath() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.RepoPath
 }
 
 // GetRemoteSource returns the configured remote source URL.
 // Returns empty string if not configured.
 func (c *Config) GetRemoteSource() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.RemoteSource
 }
 
 // SetRemoteSource sets the remote source URL.
 func (c *Config) SetRemoteSource(url string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.RemoteSource = url
 }
 
 // ClearRemoteSource clears the remote source configuration.
 func (c *Config) ClearRemoteSource() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.RemoteSource = ""
 }
 
 // --- Source switches ---
 
-func (c *Config) IsServeSourceEnabled() bool   { return c.EnableServeSource }
-func (c *Config) SetServeSourceEnabled(v bool) { c.EnableServeSource = v }
-func (c *Config) IsFirefoxFTPEnabled() bool    { return c.EnableFirefoxFTP }
-func (c *Config) SetFirefoxFTPEnabled(v bool)  { c.EnableFirefoxFTP = v }
+func (c *Config) IsServeSourceEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.EnableServeSource
+}
+func (c *Config) SetServeSourceEnabled(v bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.EnableServeSource = v
+}
+func (c *Config) IsFirefoxFTPEnabled() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.EnableFirefoxFTP
+}
+func (c *Config) SetFirefoxFTPEnabled(v bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.EnableFirefoxFTP = v
+}
 
 func (c *Config) GetDiskSpaceThresholdGB() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	if c.DiskSpaceThresholdGB <= 0 {
 		return 5
 	}
 	return c.DiskSpaceThresholdGB
 }
-func (c *Config) SetDiskSpaceThresholdGB(v int) { c.DiskSpaceThresholdGB = v }
+func (c *Config) SetDiskSpaceThresholdGB(v int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.DiskSpaceThresholdGB = v
+}
 
 // GetProxy returns the configured proxy URL.
 // Returns empty string if no proxy is configured.
 func (c *Config) GetProxy() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.Proxy
 }
 
 // SetProxy sets the proxy URL.
 // Pass empty string to clear the proxy.
 func (c *Config) SetProxy(proxy string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.Proxy = proxy
 }
 
 // GetLanguage returns the configured UI language.
 func (c *Config) GetLanguage() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.Language
 }
 
 // SetLanguage sets the UI language. Supported: "zh", "en".
 func (c *Config) SetLanguage(lang string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.Language = lang
 }
 
 // GetSources returns enabled source configs for the given browser, sorted by priority.
 func (c *Config) GetSources(browser string) []SourceConfig {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	srcs, ok := c.Sources[browser]
 	if !ok {
 		return nil
@@ -668,6 +726,42 @@ func (c *Config) GetSources(browser string) []SourceConfig {
 }
 
 // --- Helpers ---
+
+// GetAlias returns the alias value for the given name.
+func (c *Config) GetAlias(name string) (string, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	v, ok := c.Aliases[name]
+	return v, ok
+}
+
+// AddAlias adds or updates an alias.
+func (c *Config) AddAlias(name, target string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.Aliases == nil {
+		c.Aliases = make(map[string]string)
+	}
+	c.Aliases[name] = target
+}
+
+// RemoveAlias removes an alias by name.
+func (c *Config) RemoveAlias(name string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.Aliases, name)
+}
+
+// ListAliases returns a copy of all aliases.
+func (c *Config) ListAliases() map[string]string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	result := make(map[string]string, len(c.Aliases))
+	for k, v := range c.Aliases {
+		result[k] = v
+	}
+	return result
+}
 
 func parseBool(s string) bool {
 	s = strings.ToLower(strings.TrimSpace(s))

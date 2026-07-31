@@ -19,22 +19,30 @@ import (
 
 // newTransportWithProxy creates an http.Transport with the given proxy.
 // If proxyURL is empty, no proxy is configured.
-// TLS verification is skipped for compatibility with self-signed serve instances.
+// TLS verification is enabled by default for security. Set insecureSkipVerify
+// to true only for self-signed serve instances.
 func newTransportWithProxy(proxyURL string) *http.Transport {
+	return newTransportWithProxyInsecure(proxyURL, false)
+}
+
+// newTransportWithProxyInsecure creates an http.Transport with optional TLS
+// verification control. When insecureSkipVerify is true, TLS certificate
+// validation is skipped (for self-signed serve instances only).
+func newTransportWithProxyInsecure(proxyURL string, insecureSkipVerify bool) *http.Transport {
 	transport := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true, // TLS verification skipped for self-signed serve instances
+			InsecureSkipVerify: insecureSkipVerify,
 		},
 	}
 
 	if proxyURL != "" {
 		parsed, err := neturl.Parse(proxyURL)
 		if err != nil {
-			// Should not happen: proxy URL is validated at config time.
-			// Panic with a clear message instead of silently falling back to no proxy.
-			panic(fmt.Sprintf("invalid proxy URL %q (should have been validated): %v", proxyURL, err))
+			// Fall back to no proxy instead of crashing the process.
+			bmlog.Warn("[source] 代理 URL 无效，已回退为直连: %s: %v", proxyURL, err)
+		} else {
+			transport.Proxy = http.ProxyURL(parsed)
 		}
-		transport.Proxy = http.ProxyURL(parsed)
 	}
 
 	return transport

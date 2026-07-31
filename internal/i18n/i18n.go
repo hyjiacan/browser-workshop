@@ -18,6 +18,7 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -115,11 +116,15 @@ func loadExternal(lang string, externalDir string) {
 	path := filepath.Join(externalDir, lang+".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
+		// 外部翻译文件不存在或无法读取，记录调试日志（非致命错误）
+		log.Printf("[i18n] 无法读取外部翻译文件 %s: %v", path, err)
 		return
 	}
 
 	var external map[string]string
 	if err := json.Unmarshal(data, &external); err != nil {
+		// 外部翻译文件 JSON 格式错误，记录调试日志
+		log.Printf("[i18n] 外部翻译文件 %s JSON 解析失败: %v", path, err)
 		return
 	}
 

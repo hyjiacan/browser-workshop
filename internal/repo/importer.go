@@ -5,11 +5,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/bws/bws/internal/archive"
 	"github.com/bws/bws/internal/install"
 	"github.com/bws/bws/internal/paths"
+	"github.com/bws/bws/internal/util"
 	"github.com/bws/bws/internal/version"
 )
 
@@ -274,7 +274,7 @@ func (imp *Importer) installFromFile(match MatchResult) (*version.InstallRecord,
 	}
 
 	// Find the actual content directory
-	sourceDir, err := findContentDir(tmpDir, match.Browser)
+	sourceDir, err := util.FindContentDir(tmpDir, match.Browser)
 	if err != nil {
 		return nil, fmt.Errorf("finding content in extracted archive: %w", err)
 	}
@@ -285,76 +285,6 @@ func (imp *Importer) installFromFile(match MatchResult) (*version.InstallRecord,
 		Source:    "local-repo",
 		SourceDir: sourceDir,
 	}, nil)
-}
-
-// findContentDir finds the actual content directory within an extracted archive.
-// It first tries to locate the browser executable (by common names),
-// then falls back to the single-subdirectory heuristic.
-func findContentDir(root string, browserName string) (string, error) {
-	// Get common executable names for this browser
-	exeCandidates := browserExecutableCandidates(browserName)
-
-	// Use the archive package's FindContentDir which tries executable search first
-	return archive.FindContentDir(root, browserName, paths.Platform(), paths.Arch(), exeCandidates)
-}
-
-// browserExecutableCandidates returns common executable file names for a given browser.
-// These are used to locate the browser executable inside extracted archives.
-func browserExecutableCandidates(browserName string) []string {
-	lower := strings.ToLower(browserName)
-
-	// Platform-specific extensions
-	exeExt := ""
-	if paths.Platform() == "windows" {
-		exeExt = ".exe"
-	}
-
-	switch lower {
-	case "chrome", "google chrome", "google-chrome":
-		return []string{
-			"chrome" + exeExt,
-			"chrome.exe", // always include .exe variant for archives from other platforms
-			"Google Chrome" + exeExt,
-		}
-	case "firefox", "mozilla firefox", "mozilla-firefox":
-		return []string{
-			"firefox" + exeExt,
-			"firefox.exe",
-		}
-	case "chromium":
-		return []string{
-			"chromium" + exeExt,
-			"chromium.exe",
-			"chrome" + exeExt,
-		}
-	case "edge", "microsoft edge", "microsoft-edge", "msedge":
-		return []string{
-			"msedge" + exeExt,
-			"msedge.exe",
-			"edge" + exeExt,
-		}
-	case "brave":
-		return []string{
-			"brave" + exeExt,
-			"brave.exe",
-			"brave-browser" + exeExt,
-		}
-	case "opera":
-		return []string{
-			"opera" + exeExt,
-			"opera.exe",
-		}
-	case "safari":
-		return []string{
-			"Safari" + exeExt,
-		}
-	default:
-		// Generic fallback: browser name as executable
-		return []string{
-			lower + exeExt,
-			lower + ".exe",
-		}
-	}
 }
 
 // PrintSummary prints a human-readable summary to the writer.

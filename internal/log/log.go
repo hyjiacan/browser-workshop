@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/bws/bws/internal/util"
 )
 
 // Level represents the log level.
@@ -105,6 +107,7 @@ type Logger struct {
 }
 
 var (
+	defaultMu     sync.RWMutex
 	defaultLogger *Logger
 	defaultOnce   sync.Once
 )
@@ -113,6 +116,7 @@ var (
 // The default logger writes to stderr at INFO level.
 func Default() *Logger {
 	defaultOnce.Do(func() {
+		defaultMu.Lock()
 		defaultLogger = &Logger{
 			writers: []writerConfig{
 				{
@@ -124,17 +128,21 @@ func Default() *Logger {
 				},
 			},
 		}
+		defaultMu.Unlock()
 	})
-	return defaultLogger
+	defaultMu.RLock()
+	l := defaultLogger
+	defaultMu.RUnlock()
+	return l
 }
 
 // SetDefault replaces the default logger with the given one.
 // This affects all package-level log functions (Debug, Info, Warn, Error, etc.).
 func SetDefault(l *Logger) {
+	defaultMu.Lock()
 	defaultLogger = l
-	// Ensure defaultOnce is marked as done so Default() returns our logger.
-	// We trigger the Once with a no-op if it hasn't been triggered yet,
-	// but since we've already set defaultLogger directly, it won't be overwritten.
+	defaultMu.Unlock()
+	// Ensure defaultOnce is marked as done so Default() doesn't overwrite our logger.
 	defaultOnce.Do(func() {})
 }
 
@@ -613,6 +621,7 @@ func (w *RotatingFileWriter) rotate() error {
 
 // ProgressLogger provides progress logging for long-running operations.
 type ProgressLogger struct {
+	mu       sync.Mutex
 	logger   *Logger
 	prefix   string
 	total    int64
@@ -638,10 +647,12 @@ func NewProgressLogger(logger *Logger, prefix string, total int64) *ProgressLogg
 
 // Update updates the current progress and logs if enough time has passed.
 func (p *ProgressLogger) Update(current int64) {
+	p.mu.Lock()
 	p.current = current
 
 	now := time.Now()
 	if now.Sub(p.lastTime) < p.interval && current < p.total {
+		p.mu.Unlock()
 		return
 	}
 	p.lastTime = now
@@ -653,37 +664,31 @@ func (p *ProgressLogger) Update(current int64) {
 
 	// Only log if percentage changed significantly
 	if p.total > 0 && pct-p.lastPct < 1 && current < p.total {
+		p.mu.Unlock()
 		return
 	}
 	p.lastPct = pct
+	prefix := p.prefix
+	total := p.total
+	p.mu.Unlock()
 
-	if p.total > 0 {
-		p.logger.Info("%s: %.1f%% (%s / %s)", p.prefix, pct, formatSize(current), formatSize(p.total))
+	if total > 0 {
+		p.logger.Info("%s: %.1f%% (%s / %s)", prefix, pct, util.FormatSize(current), util.FormatSize(total))
 	} else {
-		p.logger.Info("%s: %s", p.prefix, formatSize(current))
+		p.logger.Info("%s: %s", prefix, util.FormatSize(current))
 	}
 }
 
 // Done marks the progress as complete.
 func (p *ProgressLogger) Done() {
+	p.mu.Lock()
 	p.current = p.total
-	if p.total > 0 {
-		p.logger.Info("%s: 100%% 完成 (%s)", p.prefix, formatSize(p.total))
+	prefix := p.prefix
+	total := p.total
+	p.mu.Unlock()
+	if total > 0 {
+		p.logger.Info("%s: 100%% 完成 (%s)", prefix, util.FormatSize(total))
 	} else {
-		p.logger.Info("%s: 完成", p.prefix)
+		p.logger.Info("%s: 完成", prefix)
 	}
-}
-
-// formatSize formats a byte size into a human-readable string.
-func formatSize(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }

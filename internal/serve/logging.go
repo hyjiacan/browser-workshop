@@ -5,9 +5,11 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	bmlog "github.com/bws/bws/internal/log"
+	"github.com/bws/bws/internal/util"
 )
 
 // responseWriterWrapper wraps http.ResponseWriter to capture the status code
@@ -104,7 +106,7 @@ func (h *loggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Determine log level based on status code.
 	status := wrapped.statusCode
 	msg := "[http] %s %s %d %s %v %s"
-	args := []interface{}{r.Method, reqPath, status, formatSize(respSize), duration.Round(time.Millisecond), clientIP}
+	args := []interface{}{r.Method, reqPath, status, util.FormatSize(respSize), duration.Round(time.Millisecond), clientIP}
 
 	switch {
 	case status >= 500:
@@ -114,4 +116,33 @@ func (h *loggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		h.logger.Info(msg, args...)
 	}
+}
+
+// authMiddleware enforces bearer token authentication for /api/ routes.
+// The root HTML page ("/") is always accessible without authentication.
+type authMiddleware struct {
+	next   http.Handler
+	token  string
+	logger *bmlog.Logger
+}
+
+// ServeHTTP checks the Authorization header for /api/ requests.
+// Non-API routes (e.g. "/") pass through without authentication.
+func (a *authMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Only protect /api/ routes; root page is always open
+	if !strings.HasPrefix(r.URL.Path, "/api/") {
+		a.next.ServeHTTP(w, r)
+		return
+	}
+
+	auth := r.Header.Get("Authorization")
+	const prefix = "Bearer "
+	if len(auth) <= len(prefix) || auth[:len(prefix)] != prefix || auth[len(prefix):] != a.token {
+		w.Header().Set("WWW-Authenticate", `Bearer realm="bws serve"`)
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		a.logger.Warn("[http] 认证失败: %s %s (来自 %s)", r.Method, r.URL.Path, r.RemoteAddr)
+		return
+	}
+
+	a.next.ServeHTTP(w, r)
 }

@@ -69,9 +69,6 @@ func Parse(version string) ([]int, error) {
 	}
 
 	parts := strings.Split(clean, ".")
-	if len(parts) == 0 {
-		return nil, fmt.Errorf("invalid version: %s", version)
-	}
 
 	segments := make([]int, len(parts))
 	for i, p := range parts {

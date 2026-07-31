@@ -90,6 +90,7 @@ func (p *Paths) EnsureAll() error {
 		p.ManifestCacheDir,
 		p.DownloadCacheDir,
 		p.RuntimeDir,
+		p.PluginsDir,
 		filepath.Join(p.Root, "i18n"),
 	}
 	for _, dir := range dirs {
@@ -184,12 +185,6 @@ func ExeDir() (string, error) {
 	return filepath.Dir(exePath), nil
 }
 
-// IsPortable returns true if running in portable mode.
-// bm is always portable by default - data is stored in the exe directory.
-func IsPortable() bool {
-	return true
-}
-
 // defaultRoot returns the default root directory for bws data.
 // Portable mode: bws-data subdirectory next to the executable.
 // Fallback: ~/.bws in user home directory.
@@ -201,12 +196,13 @@ func defaultRoot() string {
 
 	home, err := os.UserHomeDir()
 	if err != nil {
-		// Fallback to current directory if home dir can't be determined
+		// Fallback to current working directory if home dir can't be determined
 		wd, err := os.Getwd()
 		if err == nil {
 			return wd
 		}
-		return "."
+		// Last resort: use temp directory instead of relative "."
+		return filepath.Join(os.TempDir(), "bws-data")
 	}
 	return filepath.Join(home, ".bws")
 }

@@ -506,3 +506,191 @@ func execCmd(name string, args ...string) *exec.Cmd {
 	cmd := exec.Command(name, args...)
 	return cmd
 }
+
+// newHookRecorderCtx 构造一个 ScriptContext，用 env map 记录钩子调用情况。
+// 配合下方脚本可追踪 pre_run/post_run/on_exit 是否被调用。
+func newHookRecorderCtx(env map[string]string) *ScriptContext {
+	return &ScriptContext{
+		Browser: "chrome",
+		Version: "120",
+		SetEnv: func(k, v string) {
+			env[k] = v
+		},
+	}
+}
+
+// hookScript 定义了 pre_run、post_run、on_exit 三个钩子，
+// 每个钩子通过 ctx.set_env 记录自己被调用过。
+const hookScript = `
+function pre_run()
+	ctx.set_env("PRE_RUN", "1")
+end
+
+function post_run()
+	ctx.set_env("POST_RUN", "1")
+end
+
+function on_exit()
+	ctx.set_env("ON_EXIT", "1")
+end
+`
+
+func TestLuaRuntime_CallHook(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "hooks.lua")
+	_ = os.WriteFile(script, []byte(hookScript), 0o644)
+
+	rt := NewLuaRuntime()
+	defer rt.Close()
+
+	env := make(map[string]string)
+	ctx := newHookRecorderCtx(env)
+	if err := rt.RunScript(script, ctx); err != nil {
+		t.Fatal(err)
+	}
+	// pre_run 应在 RunScript 中被调用
+	if env["PRE_RUN"] != "1" {
+		t.Errorf("期望 pre_run 已被调用，env=%v", env)
+	}
+
+	// 通过公开的 CallHook 调用 post_run
+	if err := rt.CallHook(string(HookPostRun)); err != nil {
+		t.Fatalf("CallHook post_run 失败: %v", err)
+	}
+	if env["POST_RUN"] != "1" {
+		t.Errorf("期望 post_run 已被调用，env=%v", env)
+	}
+}
+
+func TestLuaRuntime_CallHook_Undefined(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "no_hooks.lua")
+	_ = os.WriteFile(script, []byte(`-- 没有定义任何钩子`), 0o644)
+
+	rt := NewLuaRuntime()
+	defer rt.Close()
+
+	ctx := &ScriptContext{Browser: "chrome"}
+	if err := rt.RunScript(script, ctx); err != nil {
+		t.Fatal(err)
+	}
+	// 调用未定义的钩子应返回 nil（不报错）
+	if err := rt.CallHook(string(HookPostRun)); err != nil {
+		t.Errorf("调用未定义的钩子应返回 nil，实际: %v", err)
+	}
+	if err := rt.CallHook(string(HookOnExit)); err != nil {
+		t.Errorf("调用未定义的钩子应返回 nil，实际: %v", err)
+	}
+}
+
+func TestLuaRuntime_CloseCallsOnExit(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "on_exit.lua")
+	_ = os.WriteFile(script, []byte(hookScript), 0o644)
+
+	env := make(map[string]string)
+	ctx := newHookRecorderCtx(env)
+
+	rt := NewLuaRuntime()
+	if err := rt.RunScript(script, ctx); err != nil {
+		rt.Close()
+		t.Fatal(err)
+	}
+	// 此时 on_exit 尚未被调用
+	if env["ON_EXIT"] != "" {
+		t.Errorf("on_exit 不应在 Close 前被调用，env=%v", env)
+	}
+	// Close 应触发 on_exit
+	rt.Close()
+	if env["ON_EXIT"] != "1" {
+		t.Errorf("期望 Close 触发 on_exit，env=%v", env)
+	}
+}
+
+func TestLuaRuntime_CloseNilSafe(t *testing.T) {
+	// 确保 nil 接收者或 nil 状态下 Close 不会 panic
+	var rt *LuaRuntime
+	rt.Close() // 不应 panic
+
+	rt = &LuaRuntime{} // L 为 nil
+	rt.Close()         // 不应 panic
+}
+
+func TestManager_Lifecycle(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "lifecycle.lua")
+	_ = os.WriteFile(script, []byte(hookScript), 0o644)
+
+	mgr, err := NewManager(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mgr.Close()
+
+	env := make(map[string]string)
+	ctx := newHookRecorderCtx(env)
+
+	// 1. 加载并运行插件（触发 pre_run）
+	if err := mgr.RunLuaPlugin("lifecycle", script, ctx); err != nil {
+		t.Fatal(err)
+	}
+	if env["PRE_RUN"] != "1" {
+		t.Errorf("期望 pre_run 已被调用，env=%v", env)
+	}
+
+	// 2. 浏览器退出后调用 post_run
+	if errs := mgr.PostRunPlugins(); errs != nil {
+		t.Fatalf("PostRunPlugins 返回错误: %v", errs)
+	}
+	if env["POST_RUN"] != "1" {
+		t.Errorf("期望 post_run 已被调用，env=%v", env)
+	}
+
+	// on_exit 此时不应被调用
+	if env["ON_EXIT"] != "" {
+		t.Errorf("on_exit 不应在卸载前被调用，env=%v", env)
+	}
+
+	// 3. 卸载插件（触发 on_exit）
+	mgr.UnloadPlugins()
+	if env["ON_EXIT"] != "1" {
+		t.Errorf("期望 on_exit 在卸载时被调用，env=%v", env)
+	}
+}
+
+func TestManager_PostRunPlugins_NoPlugins(t *testing.T) {
+	dir := t.TempDir()
+	mgr, err := NewManager(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer mgr.Close()
+	// 没有已加载插件时应返回 nil
+	if errs := mgr.PostRunPlugins(); errs != nil {
+		t.Errorf("期望 nil，实际: %v", errs)
+	}
+}
+
+func TestManager_CloseTriggersOnExit(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "close.lua")
+	_ = os.WriteFile(script, []byte(hookScript), 0o644)
+
+	mgr, err := NewManager(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	env := make(map[string]string)
+	ctx := newHookRecorderCtx(env)
+
+	if err := mgr.RunLuaPlugin("close", script, ctx); err != nil {
+		mgr.Close()
+		t.Fatal(err)
+	}
+	// Close 应触发所有已加载插件的 on_exit
+	mgr.Close()
+	if env["ON_EXIT"] != "1" {
+		t.Errorf("期望 Close 触发 on_exit，env=%v", env)
+	}
+}

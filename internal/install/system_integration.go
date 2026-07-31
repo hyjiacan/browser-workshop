@@ -18,15 +18,26 @@ type SystemDetector interface {
 	InvalidateCache()
 }
 
+// getSystemDetector returns the current system detector under a read lock.
+// The caller must not hold the returned reference beyond the immediate scope
+// (the detector itself is expected to be thread-safe).
+func (m *Manager) getSystemDetector() SystemDetector {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.systemDetector
+}
+
 // AttachSystem attaches a system detector to the install manager.
 // When attached, methods like ListWithSystem will include system browsers.
 func (m *Manager) AttachSystem(detector SystemDetector) {
+	m.mu.Lock()
 	m.systemDetector = detector
+	m.mu.Unlock()
 }
 
 // HasSystem returns true if a system detector is attached.
 func (m *Manager) HasSystem() bool {
-	return m.systemDetector != nil
+	return m.getSystemDetector() != nil
 }
 
 // ListWithSystem returns all installed versions plus system-detected versions.
@@ -37,12 +48,13 @@ func (m *Manager) ListWithSystem() (version.List, error) {
 		return nil, err
 	}
 
-	if m.systemDetector == nil {
+	detector := m.getSystemDetector()
+	if detector == nil {
 		return installed, nil
 	}
 
 	// Get system browsers
-	systemBrowsers := m.systemDetector.DetectAll()
+	systemBrowsers := detector.DetectAll()
 	for _, sb := range systemBrowsers {
 		installed = append(installed, systemBrowserToVersion(sb))
 	}
@@ -57,12 +69,13 @@ func (m *Manager) ListWithSystemByBrowser(browserName string) (version.List, err
 		return nil, err
 	}
 
-	if m.systemDetector == nil {
+	detector := m.getSystemDetector()
+	if detector == nil {
 		return installed, nil
 	}
 
 	// Get system browsers for this browser only
-	systemBrowsers := m.systemDetector.DetectAllForBrowser(browserName)
+	systemBrowsers := detector.DetectAllForBrowser(browserName)
 	for _, sb := range systemBrowsers {
 		installed = append(installed, systemBrowserToVersion(sb))
 	}
@@ -83,8 +96,9 @@ func (m *Manager) GetRecordWithSystem(browserName string, ver string) (*version.
 	}
 
 	// Then check system browsers
-	if m.systemDetector != nil {
-		systemBrowsers := m.systemDetector.DetectAllForBrowser(browserName)
+	detector := m.getSystemDetector()
+	if detector != nil {
+		systemBrowsers := detector.DetectAllForBrowser(browserName)
 		for _, sb := range systemBrowsers {
 			if sb.Version == ver || (ver == "system" && sb.Channel == "stable") {
 				return systemBrowserToRecord(sb), true
@@ -97,11 +111,12 @@ func (m *Manager) GetRecordWithSystem(browserName string, ver string) (*version.
 
 // FindSystemByVersion finds a system browser by browser name and version.
 func (m *Manager) FindSystemByVersion(browserName string, ver string) (system.BrowserInfo, bool) {
-	if m.systemDetector == nil {
+	detector := m.getSystemDetector()
+	if detector == nil {
 		return system.BrowserInfo{}, false
 	}
 
-	systemBrowsers := m.systemDetector.DetectAllForBrowser(browserName)
+	systemBrowsers := detector.DetectAllForBrowser(browserName)
 	for _, sb := range systemBrowsers {
 		if sb.Version == ver {
 			return sb, true
@@ -112,16 +127,18 @@ func (m *Manager) FindSystemByVersion(browserName string, ver string) (system.Br
 
 // GetSystemDefault returns the default (stable) system browser.
 func (m *Manager) GetSystemDefault(browserName string) (system.BrowserInfo, bool) {
-	if m.systemDetector == nil {
+	detector := m.getSystemDetector()
+	if detector == nil {
 		return system.BrowserInfo{}, false
 	}
-	return m.systemDetector.Detect(browserName)
+	return detector.Detect(browserName)
 }
 
 // IsSystemVersion checks if a version is a system-installed browser.
 // Returns false if version is locally installed or not found.
 func (m *Manager) IsSystemVersion(browserName string, ver string) bool {
-	if m.systemDetector == nil {
+	detector := m.getSystemDetector()
+	if detector == nil {
 		return false
 	}
 
@@ -130,7 +147,7 @@ func (m *Manager) IsSystemVersion(browserName string, ver string) bool {
 		return false
 	}
 
-	systemBrowsers := m.systemDetector.DetectAllForBrowser(browserName)
+	systemBrowsers := detector.DetectAllForBrowser(browserName)
 	for _, sb := range systemBrowsers {
 		if sb.Version == ver {
 			return true
@@ -151,7 +168,8 @@ func (m *Manager) GetExecutableWithSystem(browserName string, ver string) (strin
 	}
 
 	// Check system browsers
-	if m.systemDetector != nil {
+	detector := m.getSystemDetector()
+	if detector != nil {
 		sb, found := m.FindSystemByVersion(browserName, ver)
 		if found {
 			return sb.Executable, true

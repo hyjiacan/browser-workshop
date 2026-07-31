@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"net/url"
@@ -304,7 +303,6 @@ func readableConfigKeys() []configKeyInfo {
 		{[]string{"repo-path", "repo"}, "仓库路径", "/path/to/repo"},
 		{[]string{"source", "remote-source", "remote"}, "离线源 URL", "http://192.168.1.1:8080"},
 		{[]string{"source-serve", "serve-source"}, "Serve 源开关", "true / false"},
-		{[]string{"source-omaha", "omaha-source"}, "Omaha 源开关", "true / false"},
 		{[]string{"source-firefox-ftp", "firefox-ftp"}, "Firefox FTP 源开关", "true / false"},
 		{[]string{"disk-threshold", "disk-space-threshold", "space-threshold"}, "磁盘空间阈值 (GB)", "5"},
 		{[]string{"proxy"}, "代理服务器", "http://proxy:8080 或 none"},
@@ -323,7 +321,6 @@ func writableConfigKeys() []configKeyInfo {
 		{[]string{"repo-path", "repo"}, "仓库路径", "/path/to/repo"},
 		{[]string{"source", "remote-source", "remote"}, "离线源 URL", "http://192.168.1.1:8080"},
 		{[]string{"source-serve", "serve-source"}, "Serve 源开关", "true / false"},
-		{[]string{"source-omaha", "omaha-source"}, "Omaha 源开关", "true / false"},
 		{[]string{"source-firefox-ftp", "firefox-ftp"}, "Firefox FTP 源开关", "true / false"},
 		{[]string{"disk-threshold", "disk-space-threshold", "space-threshold"}, "磁盘空间阈值 (GB)", "5"},
 		{[]string{"proxy"}, "代理服务器", "http://proxy:8080 或 none 清除"},
@@ -524,19 +521,6 @@ func NewProfileCleanCommand() *Command {
 		},
 		Run: runProfileClean,
 	}
-}
-
-// bufioNewReader creates a new bufio.Reader from an io.Reader.
-func bufioNewReader(r io.Reader) *bufioReader {
-	return &bufioReader{r: bufio.NewReader(r)}
-}
-
-type bufioReader struct {
-	r *bufio.Reader
-}
-
-func (b *bufioReader) ReadString(delim byte) (string, error) {
-	return b.r.ReadString(delim)
 }
 
 // --- serve command ---

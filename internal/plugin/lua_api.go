@@ -2,9 +2,32 @@ package plugin
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 
 	lua "github.com/yuin/gopher-lua"
 )
+
+// safePluginPath ensures a file path stays within the plugin sandbox directory.
+// It resolves the path relative to baseDir and rejects any path that escapes
+// the base directory (path traversal prevention).
+func safePluginPath(baseDir, path string) (string, error) {
+	cleanBase, err := filepath.Abs(baseDir)
+	if err != nil {
+		return "", err
+	}
+	full := filepath.Join(cleanBase, path)
+	cleanFull, err := filepath.Abs(full)
+	if err != nil {
+		return "", err
+	}
+	// Verify the resolved path is within baseDir
+	rel, err := filepath.Rel(cleanBase, cleanFull)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "", os.ErrPermission
+	}
+	return cleanFull, nil
+}
 
 // registerCtx creates the global `ctx` table in the Lua state.
 func registerCtx(L *lua.LState, ctx *ScriptContext) {

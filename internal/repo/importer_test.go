@@ -13,6 +13,7 @@ import (
 	"github.com/bws/bws/internal/browser"
 	"github.com/bws/bws/internal/install"
 	"github.com/bws/bws/internal/paths"
+	"github.com/bws/bws/internal/util"
 )
 
 func setupTestImporter(t *testing.T) (*Importer, string) {
@@ -597,7 +598,7 @@ func TestFindContentDir(t *testing.T) {
 
 	// Case 1: files at root level
 	os.WriteFile(filepath.Join(tmpDir, "file.txt"), []byte("test"), 0o644)
-	result, err := findContentDir(tmpDir, "test")
+	result, err := util.FindContentDir(tmpDir, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -614,7 +615,7 @@ func TestFindContentDir(t *testing.T) {
 		chromeExe = "chrome.exe"
 	}
 	os.WriteFile(filepath.Join(subDir, chromeExe), []byte("test"), 0o755)
-	result, err = findContentDir(dir2, "chrome")
+	result, err = util.FindContentDir(dir2, "chrome")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -627,7 +628,7 @@ func TestFindContentDir(t *testing.T) {
 	subDir3 := filepath.Join(dir3, "package")
 	os.MkdirAll(subDir3, 0o755)
 	os.WriteFile(filepath.Join(subDir3, "random.txt"), []byte("test"), 0o644)
-	result, err = findContentDir(dir3, "unknown")
+	result, err = util.FindContentDir(dir3, "unknown")
 	if err != nil {
 		t.Fatal(err)
 	}

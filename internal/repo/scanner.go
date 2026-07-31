@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/bws/bws/internal/browser"
 	"github.com/bws/bws/internal/paths"
+	"github.com/bws/bws/internal/util"
 )
 
 // MatchResult represents a matched entry in a local repository.
@@ -200,10 +200,14 @@ var archKeywords = []struct {
 	keywords []string
 }{
 	{"arm64", []string{"arm64", "aarch64", "macarm64"}},
-	{"amd64", []string{"x86_64", "x64", "amd64", "win64", "64", "chrome64", "firefox64", "mac64", "linux64"}},
-	{"386", []string{"x86", "win32", "386", "i386", "32", "chrome32", "firefox32"}},
+	{"amd64", []string{"x86_64", "x64", "amd64", "win64", "chrome64", "firefox64", "mac64", "linux64"}},
+	{"386", []string{"x86", "win32", "386", "i386", "chrome32", "firefox32"}},
 }
 
+// detectArch detects the CPU architecture from a filename.
+// For bare "64"/"32" patterns, it only matches when preceded by a letter
+// (e.g. "edge64", "browser64") to avoid matching version numbers like
+// "firefox-64.0.1".
 func detectArch(name string) string {
 	lower := strings.ToLower(name)
 
@@ -215,7 +219,48 @@ func detectArch(name string) string {
 		}
 	}
 
+	// Context-aware check for bare "64"/"32": only match when preceded by
+	// a letter and followed by a non-digit (or end of string).
+	// This catches "edge64", "browser32" etc. without matching "firefox-64.0.1".
+	if matchBareArch(lower, "64") {
+		return "amd64"
+	}
+	if matchBareArch(lower, "32") {
+		return "386"
+	}
+
 	return ""
+}
+
+// matchBareArch checks if a bare arch suffix (like "64" or "32") appears in
+// the string preceded by a letter and followed by a non-digit character or
+// end of string. This prevents matching version numbers like "64.0.1".
+func matchBareArch(s, suffix string) bool {
+	idx := 0
+	for {
+		pos := strings.Index(s[idx:], suffix)
+		if pos < 0 {
+			return false
+		}
+		absPos := idx + pos
+		// Check character before the suffix: must be a letter.
+		if absPos > 0 && isLetter(s[absPos-1]) {
+			// Check character after the suffix: must be non-digit.
+			afterPos := absPos + len(suffix)
+			if afterPos >= len(s) || !isDigit(s[afterPos]) {
+				return true
+			}
+		}
+		idx = absPos + 1
+	}
+}
+
+func isLetter(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+}
+
+func isDigit(b byte) bool {
+	return b >= '0' && b <= '9'
 }
 
 // --- Channel detection ---
@@ -395,7 +440,7 @@ func (s *Scanner) ScanRepository(repoPath string, defaultBrowser string, default
 			}
 		} else {
 			// File: strip extension before matching
-			fileName := stripExtension(entry.Name())
+			fileName := util.StripExtension(entry.Name())
 			match = s.ScanEntry(fileName, entry.Name(), true, defaultBrowser, defaultArch)
 			match.Path = fullPath
 			// For installer files, we don't check for executable inside
@@ -408,50 +453,6 @@ func (s *Scanner) ScanRepository(repoPath string, defaultBrowser string, default
 }
 
 // --- Helpers ---
-
-// installerExtensions lists known installer/archive extensions that should be stripped.
-// Order matters: compound extensions like .tar.gz must come before .gz.
-var installerExtensions = []string{
-	".tar.gz",
-	".tar.bz2",
-	".tar.xz",
-	".tar.zst",
-	".tar",
-	".exe",
-	".msi",
-	".zip",
-	".7z",
-	".rar",
-	".dmg",
-	".pkg",
-	".deb",
-	".rpm",
-	".apk",
-	".gz",
-	".bz2",
-	".xz",
-}
-
-// stripExtension removes known installer/archive extensions from a filename.
-// If no known extension is found, it removes the last extension using filepath.Ext.
-func stripExtension(name string) string {
-	lower := strings.ToLower(name)
-	for _, ext := range installerExtensions {
-		if strings.HasSuffix(lower, ext) {
-			return name[:len(name)-len(ext)]
-		}
-	}
-	// Fallback: remove last extension
-	ext := filepath.Ext(name)
-	if ext != "" {
-		return name[:len(name)-len(ext)]
-	}
-	return name
-}
-
-func filepathIsAbs(path string) bool {
-	return len(path) > 0 && (path[0] == '/' || path[0] == '\\' || (len(path) >= 2 && path[1] == ':'))
-}
 
 func joinPath(base, name string) string {
 	base = strings.TrimRight(base, "/\\")

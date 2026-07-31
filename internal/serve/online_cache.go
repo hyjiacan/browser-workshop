@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,10 +15,13 @@ import (
 )
 
 // onlineCacheFile stores the on-disk cache for a single browser type.
+// The URLs map preserves download URLs so that online fallback downloads
+// work immediately after restart without re-fetching from the online source.
 type onlineCacheFile struct {
-	Browser string        `json:"browser"`
-	Files   []PackageFile `json:"files"`
-	Updated time.Time     `json:"updated"`
+	Browser string            `json:"browser"`
+	Files   []PackageFile     `json:"files"`
+	URLs    map[string]string `json:"urls,omitempty"` // filename -> download URL
+	Updated time.Time         `json:"updated"`
 }
 
 // browserCacheEntry is the in-memory cache entry for one browser.
@@ -216,22 +220,46 @@ func (m *OnlineCacheManager) refresh(browser string) {
 	m.logger.Debug("[online] 刷新完成: browser=%s 成功 %d 次查询, 获取 %d 个版本 (耗时 %v)",
 		browser, successQueries, len(list), time.Since(refreshStart).Round(time.Millisecond))
 
-	sort.Slice(list, func(i, j int) bool {
-		return list[i].Filename < list[j].Filename
+	// Sort list and newFiles together by filename so that indices stay
+	// synchronized. Without this, the filesMap and URL map would reference
+	// the wrong download URL for each filename.
+	type cacheEntry struct {
+		pkg  PackageFile
+		info onlinePackage
+	}
+	entries := make([]cacheEntry, len(list))
+	for i := range list {
+		entries[i] = cacheEntry{pkg: list[i], info: newFiles[i]}
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].pkg.Filename < entries[j].pkg.Filename
 	})
+	for i, e := range entries {
+		list[i] = e.pkg
+		newFiles[i] = e.info
+	}
 
 	// Update in-memory cache and filesMap.
+	// Always overwrite entries for the current browser so that refreshed
+	// data (including download URLs) replaces stale disk-loaded entries.
 	m.mu.Lock()
 	m.caches[browser] = &browserCacheEntry{files: list, time: time.Now()}
 	for i, f := range list {
-		if _, exists := m.filesMap[f.Filename]; !exists {
-			m.filesMap[f.Filename] = newFiles[i]
+		if existing, exists := m.filesMap[f.Filename]; exists && existing.browser != browser {
+			continue // Don't overwrite entries belonging to a different browser
 		}
+		m.filesMap[f.Filename] = newFiles[i]
 	}
 	m.mu.Unlock()
 
 	// Persist to disk (best-effort).
-	m.saveToDisk(browser, list)
+	urls := make(map[string]string, len(newFiles))
+	for i, nf := range newFiles {
+		if nf.url != "" && i < len(list) {
+			urls[list[i].Filename] = nf.url
+		}
+	}
+	m.saveToDisk(browser, list, urls)
 }
 
 // LoadFromDisk loads all existing cache files from disk at startup.
@@ -250,7 +278,7 @@ func (m *OnlineCacheManager) LoadFromDisk() {
 		}
 		name := entry.Name()
 		// Match pattern: online-cache-<browser>.json
-		if len(name) <= len("online-cache-.json") || !startsWith(name, "online-cache-") || !endsWith(name, ".json") {
+		if len(name) <= len("online-cache-.json") || !strings.HasPrefix(name, "online-cache-") || !strings.HasSuffix(name, ".json") {
 			continue
 		}
 		browser := name[len("online-cache-") : len(name)-len(".json")]
@@ -272,28 +300,42 @@ func (m *OnlineCacheManager) loadOneFromDisk(browser string) {
 		m.logger.Debug("[online] 加载缓存文件失败: %s: %v", path, err)
 		return
 	}
+	// If the cache file predates URL persistence, mark it as stale so the
+	// next access triggers a refresh that populates download URLs.
+	cacheTime := cf.Updated
+	if len(cf.URLs) == 0 {
+		m.logger.Debug("[online] 缓存文件缺少下载地址，标记为过期以触发刷新: browser=%s", browser)
+		cacheTime = time.Time{} // zero value → always stale
+	}
+
 	m.caches[browser] = &browserCacheEntry{
 		files: cf.Files,
-		time:  cf.Updated,
+		time:  cacheTime,
 	}
-	// Populate filesMap from loaded data.
+	// Populate filesMap from loaded data, restoring download URLs.
 	for _, f := range cf.Files {
 		if _, exists := m.filesMap[f.Filename]; !exists {
-			m.filesMap[f.Filename] = onlinePackage{
+			pkg := onlinePackage{
 				browser:  f.Browser,
 				version:  f.Version,
 				platform: f.Platform,
 				arch:     f.Architecture,
+				size:     f.Size,
 			}
+			if cf.URLs != nil {
+				pkg.url = cf.URLs[f.Filename]
+			}
+			m.filesMap[f.Filename] = pkg
 		}
 	}
 	m.logger.Debug("[online] 已加载缓存: browser=%s 条目数=%d", browser, len(cf.Files))
 }
 
-func (m *OnlineCacheManager) saveToDisk(browser string, files []PackageFile) {
+func (m *OnlineCacheManager) saveToDisk(browser string, files []PackageFile, urls map[string]string) {
 	cf := onlineCacheFile{
 		Browser: browser,
 		Files:   files,
+		URLs:    urls,
 		Updated: time.Now(),
 	}
 	data, err := json.MarshalIndent(cf, "", "  ")
@@ -301,8 +343,17 @@ func (m *OnlineCacheManager) saveToDisk(browser string, files []PackageFile) {
 		return
 	}
 	path := m.cacheFilePath(browser)
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		m.logger.Debug("[online] 保存缓存文件失败: %s: %v", path, err)
+
+	// Atomic write: write to a temp file first, then rename.
+	// This prevents cache corruption if the process crashes mid-write.
+	tmpPath := path + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
+		m.logger.Debug("[online] 写入临时缓存文件失败: %s: %v", tmpPath, err)
+		return
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		m.logger.Debug("[online] 重命名缓存文件失败: %s -> %s: %v", tmpPath, path, err)
+		_ = os.Remove(tmpPath) // clean up temp file on rename failure
 	}
 }
 
@@ -327,29 +378,25 @@ func (m *OnlineCacheManager) listVersionsWithTimeout(browser, channel, platform,
 
 // --- helpers ---
 
-func startsWith(s, prefix string) bool {
-	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
-}
-
-func endsWith(s, suffix string) bool {
-	return len(s) >= len(suffix) && s[len(s)-len(suffix):] == suffix
-}
-
 // buildOnlinePackageFile builds a PackageFile entry for an online-available version.
+// Platform and arch are used as-is because they come from defaultOnlineCombos
+// which already uses canonical names (windows, darwin, linux, amd64, 386, arm64)
+// consistent with the source package's Platform/Arch types and the client's
+// FilterVersions expectations.
 func buildOnlinePackageFile(filename string, v SyncVersionInfo, platform, arch string) PackageFile {
 	pkg := PackageFile{
-		Filename: filename,
-		Version:  v.Version,
-		Browser:  v.Browser,
-		Channel:  v.Channel,
-		Size:     v.Size,
+		Filename:     filename,
+		Version:      v.Version,
+		Browser:      v.Browser,
+		Channel:      v.Channel,
+		Size:         v.Size,
+		Platform:     platform,
+		Architecture: arch,
 	}
 	if v.Version != "" {
 		pkg.MajorVersion = strconv.Itoa(version.Major(v.Version))
 	} else {
 		pkg.MajorVersion = "0"
 	}
-	pkg.Platform = normalizePlatform(platform)
-	pkg.Architecture = normalizeArch(arch)
 	return pkg
 }

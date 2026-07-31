@@ -25,7 +25,6 @@ var Chromium = &BrowserDescriptor{
 
 	MultiInstanceArgs: []string{
 		"--no-default-browser-check",
-		"--no-first-run",
 	},
 	DisableUpdateArgs: []string{},
 	FirstRunSkipArgs:  []string{"--no-first-run"},

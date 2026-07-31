@@ -6,6 +6,7 @@ package system
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
@@ -136,6 +137,10 @@ func (d *Detector) DetectAllForBrowser(browserName string) []BrowserInfo {
 // A browser may have multiple installations (stable, beta, dev, canary).
 func (d *Detector) detectBrowser(desc *browser.BrowserDescriptor) []BrowserInfo {
 	platform := runtime.GOOS
+	// 使用 runtime.GOARCH 获取当前系统的 CPU 架构。这是有意为之的：
+	// bws 二进制文件是为特定架构编译的，runtime.GOARCH 反映的正是
+	// 运行此程序的系统架构（例如 "amd64" 或 "arm64"），而非被检测
+	// 浏览器本身的架构。系统浏览器与当前运行的程序在同一架构上运行。
 	arch := runtime.GOARCH
 
 	candidates := getInstallPaths(desc.Name, platform)
@@ -344,6 +349,18 @@ func readVersion(execPath string, browserName string) string {
 	return "unknown"
 }
 
+// extractVersion extracts a version number from a version output string.
+// Examples:
+//   "Google Chrome 120.0.6099.109 " -> "120.0.6099.109"
+//   "Mozilla Firefox 121.0" -> "121.0"
+//   "Chromium 121.0.6156.0" -> "121.0.6156.0"
+func extractVersion(output string) string {
+	// Match version-like patterns: digits.digits[.digits[.digits]]
+	re := regexp.MustCompile(`\d+\.\d+(?:\.\d+)?(?:\.\d+)?`)
+	match := re.FindString(output)
+	return match
+}
+
 // detectVersionFromPath tries to extract version from the install path.
 // On Windows, Chrome has version directories next to chrome.exe.
 func detectVersionFromPath(execPath string) string {
@@ -395,6 +412,12 @@ func isVersionDir(name string) bool {
 	return true
 }
 
+// devWordRe matches "dev" as a standalone word, ensuring it does not match
+// as part of longer words like "developer" or "device".
+// It requires "dev" to be preceded by start-of-string or a non-letter
+// character, and followed by end-of-string or a non-letter character.
+var devWordRe = regexp.MustCompile(`(?:^|[^a-z])dev(?:[^a-z]|$)`)
+
 // detectChannel tries to determine the release channel from the install path.
 func detectChannel(execPath string, browserName string) string {
 	lowerPath := strings.ToLower(execPath)
@@ -409,7 +432,8 @@ func detectChannel(execPath string, browserName string) string {
 		return "nightly"
 	case strings.Contains(lowerPath, "beta"):
 		return "beta"
-	case strings.Contains(lowerPath, "dev"):
+	case devWordRe.MatchString(lowerPath):
+		// 仅匹配 "dev" 作为独立单词，避免误匹配 "developer" 或 "device"
 		return "dev"
 	case strings.Contains(lowerPath, "esr"):
 		return "esr"

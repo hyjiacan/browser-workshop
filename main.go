@@ -354,6 +354,15 @@ func (a *configAdapter) SetDefaultBrowser(browser string) error {
 	return config.Save(a.cfg, a.configPath)
 }
 
+func (a *configAdapter) DefaultVersion() string {
+	return a.cfg.DefaultVersion
+}
+
+func (a *configAdapter) SetDefaultVersion(version string) error {
+	a.cfg.DefaultVersion = version
+	return config.Save(a.cfg, a.configPath)
+}
+
 func (a *configAdapter) DefaultChannel() string {
 	return a.cfg.DefaultChannel
 }
@@ -389,25 +398,21 @@ func (a *configAdapter) ConfigPath() string {
 }
 
 func (a *configAdapter) GetAlias(name string) (string, bool) {
-	v, ok := a.cfg.Aliases[name]
-	return v, ok
+	return a.cfg.GetAlias(name)
 }
 
 func (a *configAdapter) AddAlias(name, target string) error {
-	if a.cfg.Aliases == nil {
-		a.cfg.Aliases = make(map[string]string)
-	}
-	a.cfg.Aliases[name] = target
+	a.cfg.AddAlias(name, target)
 	return config.Save(a.cfg, a.configPath)
 }
 
 func (a *configAdapter) RemoveAlias(name string) error {
-	delete(a.cfg.Aliases, name)
+	a.cfg.RemoveAlias(name)
 	return config.Save(a.cfg, a.configPath)
 }
 
 func (a *configAdapter) ListAliases() map[string]string {
-	return a.cfg.Aliases
+	return a.cfg.ListAliases()
 }
 
 func (a *configAdapter) GetRepoPath() string {
@@ -915,15 +920,24 @@ type serveAdapter struct {
 	verbose bool
 }
 
-func (a *serveAdapter) StartFromConfig() error {
+func (a *serveAdapter) StartFromConfig(baseDir string) error {
 	// dataDir is the bws-data directory (shared with client config, logs, etc.)
 	dataDir := paths.Default().Root
 
 	// exeDir is the executable directory (used for resolving relative packages/bin paths)
+	// If --dir flag is provided, use it as the base directory instead.
 	exeDir, err := paths.ExeDir()
 	if err != nil {
 		wd, _ := os.Getwd()
 		exeDir = wd
+	}
+	if baseDir != "" {
+		abs, err := filepath.Abs(baseDir)
+		if err == nil {
+			exeDir = abs
+		} else {
+			exeDir = baseDir
+		}
 	}
 
 	// Load serve config from bws-serve.ini (in the bws-data directory)
@@ -988,24 +1002,25 @@ func (a *serveAdapter) StartFromConfig() error {
 		}
 
 		srv := bmserve.NewServerWithOptions(bmserve.ServerOptions{
-			Addr:        addr,
-			Version:     a.version,
-			PackagesDir: packagesDir,
-			BinDir:      binDir,
-			SyncSource:  onlineSource,
-			SyncConfig: bmserve.SyncConfig{
-				Enabled:  true,
-				Interval: interval,
-				Browsers: syncBrowsers,
-				Channels: syncChannels,
-			},
-			OnlineSource:   onlineSource,
-			OnlineFallback: cfg.OnlineFallback,
-			OnlineBrowsers: onlineBrowsers,
-			ScanWorkers:    cfg.ScanWorkers,
-			ConfigPath:     bmserve.ConfigPath(dataDir),
-			Logger:         serveLogger,
-		})
+		Addr:        addr,
+		Version:     a.version,
+		PackagesDir: packagesDir,
+		BinDir:      binDir,
+		SyncSource:  onlineSource,
+		SyncConfig: bmserve.SyncConfig{
+			Enabled:  true,
+			Interval: interval,
+			Browsers: syncBrowsers,
+			Channels: syncChannels,
+		},
+		OnlineSource:   onlineSource,
+		OnlineFallback: cfg.OnlineFallback,
+		OnlineBrowsers: onlineBrowsers,
+		ScanWorkers:    cfg.ScanWorkers,
+		ConfigPath:     bmserve.ConfigPath(dataDir),
+		AuthToken:      cfg.AuthToken,
+		Logger:         serveLogger,
+	})
 		return srv.Start()
 	}
 

@@ -92,10 +92,8 @@ func sanitizeName(name string) string {
 	return strings.TrimSpace(replacer.Replace(name))
 }
 
-// escapeArg escapes a single argument for use in shell commands.
-func escapeArg(arg string) string {
-	if strings.ContainsAny(arg, " \\t\n\r\"") {
-		return fmt.Sprintf("%q", arg)
-	}
-	return arg
+// fileExists reports whether a file or directory exists at path.
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

@@ -52,9 +52,25 @@ func SaveManifest(m *Manifest, path string) error {
 		return err
 	}
 	dir := filepath.Dir(path)
-	tmpPath := filepath.Join(dir, ".manifest.json.tmp")
-	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
+	// Use a unique temp filename to avoid collisions between concurrent saves.
+	tmpFile, err := os.CreateTemp(dir, ".manifest-*.tmp")
+	if err != nil {
+		return fmt.Errorf("creating manifest temp file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	// Write data and close before rename (Windows requires the file to be closed).
+	if _, err := tmpFile.Write(data); err != nil {
+		tmpFile.Close()
+		_ = os.Remove(tmpPath)
 		return fmt.Errorf("writing manifest temp file: %w", err)
 	}
-	return os.Rename(tmpPath, path)
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("closing manifest temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("renaming manifest file: %w", err)
+	}
+	return nil
 }

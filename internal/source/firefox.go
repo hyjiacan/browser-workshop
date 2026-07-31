@@ -40,22 +40,23 @@ var dirLinkRegex = regexp.MustCompile(`<a href="([^"]*)">([^<]*)</a>`)
 // 提供 Firefox 版本数据。
 //
 // 目录结构:
-//   /pub/firefox/releases/
-//     ├── 141.0/                    (版本目录)
-//     │   ├── win64/                (平台目录)
-//     │   │   └── en-US/            (语言目录)
-//     │   │       ├── Firefox Setup 141.0.exe
-//     │   │       └── Firefox Setup 141.0.msi
-//     │   ├── linux-x86_64/
-//     │   │   └── en-US/
-//     │   │       ├── firefox-141.0.tar.xz
-//     │   │       └── firefox-141.0.deb
-//     │   └── mac/
-//     │       └── en-US/
-//     │           ├── Firefox 141.0.dmg
-//     │           └── Firefox 141.0.pkg
-//     ├── 141.0b1/                  (Beta 版本)
-//     └── 140.0esr/                 (ESR 版本)
+//
+//	/pub/firefox/releases/
+//	  ├── 141.0/                    (版本目录)
+//	  │   ├── win64/                (平台目录)
+//	  │   │   └── en-US/            (语言目录)
+//	  │   │       ├── Firefox Setup 141.0.exe
+//	  │   │       └── Firefox Setup 141.0.msi
+//	  │   ├── linux-x86_64/
+//	  │   │   └── en-US/
+//	  │   │       ├── firefox-141.0.tar.xz
+//	  │   │       └── firefox-141.0.deb
+//	  │   └── mac/
+//	  │       └── en-US/
+//	  │           ├── Firefox 141.0.dmg
+//	  │           └── Firefox 141.0.pkg
+//	  ├── 141.0b1/                  (Beta 版本)
+//	  └── 140.0esr/                 (ESR 版本)
 type FirefoxSource struct {
 	baseURL      string
 	httpClient   *http.Client

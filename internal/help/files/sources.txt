@@ -32,9 +32,7 @@
 
   --- Omaha 协议（Chrome/Chromium）---
   Google Chrome 的官方更新协议，用于获取版本信息和下载链接。
-
-  配置方法：
-    bws cfg set source-omaha true
+  该源默认启用，无需配置。
 
   支持的浏览器：
   * chrome
@@ -55,7 +53,6 @@
   通过 config 命令控制各数据源的启用/禁用：
 
     bws cfg set source-serve true     # 启用 Serve 离线源
-    bws cfg set source-omaha true     # 启用 Omaha 在线源
     bws cfg set source-firefox-ftp true # 启用 Firefox 在线源
 
 【数据源优先级】

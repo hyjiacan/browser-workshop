@@ -73,7 +73,8 @@ func (ctx *Context) Confirm(prompt string) bool {
 type ServeProvider interface {
 	// StartFromConfig starts the HTTP server using configuration from bws-serve.ini
 	// in the executable directory.
-	StartFromConfig() error
+	// baseDir overrides the base directory (containing packages/ and bin/) if non-empty.
+	StartFromConfig(baseDir string) error
 
 	// ConfigPath returns the path to the serve config file.
 	ConfigPath() string
@@ -133,6 +134,8 @@ type RepoSettings interface {
 type DefaultSettings interface {
 	DefaultBrowser() string
 	SetDefaultBrowser(browser string) error
+	DefaultVersion() string
+	SetDefaultVersion(version string) error
 	DefaultChannel() string
 	SetDefaultChannel(channel string) error
 }
@@ -276,6 +279,7 @@ type ProfileProvider interface {
 	// ListProfiles lists all profiles for a browser.
 	ListProfiles(browser string) ([]install.ProfileInfo, error)
 	// CleanOrphanedProfiles finds orphaned profiles for uninstalled versions.
+	// Returns paths; actual deletion is handled by the caller.
 	CleanOrphanedProfiles(browser string) ([]string, error)
 }
 
@@ -439,31 +443,6 @@ func hasHelpFlag(args []string) bool {
 	return false
 }
 
-// findCommand finds the command matching the argument path.
-func (a *App) findCommand(args []string) (*Command, []string) {
-	return findCommandRecursive(a.RootCmd, args)
-}
-
-func findCommandRecursive(cmd *Command, args []string) (*Command, []string) {
-	if len(args) == 0 {
-		return cmd, args
-	}
-
-	name := args[0]
-	for _, sub := range cmd.SubCommands {
-		if sub.Name == name {
-			return findCommandRecursive(sub, args[1:])
-		}
-		for _, alias := range sub.Aliases {
-			if alias == name {
-				return findCommandRecursive(sub, args[1:])
-			}
-		}
-	}
-
-	return cmd, args
-}
-
 func (a *App) printRootHelp() {
 	w := a.Context.Stdout
 	fmt.Fprintf(w, "%s - %s\n\n", a.Name, a.RootCmd.Description)
@@ -566,8 +545,8 @@ func ParseFlags(args []string, flags []*Flag) (map[string]string, []string, erro
 
 		found := false
 		for _, f := range flags {
-			// Long form
-			if strings.HasPrefix(arg, "--"+f.Name) {
+			// Long form: exact match or --name=value
+			if arg == "--"+f.Name || strings.HasPrefix(arg, "--"+f.Name+"=") {
 				if f.HasValue {
 					if eq := strings.Index(arg, "="); eq > 0 {
 						result[f.Name] = arg[eq+1:]

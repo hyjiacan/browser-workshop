@@ -3,6 +3,7 @@
 package shortcut
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"os/exec"
@@ -18,30 +19,46 @@ func defaultDesktopDir() string {
 	return filepath.Join(os.Getenv("HOMEDRIVE")+os.Getenv("HOMEPATH"), "Desktop")
 }
 
+// psEscape escapes a string for safe embedding in a PowerShell double-quoted
+// string. PowerShell uses backtick (`) as the escape character inside double
+// quotes, not backslash. We escape characters that could break out of the
+// string context.
+func psEscape(s string) string {
+	s = strings.ReplaceAll(s, "`", "``")
+	s = strings.ReplaceAll(s, "\"", "`\"")
+	s = strings.ReplaceAll(s, "$", "`$")
+	return s
+}
+
 // createShortcut creates a .lnk file on Windows using PowerShell.
+// The PowerShell script is passed via -EncodedCommand (Base64 UTF-16LE)
+// to prevent any command injection through user-controlled paths.
 func createShortcut(desktopDir string, opts Options) error {
 	name := sanitizeName(opts.Name)
-	shortcutPath := filepath.Join(desktopDir, name+".lnk")
+	shortcatPath := filepath.Join(desktopDir, name+".lnk")
 
-	// Build PowerShell script
+	// Build PowerShell script with properly escaped values
 	script := fmt.Sprintf(
 		"$ws = New-Object -ComObject WScript.Shell; "+
-			"$s = $ws.CreateShortcut(%q); "+
-			"$s.TargetPath = %q; "+
-			"$s.Arguments = %q; "+
-			"$s.WorkingDirectory = %q; "+
+			"$s = $ws.CreateShortcut(\"%s\"); "+
+			"$s.TargetPath = \"%s\"; "+
+			"$s.Arguments = \"%s\"; "+
+			"$s.WorkingDirectory = \"%s\"; "+
 			"$s.Save();",
-		shortcutPath,
-		opts.Target,
-		strings.Join(opts.Args, " "),
-		opts.WorkingDir,
+		psEscape(shortcatPath),
+		psEscape(opts.Target),
+		psEscape(strings.Join(opts.Args, " ")),
+		psEscape(opts.WorkingDir),
 	)
 
 	if opts.IconPath != "" {
-		script += fmt.Sprintf(" $s.IconLocation = %q; $s.Save();", opts.IconPath)
+		script += fmt.Sprintf(" $s.IconLocation = \"%s\"; $s.Save();", psEscape(opts.IconPath))
 	}
 
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
+	// Encode as UTF-16LE Base64 for -EncodedCommand to prevent injection
+	encoded := base64.StdEncoding.EncodeToString([]byte(script))
+
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded)
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("创建快捷方式失败: %w", err)
@@ -53,8 +70,8 @@ func createShortcut(desktopDir string, opts Options) error {
 // removeShortcut removes a .lnk file on Windows.
 func removeShortcut(desktopDir string, name string) error {
 	name = sanitizeName(name)
-	shortcutPath := filepath.Join(desktopDir, name+".lnk")
-	if err := os.Remove(shortcutPath); err != nil {
+	shortcatPath := filepath.Join(desktopDir, name+".lnk")
+	if err := os.Remove(shortcatPath); err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("快捷方式不存在: %s", name)
 		}

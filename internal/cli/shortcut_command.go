@@ -99,7 +99,7 @@ func runShortcutCreate(ctx *Context, args []string) error {
 			return fmt.Errorf("获取已安装列表失败: %w", err)
 		}
 		if len(installed) == 0 {
-			fmt.Println("没有已安装的浏览器")
+			ctx.Println("没有已安装的浏览器")
 			return nil
 		}
 
@@ -114,10 +114,10 @@ func runShortcutCreate(ctx *Context, args []string) error {
 				fmt.Fprintf(ctx.Stderr, "  创建 %s 快捷方式失败: %v\n", name, err)
 				continue
 			}
-			fmt.Printf("  已创建: %s\n", name)
+			ctx.Printf("  已创建: %s\n", name)
 			created++
 		}
-		fmt.Printf("\n共创建 %d 个快捷方式\n", created)
+		ctx.Printf("\n共创建 %d 个快捷方式\n", created)
 		return nil
 	}
 
@@ -175,9 +175,9 @@ func createOneShortcut(ctx *Context, browser, version, profileName string, nativ
 		return err
 	}
 
-	fmt.Printf("已创建快捷方式: %s -> %s\n", name, exePath)
+	ctx.Printf("已创建快捷方式: %s -> %s\n", name, exePath)
 	if len(args) > 0 {
-		fmt.Printf("  参数: %s\n", strings.Join(args, " "))
+		ctx.Printf("  参数: %s\n", strings.Join(args, " "))
 	}
 	return nil
 }
@@ -201,12 +201,12 @@ func runShortcutRemove(ctx *Context, args []string) error {
 			return fmt.Errorf("获取快捷方式列表失败: %w", err)
 		}
 		if len(names) == 0 {
-			fmt.Println("没有可移除的快捷方式")
+			ctx.Println("没有可移除的快捷方式")
 			return nil
 		}
 
 		if !ctx.Confirm(fmt.Sprintf("确定要移除所有 %d 个快捷方式吗", len(names))) {
-			fmt.Println("已取消")
+			ctx.Println("已取消")
 			return nil
 		}
 
@@ -216,10 +216,10 @@ func runShortcutRemove(ctx *Context, args []string) error {
 				fmt.Fprintf(ctx.Stderr, "  移除 %s 失败: %v\n", name, err)
 				continue
 			}
-			fmt.Printf("  已移除: %s\n", name)
+			ctx.Printf("  已移除: %s\n", name)
 			removed++
 		}
-		fmt.Printf("\n共移除 %d 个快捷方式\n", removed)
+		ctx.Printf("\n共移除 %d 个快捷方式\n", removed)
 		return nil
 	}
 
@@ -227,7 +227,7 @@ func runShortcutRemove(ctx *Context, args []string) error {
 	if err := ctx.Shortcut.Remove(name, ""); err != nil {
 		return err
 	}
-	fmt.Printf("已移除快捷方式: %s\n", name)
+	ctx.Printf("已移除快捷方式: %s\n", name)
 	return nil
 }
 
@@ -247,13 +247,13 @@ func runShortcutList(ctx *Context, args []string) error {
 	}
 
 	if len(names) == 0 {
-		fmt.Println("没有已创建的快捷方式")
+		ctx.Println("没有已创建的快捷方式")
 		return nil
 	}
 
-	fmt.Printf("已创建的快捷方式 (%d 个):\n", len(names))
+	ctx.Printf("已创建的快捷方式 (%d 个):\n", len(names))
 	for _, name := range names {
-		fmt.Printf("  - %s\n", name)
+		ctx.Printf("  - %s\n", name)
 	}
 	return nil
 }

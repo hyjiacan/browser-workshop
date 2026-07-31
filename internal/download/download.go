@@ -96,6 +96,7 @@ type Manager struct {
 
 // downloadState tracks the state of an active download.
 type downloadState struct {
+	mu        sync.Mutex // protects progress, lastBytes, lastTime, speedEMA
 	options   Options
 	cancelFn  context.CancelFunc
 	progress  Progress
@@ -112,11 +113,10 @@ func NewManager() *Manager {
 
 // NewManagerWithProxy creates a new download manager that uses the given proxy.
 // proxyURL can be empty (direct), "http://host:port", "socks5://host:port", etc.
+// TLS certificate verification is enabled by default for security.
 func NewManagerWithProxy(proxyURL string) *Manager {
 	transport := &http.Transport{
-		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: true,
-		},
+		TLSClientConfig: &tls.Config{},
 	}
 	if proxyURL != "" {
 		proxyURLParsed, err := url.Parse(proxyURL)
@@ -259,6 +259,17 @@ func (m *Manager) Download(ctx context.Context, opts Options) (*Result, error) {
 					totalSize = 0
 				}
 			}
+			// Validate that the server is returning data from the expected offset
+			var rangeStart int64
+			if strings.HasPrefix(parts[0], "bytes ") {
+				if _, err := fmt.Sscanf(parts[0], "bytes %d-", &rangeStart); err == nil {
+					if rangeStart != existingSize {
+						// Clean up the .part file — it's stale or corrupted
+						_ = os.Remove(tempPath)
+						return nil, fmt.Errorf("服务器返回的范围与请求不匹配 (期望 %d, 得到 %d)", existingSize, rangeStart)
+					}
+				}
+			}
 		}
 		if totalSize == 0 {
 			totalSize = resp.ContentLength + existingSize
@@ -273,18 +284,21 @@ func (m *Manager) Download(ctx context.Context, opts Options) (*Result, error) {
 		totalSize = resp.ContentLength
 	}
 
+	state.mu.Lock()
 	state.progress.Total = totalSize
 	state.progress.Downloaded = existingSize
+	state.mu.Unlock()
 
 	// Report initial progress
 	m.reportProgress(state)
 
 	// Create progress writer
 	writer := &progressWriter{
-		writer:     file,
+		writer: file,
 		onProgress: func(n int64) {
+			state.mu.Lock()
 			state.progress.Downloaded += n
-			m.updateSpeed(state)
+			m.updateSpeedLocked(state)
 			state.progress.Elapsed = time.Since(state.startTime)
 			if state.progress.Total > 0 {
 				state.progress.Percent = float64(state.progress.Downloaded) / float64(state.progress.Total) * 100
@@ -293,10 +307,12 @@ func (m *Manager) Download(ctx context.Context, opts Options) (*Result, error) {
 					state.progress.ETA = time.Duration(float64(remaining)/state.speedEMA) * time.Second
 				}
 			}
+			state.mu.Unlock()
 		},
-		interval: opts.ProgressInterval,
+		reportFn:  func() { m.reportProgress(state) },
+		interval:  opts.ProgressInterval,
 		lastReport: time.Now(),
-		ctx:      downloadCtx,
+		ctx:       downloadCtx,
 	}
 
 	// Download the body
@@ -313,8 +329,10 @@ func (m *Manager) Download(ctx context.Context, opts Options) (*Result, error) {
 	writer.Flush()
 
 	// Final progress report
+	state.mu.Lock()
 	state.progress.Status = "complete"
 	state.progress.Percent = 100
+	state.mu.Unlock()
 	m.reportProgress(state)
 
 	// Close file before renaming (must check error)
@@ -346,40 +364,47 @@ func (m *Manager) Download(ctx context.Context, opts Options) (*Result, error) {
 // Cancel cancels an active download by URL.
 func (m *Manager) Cancel(url string) bool {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	state, ok := m.activeDownloads[url]
+	m.mu.Unlock()
 	if !ok {
 		return false
 	}
 
 	state.cancelFn()
+	state.mu.Lock()
 	state.progress.Status = "cancelled"
+	state.mu.Unlock()
 	return true
 }
 
 // GetProgress returns the current progress of a download by URL.
 func (m *Manager) GetProgress(url string) (Progress, bool) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	state, ok := m.activeDownloads[url]
+	m.mu.Unlock()
 	if !ok {
 		return Progress{}, false
 	}
 
+	state.mu.Lock()
+	defer state.mu.Unlock()
 	return state.progress, true
 }
 
 // reportProgress calls the progress callback if set.
+// Copies progress under lock to avoid holding the lock during the callback.
 func (m *Manager) reportProgress(state *downloadState) {
+	state.mu.Lock()
+	p := state.progress
+	state.mu.Unlock()
 	if state.options.OnProgress != nil {
-		state.options.OnProgress(state.progress)
+		state.options.OnProgress(p)
 	}
 }
 
-// updateSpeed calculates the current download speed using EMA.
-func (m *Manager) updateSpeed(state *downloadState) {
+// updateSpeedLocked calculates the current download speed using EMA.
+// Caller must hold state.mu.
+func (m *Manager) updateSpeedLocked(state *downloadState) {
 	now := time.Now()
 	elapsed := now.Sub(state.lastTime).Seconds()
 
@@ -405,6 +430,7 @@ func (m *Manager) updateSpeed(state *downloadState) {
 type progressWriter struct {
 	writer     io.Writer
 	onProgress func(int64)
+	reportFn   func() // called at intervals to report progress to the user
 	interval   time.Duration
 	lastReport time.Time
 	ctx        context.Context
@@ -422,12 +448,13 @@ func (w *progressWriter) Write(p []byte) (int, error) {
 	if n > 0 && w.onProgress != nil {
 		w.onProgress(int64(n))
 
-		// Report progress at intervals
-		now := time.Now()
-		if now.Sub(w.lastReport) >= w.interval {
-			w.lastReport = now
-			// Progress is reported via the onProgress callback
-			// The actual progress reporting happens in the Manager
+		// Report progress to user at intervals
+		if w.reportFn != nil {
+			now := time.Now()
+			if now.Sub(w.lastReport) >= w.interval {
+				w.lastReport = now
+				w.reportFn()
+			}
 		}
 	}
 	return n, err
@@ -435,7 +462,9 @@ func (w *progressWriter) Write(p []byte) (int, error) {
 
 // Flush forces a final progress report.
 func (w *progressWriter) Flush() {
-	// Nothing to flush, progress is tracked incrementally
+	if w.reportFn != nil {
+		w.reportFn()
+	}
 }
 
 // FormatSpeed formats a speed in bytes per second to a human-readable string.

@@ -18,6 +18,22 @@ func defaultDesktopDir() string {
 	return "/tmp"
 }
 
+// escapeAppleScriptString escapes a string for safe embedding in an AppleScript
+// double-quoted string literal. AppleScript uses backslash as the escape
+// character inside double quotes.
+func escapeAppleScriptString(s string) string {
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "\"", "\\\"")
+	return s
+}
+
+// escapeBashSingleQuote escapes a string for safe use in a bash single-quoted
+// context. Single quotes in bash prevent all interpretation except the closing
+// quote itself, which we handle with the standard '\'' trick.
+func escapeBashSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
+}
+
 // createShortcut creates an AppleScript .app bundle on macOS.
 func createShortcut(desktopDir string, opts Options) error {
 	name := sanitizeName(opts.Name)
@@ -45,19 +61,24 @@ func createShortcut(desktopDir string, opts Options) error {
 }
 
 // buildAppleScript builds an AppleScript that launches the browser.
+// All user-controlled values are properly escaped using escapeAppleScriptString
+// to prevent AppleScript injection.
 func buildAppleScript(cmdParts []string, workingDir string) string {
 	var b strings.Builder
 	b.WriteString(`on run
 `)
 
-	// Build the shell command with proper quoting
+	// Build the shell command with proper quoting using AppleScript's
+	// "quoted form of" operator, which safely quotes for shell use.
+	// The string literal itself is escaped to prevent breaking out of
+	// the AppleScript string context.
 	var quotedParts []string
 	for _, part := range cmdParts {
-		quotedParts = append(quotedParts, fmt.Sprintf("quoted form of %q", part))
+		quotedParts = append(quotedParts, fmt.Sprintf(`quoted form of "%s"`, escapeAppleScriptString(part)))
 	}
 
 	if workingDir != "" {
-		b.WriteString(fmt.Sprintf(`	do shell script "cd " & quoted form of %q & " && " & `, workingDir))
+		b.WriteString(fmt.Sprintf(`	do shell script "cd " & quoted form of "%s" & " && " & `, escapeAppleScriptString(workingDir)))
 	} else {
 		b.WriteString(`	do shell script `)
 	}
@@ -70,19 +91,21 @@ end run`)
 }
 
 // createCommandScript creates a .command file as a fallback.
+// All values are escaped using bash single-quote escaping to prevent
+// shell command injection.
 func createCommandScript(desktopDir, name string, cmdParts []string, workingDir string) error {
 	scriptPath := filepath.Join(desktopDir, name+".command")
 
 	var b strings.Builder
 	b.WriteString("#!/bin/bash\n")
 	if workingDir != "" {
-		b.WriteString(fmt.Sprintf("cd %q\n", workingDir))
+		b.WriteString("cd " + escapeBashSingleQuote(workingDir) + "\n")
 	}
 	for i, part := range cmdParts {
 		if i > 0 {
 			b.WriteString(" ")
 		}
-		b.WriteString(fmt.Sprintf("%q", part))
+		b.WriteString(escapeBashSingleQuote(part))
 	}
 	b.WriteString("\n")
 
@@ -98,22 +121,34 @@ func removeShortcut(desktopDir string, name string) error {
 	appPath := filepath.Join(desktopDir, name+".app")
 	cmdPath := filepath.Join(desktopDir, name+".command")
 
-	// Try .app first
-	if err := os.RemoveAll(appPath); err == nil {
-		return nil
-	}
-	// Try .command
-	if err := os.Remove(cmdPath); err == nil {
-		return nil
+	// Check existence first to distinguish "not found" from "removal failed".
+	appExists := fileExists(appPath)
+	cmdExists := fileExists(cmdPath)
+
+	if !appExists && !cmdExists {
+		return fmt.Errorf("快捷方式不存在: %s", name)
 	}
 
-	// Check existence
-	if _, err := os.Stat(appPath); os.IsNotExist(err) {
-		if _, err2 := os.Stat(cmdPath); os.IsNotExist(err2) {
-			return fmt.Errorf("快捷方式不存在: %s", name)
+	var errs []string
+
+	// Try .app first
+	if appExists {
+		if err := os.RemoveAll(appPath); err != nil {
+			errs = append(errs, fmt.Sprintf(".app: %v", err))
 		}
 	}
-	return fmt.Errorf("删除快捷方式失败")
+	// Try .command
+	if cmdExists {
+		if err := os.Remove(cmdPath); err != nil {
+			errs = append(errs, fmt.Sprintf(".command: %v", err))
+		}
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("删除快捷方式失败: %s", strings.Join(errs, "; "))
+	}
+
+	return nil
 }
 
 // listShortcuts returns all .app bundles and .command files in the desktop directory.

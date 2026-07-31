@@ -8,6 +8,7 @@ import (
 
 	"github.com/bws/bws/internal/browser"
 	"github.com/bws/bws/internal/paths"
+	"github.com/bws/bws/internal/util"
 )
 
 func TestNewScanner(t *testing.T) {
@@ -546,7 +547,7 @@ func TestStripExtension(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			result := stripExtension(tt.input)
+			result := util.StripExtension(tt.input)
 			if result != tt.expected {
 				t.Errorf("stripExtension(%q) = %q, want %q", tt.input, result, tt.expected)
 			}

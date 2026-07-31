@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/bws/bws/internal/util"
 )
 
 // maxDownloadSize is the maximum allowed download size (2GB).
@@ -51,11 +53,11 @@ type SyncConfig struct {
 	// Default: ["stable"].
 	Channels []string
 
-	// Platforms is the list of platforms to sync (e.g. ["windows", "macos", "linux"]).
+	// Platforms is the list of platforms to sync (e.g. ["windows", "darwin", "linux"]).
 	// Default: current platform.
 	Platforms []string
 
-	// Arches is the list of architectures to sync (e.g. ["x64", "x86"]).
+	// Arches is the list of architectures to sync (e.g. ["amd64", "386", "arm64"]).
 	// Default: current arch.
 	Arches []string
 
@@ -229,7 +231,7 @@ func (sm *syncManager) doSync() {
 
 	arches := sm.config.Arches
 	if len(arches) == 0 {
-		arches = []string{"x64"}
+		arches = []string{"amd64"}
 	}
 
 	channels := sm.config.Channels
@@ -285,7 +287,7 @@ func (sm *syncManager) doSync() {
 
 						sizeStr := "未知"
 						if v.Size > 0 {
-							sizeStr = formatSize(v.Size)
+							sizeStr = util.FormatSize(v.Size)
 						}
 						sm.setProgress(fmt.Sprintf("正在下载 %s %s (%s/%s)...",
 							browser, v.Version, platform, arch))
@@ -294,7 +296,7 @@ func (sm *syncManager) doSync() {
 
 						dlStart := time.Now()
 						// Download to temp file first
-						_, err := sm.source.Download(v.DownloadURL, sm.server.packagesDir,
+						dlPath, err := sm.source.Download(v.DownloadURL, sm.server.packagesDir,
 							func(downloaded, total int64) {
 								// Progress updates could be more granular, but we keep it simple
 							})
@@ -304,6 +306,25 @@ func (sm *syncManager) doSync() {
 							sm.server.logger.Warn("[sync] 下载失败: %s@%s (%s/%s): %v (耗时 %v)",
 								browser, v.Version, platform, arch, err, time.Since(dlStart).Round(time.Millisecond))
 							continue
+						}
+
+						// Verify download integrity: check file size if the source provided one.
+						if v.Size > 0 {
+							fi, statErr := os.Stat(dlPath)
+							if statErr != nil {
+								failedDownloads++
+								sm.setError(fmt.Errorf("stat downloaded %s@%s: %w", browser, v.Version, statErr))
+								sm.server.logger.Warn("[sync] 下载后无法获取文件信息: %s@%s: %v", browser, v.Version, statErr)
+								_ = os.Remove(dlPath)
+								continue
+							}
+							if fi.Size() != v.Size {
+								failedDownloads++
+								sm.setError(fmt.Errorf("downloaded %s@%s size mismatch: got %d, expected %d", browser, v.Version, fi.Size(), v.Size))
+								sm.server.logger.Warn("[sync] 下载文件大小不匹配: %s@%s: 实际=%d 预期=%d", browser, v.Version, fi.Size(), v.Size)
+								_ = os.Remove(dlPath)
+								continue
+							}
 						}
 
 						sm.server.logger.Debug("[sync] 下载完成: %s@%s (%s/%s) (耗时 %v)",

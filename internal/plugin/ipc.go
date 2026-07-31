@@ -24,6 +24,14 @@ type IPCResponse struct {
 	Error     string            `json:"error,omitempty"`
 }
 
+// ipcReadResult holds the outcome of reading a response from the plugin process.
+// It is sent over a channel so the main goroutine can safely consume it
+// without racing with the timeout path.
+type ipcReadResult struct {
+	resp IPCResponse
+	err  error
+}
+
 // RunIPCPlugin launches an external process plugin and communicates via stdin/stdout JSON.
 // The plugin receives an IPCRequest on stdin and must write an IPCResponse to stdout.
 // The plugin may output log lines before/after the JSON response; only the first JSON object is parsed.
@@ -62,40 +70,41 @@ func RunIPCPlugin(execPath string, ctx *ScriptContext) (*IPCResponse, error) {
 	}
 	stdin.Close()
 
-	// Read response with timeout
-	done := make(chan struct{})
-	var resp IPCResponse
-	var readErr error
+	// Read response with timeout.
+	// The goroutine sends the result over a channel; on timeout, we kill
+	// the process and discard the goroutine's result to avoid a data race.
+	resultCh := make(chan ipcReadResult, 1)
 
 	go func() {
+		var resp IPCResponse
 		decoder := json.NewDecoder(stdout)
 		if err := decoder.Decode(&resp); err != nil {
-			readErr = fmt.Errorf("ipc plugin: parse response: %w", err)
+			resultCh <- ipcReadResult{err: fmt.Errorf("ipc plugin: parse response: %w", err)}
+			return
 		}
-		close(done)
+		resultCh <- ipcReadResult{resp: resp}
 	}()
 
 	select {
-	case <-done:
-		// response received
+	case r := <-resultCh:
+		// Response received successfully
+		_ = cmd.Wait()
+		if r.err != nil {
+			return nil, r.err
+		}
+		if r.resp.Error != "" {
+			return nil, fmt.Errorf("ipc plugin: %s", r.resp.Error)
+		}
+		return &r.resp, nil
+
 	case <-time.After(10 * time.Second):
+		// Timeout — kill the process. The goroutine may still be running
+		// but its result is discarded via the buffered channel, so there
+		// is no data race on shared variables.
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
 		}
 		_ = cmd.Wait()
 		return nil, fmt.Errorf("ipc plugin: timeout after 10s")
 	}
-
-	// Wait for process to exit
-	_ = cmd.Wait()
-
-	if readErr != nil {
-		return nil, readErr
-	}
-
-	if resp.Error != "" {
-		return nil, fmt.Errorf("ipc plugin: %s", resp.Error)
-	}
-
-	return &resp, nil
 }

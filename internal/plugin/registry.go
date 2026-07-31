@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -154,8 +156,53 @@ func (c *RegistryClient) Get(name string) (*RegistryEntry, error) {
 	return &entry, nil
 }
 
+// validateURL checks that a URL is safe to fetch (SSRF prevention).
+// Only http/https schemes are allowed. Loopback, link-local, and private
+// IP ranges are rejected. This prevents plugins from scanning internal
+// networks or accessing cloud metadata endpoints (e.g. 169.254.169.254).
+func validateURL(rawURL string) error {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+
+	scheme := strings.ToLower(parsed.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return fmt.Errorf("unsupported scheme %q: only http/https allowed", parsed.Scheme)
+	}
+
+	host := parsed.Hostname()
+	if host == "" {
+		return fmt.Errorf("URL missing hostname")
+	}
+
+	// Resolve hostname and check each IP
+	ips, err := net.LookupIP(host)
+	if err != nil {
+		return fmt.Errorf("resolving host %s: %w", host, err)
+	}
+
+	for _, ip := range ips {
+		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsPrivate() || ip.IsUnspecified() {
+			return fmt.Errorf("URL host %s resolves to restricted IP %s", host, ip)
+		}
+		// Block cloud metadata endpoint explicitly (169.254.169.254)
+		if ip.Equal(net.IPv4(169, 254, 169, 254)) {
+			return fmt.Errorf("URL host %s resolves to cloud metadata endpoint", host)
+		}
+	}
+
+	return nil
+}
+
 // Download fetches a plugin file from a URL.
+// The URL is validated to prevent SSRF attacks (internal IPs are blocked).
 func (c *RegistryClient) Download(url string) ([]byte, error) {
+	if err := validateURL(url); err != nil {
+		return nil, fmt.Errorf("plugin download URL rejected: %w", err)
+	}
+
+	// Use a client that does not follow redirects to unvalidated URLs
 	resp, err := c.client.Get(url)
 	if err != nil {
 		return nil, fmt.Errorf("downloading plugin: %w", err)

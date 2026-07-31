@@ -133,16 +133,28 @@ func StandardPreset() *Config {
 	}
 }
 
-// commonResolutions is a list of realistic screen resolutions.
-var commonResolutions = []struct{ W, H int }{
-	{1920, 1080},
-	{1366, 768},
-	{2560, 1440},
-	{1440, 900},
-	{1536, 864},
-	{1280, 720},
-	{1600, 900},
-	{1680, 1050},
+// commonResolutionsByPlatform maps UA platform names to their typical screen resolutions.
+// 分辨率按平台分组，确保生成的指纹一致（例如 Mac UA 不会搭配 Windows 分辨率）。
+var commonResolutionsByPlatform = map[string][]struct{ W, H int }{
+	"Win32": {
+		{1920, 1080},
+		{1366, 768},
+		{1536, 864},
+		{1600, 900},
+		{1280, 720},
+	},
+	"MacIntel": {
+		{2560, 1440},
+		{1440, 900},
+		{1680, 1050},
+		{1920, 1080},
+	},
+	"Linux x86_64": {
+		{1920, 1080},
+		{1366, 768},
+		{1600, 900},
+		{1280, 720},
+	},
 }
 
 // commonUserAgents are realistic Chrome user agents.
@@ -186,8 +198,9 @@ func RandomPreset() *Config {
 	// Pick a platform and its UA
 	ua := commonUserAgents[randInt(len(commonUserAgents))]
 
-	// Pick a resolution
-	res := commonResolutions[randInt(len(commonResolutions))]
+	// Pick a resolution matching the selected UA platform
+	resolutions := commonResolutionsByPlatform[ua.Platform]
+	res := resolutions[randInt(len(resolutions))]
 
 	// Pick a language
 	lang := commonLanguages[randInt(len(commonLanguages))]

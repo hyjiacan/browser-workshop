@@ -32,6 +32,7 @@ import (
 	bmlog "github.com/bws/bws/internal/log"
 	"github.com/bws/bws/internal/paths"
 	"github.com/bws/bws/internal/repo"
+	"github.com/bws/bws/internal/util"
 	"github.com/bws/bws/internal/version"
 	"github.com/zeebo/xxh3"
 )
@@ -133,6 +134,17 @@ type Server struct {
 	// same filename: the first requester downloads, others wait.
 	dlMu       sync.Mutex
 	dlInflight map[string]chan struct{}
+
+	// cacheMu protects saveCache from concurrent writes to the cache file.
+	cacheMu sync.Mutex
+
+	// scanMu serializes concurrent scanPackages calls so that multiple
+	// on-demand online fallback downloads don't trigger parallel scans.
+	scanMu sync.Mutex
+
+	// authToken is the optional bearer token for API authentication.
+	// When non-empty, /api/ requests must carry "Authorization: Bearer <token>".
+	authToken string
 }
 
 // PackageFile represents a single package file with its metadata.
@@ -243,6 +255,12 @@ type ServerOptions struct {
 	// BaseDir.
 	ConfigPath string
 
+	// AuthToken is an optional bearer token for API authentication.
+	// When set, all /api/ requests must include "Authorization: Bearer <token>".
+	// When empty, the API is open (no authentication).
+	// The root HTML page is always accessible without authentication.
+	AuthToken string
+
 	// Logger is the logger used by the server. If nil, the default logger is used.
 	Logger *bmlog.Logger
 }
@@ -309,6 +327,7 @@ func NewServerWithOptions(opts ServerOptions) *Server {
 		onlineFallback: opts.OnlineFallback,
 		scanWorkers:    opts.ScanWorkers,
 		dlInflight:     make(map[string]chan struct{}),
+		authToken:      opts.AuthToken,
 	}
 
 	// Create online cache manager when online source is configured.
@@ -395,9 +414,15 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/v1/bin/", s.handleBin)
 	mux.HandleFunc("/", s.handleRoot)
 
+	// Wrap mux with optional auth middleware
+	handler := http.Handler(mux)
+	if s.authToken != "" {
+		handler = &authMiddleware{next: handler, token: s.authToken, logger: s.logger}
+	}
+
 	s.httpSrv = &http.Server{
 		Addr:         s.addr,
-		Handler:      &loggingHandler{next: mux, logger: s.logger, name: serverName},
+		Handler:      &loggingHandler{next: handler, logger: s.logger, name: serverName},
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  120 * time.Second,
@@ -463,7 +488,7 @@ func (s *Server) printStartupInfo() {
 	fmt.Printf("  软件包目录:   %s\n", s.packagesDir)
 	fmt.Printf("  客户端目录:   %s\n", s.binDir)
 	fmt.Printf("  监听地址:     %s\n", s.addr)
-	fmt.Printf("  软件包数量:   %d 个 (%s)\n", fileCount, formatSize(totalSize))
+	fmt.Printf("  软件包数量:   %d 个 (%s)\n", fileCount, util.FormatSize(totalSize))
 	if s.onlineFallback && s.onlineSrc != nil {
 		fmt.Printf("  在线回退:     已启用\n")
 	}
@@ -545,6 +570,11 @@ func isSupportedExtension(base string) bool {
 // Uses a worker pool for parallel checksum computation. The number of workers is
 // determined by s.scanWorkers (0 = runtime.NumCPU(), clamped to [1, 32]).
 func (s *Server) scanPackages(cache map[string]cacheEntry) error {
+	// Serialize concurrent scan calls — multiple on-demand downloads may
+	// trigger scans simultaneously.
+	s.scanMu.Lock()
+	defer s.scanMu.Unlock()
+
 	scanStart := time.Now()
 	if cache == nil {
 		cache = make(map[string]cacheEntry)
@@ -771,7 +801,7 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 	// Print discovery log for each valid file (jm.exe style).
 	for _, f := range files {
 		s.logger.Info("[scan] 发现: %s（%s/%s, 版本 %s, %s, %s）",
-			f.Filename, f.Platform, f.Architecture, f.Version, f.Browser, formatSize(f.Size))
+			f.Filename, f.Platform, f.Architecture, f.Version, f.Browser, util.FormatSize(f.Size))
 	}
 
 	s.mu.Lock()
@@ -782,7 +812,7 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 	computedSuccessfully := len(files) - cacheHits
 
 	s.logger.Info("[scan] 扫描完成: %d 个文件 (缓存命中 %d, 新计算 %d, 跳过 %d), 总大小 %s (耗时 %v)",
-		len(files), cacheHits, computedSuccessfully, skippedUnsupported, formatSize(totalSize), time.Since(scanStart).Round(time.Millisecond))
+		len(files), cacheHits, computedSuccessfully, skippedUnsupported, util.FormatSize(totalSize), time.Since(scanStart).Round(time.Millisecond))
 
 	return nil
 }
@@ -790,7 +820,7 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 // parsePackageFile parses a filename to extract metadata and returns a PackageFile.
 func (s *Server) parsePackageFile(scanner *repo.Scanner, filename string, size int64, checksum string) PackageFile {
 	// Strip extension for matching
-	nameNoExt := stripExtension(filename)
+	nameNoExt := util.StripExtension(filename)
 
 	// Use scanner to detect metadata
 	match := scanner.ScanEntry(nameNoExt, filename, true, "", "")
@@ -813,40 +843,18 @@ func (s *Server) parsePackageFile(scanner *repo.Scanner, filename string, size i
 	}
 
 	if match.Platform != "" {
-		pkg.Platform = normalizePlatform(match.Platform)
+		pkg.Platform = match.Platform
 	} else {
 		pkg.Platform = "unknown"
 	}
 
 	if match.Arch != "" {
-		pkg.Architecture = normalizeArch(match.Arch)
+		pkg.Architecture = match.Arch
 	} else {
 		pkg.Architecture = "unknown"
 	}
 
 	return pkg
-}
-
-// normalizePlatform converts scanner platform names to serve API names.
-func normalizePlatform(p string) string {
-	switch p {
-	case "darwin":
-		return "macos"
-	default:
-		return p
-	}
-}
-
-// normalizeArch converts scanner arch names to serve API names.
-func normalizeArch(a string) string {
-	switch a {
-	case "amd64":
-		return "x64"
-	case "386":
-		return "x86"
-	default:
-		return a
-	}
 }
 
 // computeXXH3 computes the XXH3 64-bit hash of a file and returns it as a hex string.
@@ -903,6 +911,8 @@ func (s *Server) saveCache(cache map[string]cacheEntry) error {
 		return err
 	}
 
+	s.cacheMu.Lock()
+	defer s.cacheMu.Unlock()
 	return os.WriteFile(s.cachePath, data, 0o600)
 }
 
@@ -988,7 +998,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 				s.logger.Info("[download] 本地未找到，触发在线回退: %s", filename)
 				if localPath, ferr := s.fetchOnlinePackage(filename); ferr == nil {
 					if dlInfo, statErr := os.Stat(localPath); statErr == nil {
-						s.logger.Info("[online] 在线回退成功: %s (%s)", filename, formatSize(dlInfo.Size()))
+						s.logger.Info("[online] 在线回退成功: %s (%s)", filename, util.FormatSize(dlInfo.Size()))
 					} else {
 						s.logger.Info("[online] 在线回退成功: %s", filename)
 					}
@@ -1014,7 +1024,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.logger.Debug("[download] 本地命中: %s (%s)", filename, formatSize(info.Size()))
+	s.logger.Debug("[download] 本地命中: %s (%s)", filename, util.FormatSize(info.Size()))
 	// Serve the file with Range support
 	servePackageFile(w, r, fullPath)
 }
@@ -1053,7 +1063,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	uptime := int64(time.Since(s.startTime).Seconds())
 
-	s.logger.Debug("[status] 返回服务状态: uptime=%ds files=%d size=%s", uptime, fileCount, formatSize(totalSize))
+	s.logger.Debug("[status] 返回服务状态: uptime=%ds files=%d size=%s", uptime, fileCount, util.FormatSize(totalSize))
 
 	resp := StatusResponse{
 		Status: "ok",
@@ -1112,7 +1122,7 @@ func (s *Server) handleBin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.logger.Debug("[bin] 发送: %s (%s)", filename, formatSize(info.Size()))
+	s.logger.Debug("[bin] 发送: %s (%s)", filename, util.FormatSize(info.Size()))
 
 	// Serve the file
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", info.Name()))
@@ -1164,7 +1174,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 			Platform:      bf.Platform,
 			Arch:          bf.Arch,
 			PlatformLabel: platLabel,
-			Size:          formatSize(bf.Size),
+			Size:          util.FormatSize(bf.Size),
 		}
 	}
 
@@ -1181,7 +1191,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 			"便携模式：数据存储在 bws-data/ 子目录，U 盘随身携带",
 		},
 		FileCount:      fileCount,
-		TotalSize:      formatSize(totalSize),
+		TotalSize:      util.FormatSize(totalSize),
 		BinFiles:       binFileViews,
 		BaseURL:        baseURL,
 		SyncEnabled:    s.syncMgr != nil,
@@ -1249,6 +1259,7 @@ func listBinFiles(binDir string) []binFile {
 }
 
 // detectPlatformArch detects platform and architecture from a binary filename.
+// Returns canonical names: windows/darwin/linux and amd64/386/arm64.
 func detectPlatformArch(filename string) (string, string) {
 	lower := strings.ToLower(filename)
 
@@ -1257,22 +1268,22 @@ func detectPlatformArch(filename string) (string, string) {
 	platform := "unknown"
 	switch {
 	case strings.Contains(lower, "darwin") || strings.Contains(lower, "macos") || strings.Contains(lower, "_mac") || strings.Contains(lower, "-mac"):
-		platform = "macos"
+		platform = "darwin"
 	case strings.Contains(lower, "linux"):
 		platform = "linux"
 	case strings.Contains(lower, ".exe") || strings.Contains(lower, "win") || strings.Contains(lower, "windows"):
 		platform = "windows"
 	}
 
-	// Arch detection
+	// Arch detection — returns canonical arch names.
 	arch := ""
 	switch {
 	case strings.Contains(lower, "arm64") || strings.Contains(lower, "aarch64"):
 		arch = "arm64"
 	case strings.Contains(lower, "x86_64") || strings.Contains(lower, "amd64") || strings.Contains(lower, "x64"):
-		arch = "x64"
+		arch = "amd64"
 	case strings.Contains(lower, "x86") || strings.Contains(lower, "i386") || strings.Contains(lower, "386"):
-		arch = "x86"
+		arch = "386"
 	}
 
 	return platform, arch
@@ -1308,65 +1319,22 @@ func safeJoin(baseDir, name string) (string, error) {
 	return absFull, nil
 }
 
-// installerExtensions lists known installer/archive extensions that should be stripped.
-// Order matters: compound extensions like .tar.gz must come before .gz.
-var installerExtensions = []string{
-	".tar.gz",
-	".tar.bz2",
-	".tar.xz",
-	".tar.zst",
-	".tar",
-	".exe",
-	".msi",
-	".zip",
-	".7z",
-	".rar",
-	".dmg",
-	".pkg",
-	".deb",
-	".rpm",
-	".apk",
-	".gz",
-	".bz2",
-	".xz",
-}
-
-// stripExtension removes known installer/archive extensions from a filename.
-// If no known extension is found, it removes the last extension using filepath.Ext.
-func stripExtension(name string) string {
-	lower := strings.ToLower(name)
-	for _, ext := range installerExtensions {
-		if strings.HasSuffix(lower, ext) {
-			return name[:len(name)-len(ext)]
-		}
-	}
-	// Fallback: remove last extension
-	ext := filepath.Ext(name)
-	if ext != "" {
-		return name[:len(name)-len(ext)]
-	}
-	return name
-}
-
-// formatSize formats a byte count for display.
-func formatSize(bytes int64) string {
-	const unit = 1024
-	if bytes < unit {
-		return fmt.Sprintf("%d B", bytes)
-	}
-	div, exp := int64(unit), 0
-	for n := bytes / unit; n >= unit; n /= unit {
-		div *= unit
-		exp++
-	}
-	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
-}
-
 // --- Online fallback ---
 
 // mergeManifest merges local and online package lists, deduplicating by
 // filename. Local entries take priority because they carry real checksums.
+// However, when a local entry has incomplete metadata (e.g. platform/arch
+// could not be parsed from the filename), the missing fields are filled in
+// from the corresponding online entry so that client-side filtering works.
 func mergeManifest(local, online []PackageFile) []PackageFile {
+	// Build a lookup of online entries by filename for metadata backfill.
+	onlineByName := make(map[string]PackageFile, len(online))
+	for _, f := range online {
+		if f.Filename != "" {
+			onlineByName[f.Filename] = f
+		}
+	}
+
 	seen := make(map[string]bool, len(local)+len(online))
 	merged := make([]PackageFile, 0, len(local)+len(online))
 	for _, f := range local {
@@ -1374,6 +1342,25 @@ func mergeManifest(local, online []PackageFile) []PackageFile {
 			continue
 		}
 		seen[f.Filename] = true
+		// Backfill incomplete metadata from the online entry.
+		if online, ok := onlineByName[f.Filename]; ok {
+			if f.Platform == "" || f.Platform == "unknown" {
+				f.Platform = online.Platform
+			}
+			if f.Architecture == "" || f.Architecture == "unknown" {
+				f.Architecture = online.Architecture
+			}
+			if f.Channel == "" {
+				f.Channel = online.Channel
+			}
+			if f.Browser == "" {
+				f.Browser = online.Browser
+			}
+			if f.Version == "" || f.Version == "unknown" {
+				f.Version = online.Version
+				f.MajorVersion = online.MajorVersion
+			}
+		}
 		merged = append(merged, f)
 	}
 	for _, f := range online {
@@ -1448,7 +1435,7 @@ func (s *Server) doOnlineDownload(filename string) error {
 
 	s.logger.Info("[online] 开始在线下载: %s", filename)
 	s.logger.Debug("[online] 下载详情: url=%s browser=%s version=%s platform=%s arch=%s size=%s",
-		info.url, info.browser, info.version, info.platform, info.arch, formatSize(info.size))
+		info.url, info.browser, info.version, info.platform, info.arch, util.FormatSize(info.size))
 
 	// SyncSource.Download has its own 30-minute timeout via DefaultDownload.
 	downloadStart := time.Now()
@@ -1470,7 +1457,7 @@ func (s *Server) doOnlineDownload(filename string) error {
 		if err := os.Rename(downloadedPath, destPath); err != nil {
 			// Rename can fail across volumes/devices; fall back to a copy.
 			s.logger.Debug("[online] 重命名失败，尝试复制: %s -> %s", downloadedPath, destPath)
-			if copyErr := copyFile(downloadedPath, destPath); copyErr != nil {
+			if _, copyErr := util.CopyFile(downloadedPath, destPath); copyErr != nil {
 				return fmt.Errorf("重命名下载文件失败: %w", copyErr)
 			}
 			_ = os.Remove(downloadedPath)
@@ -1479,7 +1466,7 @@ func (s *Server) doOnlineDownload(filename string) error {
 
 	// Log final file size.
 	if fi, statErr := os.Stat(destPath); statErr == nil {
-		s.logger.Debug("[online] 文件已就绪: %s (%s)", destPath, formatSize(fi.Size()))
+		s.logger.Debug("[online] 文件已就绪: %s (%s)", destPath, util.FormatSize(fi.Size()))
 	}
 
 	// Re-scan packages so the new file gets a checksum and is added to the
@@ -1496,43 +1483,26 @@ func (s *Server) doOnlineDownload(filename string) error {
 }
 
 // findOnlinePackage looks up the download info for a filename, refreshing the
-// online cache on miss.
+// online cache on miss or when the download URL is missing (e.g. cache was
+// loaded from an older disk file without URL data).
 func (s *Server) findOnlinePackage(filename string) (onlinePackage, error) {
 	info, ok := s.onlineCacheMgr.FindPackage(filename)
-	if ok {
+	if ok && info.url != "" {
 		return info, nil
 	}
 
-	// Not in cache: refresh all browsers so we can resolve any filename
-	// regardless of which browser/platform/arch it belongs to.
+	// Not in cache or URL missing: refresh all browsers so we can resolve
+	// any filename regardless of which browser/platform/arch it belongs to.
 	s.onlineCacheMgr.RefreshAll()
 
 	info, ok = s.onlineCacheMgr.FindPackage(filename)
 	if !ok {
 		return onlinePackage{}, fmt.Errorf("在线源中未找到文件: %s", filename)
 	}
+	if info.url == "" {
+		return onlinePackage{}, fmt.Errorf("在线源中未找到 %s 的下载地址: %s", filename, filename)
+	}
 	return info, nil
-}
-
-// copyFile copies src to dst. Used as a fallback when os.Rename fails (e.g.
-// cross-device). It does not preserve permissions beyond what the source has.
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-
-	out, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	return out.Sync()
 }
 
 // --- Sync API Handlers ---

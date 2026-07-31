@@ -104,17 +104,17 @@ func (m *Manager) Launch(opts Options) (*Process, error) {
 		return nil, fmt.Errorf("resolving version %s@%s: %w. Install it first with 'bws i %s@%s'", opts.Browser, opts.Version, err, opts.Browser, opts.Version)
 	}
 
-	// Print matching versions to stdout (user-visible output)
+	// 通过日志输出匹配的版本信息（避免直接写入 stdout）
 	if len(matches) == 1 {
-		fmt.Fprintf(os.Stdout, "使用 %s@%s\n", opts.Browser, matches[0].Version)
+		log.Info("使用 %s@%s", opts.Browser, matches[0].Version)
 	} else {
-		fmt.Fprintf(os.Stdout, "%s@%s 的匹配版本:\n", opts.Browser, opts.Version)
+		log.Info("%s@%s 的匹配版本:", opts.Browser, opts.Version)
 		for i, v := range matches {
 			prefix := "  "
 			if i == 0 {
 				prefix = "> "
 			}
-			fmt.Fprintf(os.Stdout, "%s%s\n", prefix, v.Version)
+			log.Info("%s%s", prefix, v.Version)
 		}
 	}
 
@@ -273,9 +273,14 @@ func (m *Manager) buildArgs(desc *browser.BrowserDescriptor, opts Options, profi
 		args = append(args, fpArgs...)
 	}
 
-	// URLs to open
-	for _, url := range opts.URLs {
-		args = append(args, url)
+	// URLs to open — insert "--" separator before URLs so that any URL
+	// starting with "-" is treated as a positional argument (URL) rather
+	// than a command-line flag, preventing argument injection.
+	if len(opts.URLs) > 0 {
+		args = append(args, "--")
+		for _, url := range opts.URLs {
+			args = append(args, url)
+		}
 	}
 
 	// Extra args (last, so they can override)
@@ -315,7 +320,7 @@ func writeFirefoxProxyPrefs(profileDir, proxyURL string) error {
 		return fmt.Errorf("parsing proxy URL: %w", err)
 	}
 
-	host := parsed.Hostname()
+	host := jsEscapeString(parsed.Hostname())
 	port := parsed.Port()
 	if port == "" {
 		switch parsed.Scheme {
@@ -324,6 +329,10 @@ func writeFirefoxProxyPrefs(profileDir, proxyURL string) error {
 		case "socks5", "socks5h":
 			port = "1080"
 		}
+	}
+	// Validate port is numeric to prevent JS injection
+	if !isNumeric(port) {
+		return fmt.Errorf("invalid proxy port: %s", port)
 	}
 
 	var content string
@@ -417,4 +426,27 @@ func (m *Manager) BuildCommandPreview(opts Options) (string, []string, error) {
 	}
 
 	return exePath, args, nil
+}
+
+// jsEscapeString escapes a string for safe embedding in a JavaScript
+// double-quoted string literal (e.g. in Firefox user.js prefs).
+func jsEscapeString(s string) string {
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, `"`, `\"`)
+	s = strings.ReplaceAll(s, "\n", `\n`)
+	s = strings.ReplaceAll(s, "\r", `\r`)
+	return s
+}
+
+// isNumeric returns true if s consists only of ASCII digits.
+func isNumeric(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }

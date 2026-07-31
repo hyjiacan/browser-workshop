@@ -13,6 +13,7 @@ import (
 
 type mockConfig struct {
 	defaultBrowser string
+	defaultVersion string
 	defaultChannel string
 	logLevel       string
 	dataDir        string
@@ -25,6 +26,11 @@ type mockConfig struct {
 func (m *mockConfig) DefaultBrowser() string { return m.defaultBrowser }
 func (m *mockConfig) SetDefaultBrowser(browser string) error {
 	m.defaultBrowser = browser
+	return nil
+}
+func (m *mockConfig) DefaultVersion() string { return m.defaultVersion }
+func (m *mockConfig) SetDefaultVersion(version string) error {
+	m.defaultVersion = version
 	return nil
 }
 func (m *mockConfig) DefaultChannel() string {
