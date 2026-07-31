@@ -7,12 +7,14 @@
 | Path | Method | Description |
 |------|--------|-------------|
 | `/` | GET | HTML help page / Web interface |
-| `/api/v1/manifest` | GET | File manifest (with XXH3 checksum) |
+| `/api/v1/manifest` | GET | File manifest (local + online cache merged, with XXH3 checksum) |
 | `/api/v1/download/{filename}` | GET | File download (supports resume) |
 | `/api/v1/status` | GET | Service status |
 | `/api/v1/sync/status` | GET | Sync status |
 | `/api/v1/sync/trigger` | POST | Manually trigger sync |
-| `/bin/{filename}` | GET | Client binary download |
+| `/api/v1/bin/{filename}` | GET | Client binary download |
+
+> **Manifest merge mechanism**: When `online-fallback` is enabled, `manifest` returns a merged result of local packages directory files and online source cached versions (deduplicated). Local files carry real XXH3 checksums; online cached versions have empty checksums (computed after download). Filtering is done client-side.
 
 ## Basic Information
 
@@ -82,7 +84,7 @@ Returns an HTML page containing:
 
 ## GET /api/v1/manifest
 
-Get the file manifest, containing information about all recognizable browser installer packages and their XXH3 checksums.
+Get the file manifest, containing local packages directory files and online source cached versions (when `online-fallback` is enabled). Returns entries for all platforms, architectures, versions, and channels; filtering is done client-side.
 
 ### Request
 
@@ -99,6 +101,8 @@ GET /api/v1/manifest
     {
       "filename": "Chrome_120.0.6099.109_Windows_x64.exe",
       "version": "120.0.6099.109",
+      "browser": "chrome",
+      "channel": "stable",
       "major_version": "120",
       "platform": "windows",
       "architecture": "x64",
@@ -106,13 +110,15 @@ GET /api/v1/manifest
       "checksum": "xxh3:abcdef1234567890"
     },
     {
-      "filename": "Firefox_121.0_Linux_x64.tar.bz2",
-      "version": "121.0",
-      "major_version": "121",
-      "platform": "linux",
-      "architecture": "x64",
-      "size": 67108864,
-      "checksum": "xxh3:0987654321fedcba"
+      "filename": "Firefox Setup 141.0.exe",
+      "version": "141.0",
+      "browser": "firefox",
+      "channel": "stable",
+      "major_version": "141",
+      "platform": "windows",
+      "architecture": "amd64",
+      "size": 57671680,
+      "checksum": ""
     }
   ],
   "server": {
@@ -123,6 +129,8 @@ GET /api/v1/manifest
 }
 ```
 
+> Local files have real XXH3 checksums; online cached versions have empty checksum strings, computed only after download.
+
 ### Response Field Descriptions
 
 | Field | Type | Description |
@@ -131,11 +139,13 @@ GET /api/v1/manifest
 | `data` | array | File list |
 | `data[].filename` | string | Filename (relative path) |
 | `data[].version` | string | Version number |
+| `data[].browser` | string | Browser name (chrome / firefox / chromium) |
+| `data[].channel` | string | Release channel (stable / beta / dev / canary / esr) |
 | `data[].major_version` | string | Major version number |
 | `data[].platform` | string | Platform (windows / linux / macos) |
 | `data[].architecture` | string | Architecture (x64 / x86 / arm64) |
 | `data[].size` | number | File size (bytes) |
-| `data[].checksum` | string | XXH3 checksum, format is `xxh3:` + 16-digit hex |
+| `data[].checksum` | string | XXH3 checksum, format is `xxh3:` + 16-digit hex; empty for online cached versions |
 | `server` | object | Server information |
 | `server.name` | string | Service name |
 | `server.version` | string | Server version |
@@ -343,14 +353,14 @@ curl -X POST http://localhost:8080/api/v1/sync/trigger
 
 ---
 
-## GET /bin/{filename}
+## GET /api/v1/bin/{filename}
 
 Download client binary files (only available when bin directory exists).
 
 ### Request
 
 ```
-GET /bin/{filename}
+GET /api/v1/bin/{filename}
 ```
 
 ### Path Parameters
@@ -367,7 +377,7 @@ Returns file content, supports resume, behavior is consistent with the download 
 
 ```bash
 # Download Windows version of bws
-curl -O http://localhost:8080/bin/bws-windows-amd64.exe
+curl -O http://localhost:8080/api/v1/bin/bws-windows-amd64.exe
 ```
 
 ---

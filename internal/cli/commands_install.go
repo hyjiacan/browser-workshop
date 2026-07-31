@@ -130,7 +130,7 @@ func runInstall(ctx *Context, args []string) error {
 	if err != nil {
 		// 如果版本是渠道名，如 latest、beta 等，尝试从指定渠道获取
 		if spec.IsAlias {
-			versions, listErr := ctx.Source.ListVersions(spec.Browser, channel)
+			versions, listErr := ctx.Source.ListVersions(spec.Browser, channel, "")
 			if listErr == nil && len(versions) > 0 {
 				versionInfo = versions[0]
 			} else {

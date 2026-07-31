@@ -145,7 +145,7 @@
 | CFG-01 | 正常 — 查看所有配置 | `bws cfg show` | 显示所有配置项及当前值 | P0 |
 | CFG-02 | 正常 — 获取配置项 | `bws cfg get repo-path` | 显示该配置项的值 | P0 |
 | CFG-03 | 正常 — 设置配置项 | `bws cfg set repo-path D:\browsers` | 保存配置 | P0 |
-| CFG-04 | 正常 — 设置数据源开关 | `bws cfg set omaha-source false` | 禁用 Omaha 源 | P1 |
+| CFG-04 | 正常 — 设置数据源开关 | `bws cfg set firefox-ftp false` | 禁用 Firefox 源 | P1 |
 | CFG-05 | 异常 — 配置项不存在 | `bws cfg get not-exist` | 报错 "未知配置项" | P1 |
 | CFG-06 | 异常 — 值类型错误 | `bws cfg set disk-threshold abc` | 报错 "值类型错误" | P2 |
 
@@ -371,11 +371,9 @@
 | ID | 场景 | 输入 | 预期 | 优先级 |
 |----|------|------|------|--------|
 | SRC-01 | 正常 — serve 源优先 | `bws ls -R gc` (serve 可用) | 优先从 serve 获取 | P0 |
-| SRC-02 | 正常 — Omaha 源查询 Chrome | `bws ls -R gc` (serve 不可用) | 从 Omaha 获取 Chrome 版本 | P0 |
-| SRC-03 | 正常 — Omaha 源查询 Chromium | `bws ls -R cm` | 从 Omaha 获取 Chromium 版本 | P0 |
 | SRC-04 | 正常 — Firefox 源 | `bws ls -R ff` | 从 Mozilla API 获取 Firefox 版本 | P0 |
-| SRC-05 | 正常 — 按浏览器过滤源 | `bws ls -R ff` | 不查询 Omaha 源（Firefox 不支持） | P0 |
-| SRC-06 | 正常 — 源开关生效 | `bws cfg set omaha-source false` | 查询时不再访问 Omaha 源 | P1 |
+| SRC-05 | 正常 — 按浏览器过滤源 | `bws ls -R ff` | 仅查询支持 Firefox 的源 | P0 |
+| SRC-06 | 正常 — 源开关生效 | `bws cfg set firefox-ftp false` | 查询时不再访问 Firefox 源 | P1 |
 | SRC-07 | 边界 — 所有源禁用 | `bws ls -R gc` (所有源禁用) | 提示 "没有可用的远程源" | P1 |
 
 ---

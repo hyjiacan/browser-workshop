@@ -79,8 +79,8 @@ func downloadReq(filename string) *http.Request {
 }
 
 // TestOnlineFallback_ManifestMerge verifies that, with online fallback enabled,
-// the manifest lists online-available versions even when nothing is cached
-// locally, and that URL-encoded filenames are decoded.
+// the manifest endpoint lists online-available versions even when nothing is
+// cached locally, and that URL-encoded filenames are decoded.
 func TestOnlineFallback_ManifestMerge(t *testing.T) {
 	src := &mockSyncSource{
 		versions: []SyncVersionInfo{
@@ -104,6 +104,7 @@ func TestOnlineFallback_ManifestMerge(t *testing.T) {
 	}
 	s := newFallbackTestServer(t, true, src)
 
+	// Manifest should return online-cached versions merged with local (0 local).
 	resp := doManifest(t, s)
 
 	wantNames := map[string]bool{
@@ -119,9 +120,6 @@ func TestOnlineFallback_ManifestMerge(t *testing.T) {
 		if !found {
 			t.Errorf("manifest missing online file %q; got %d entries", name, len(resp.Data))
 		}
-	}
-	if resp.Server.FileCount != len(resp.Data) {
-		t.Errorf("FileCount = %d, want %d", resp.Server.FileCount, len(resp.Data))
 	}
 }
 

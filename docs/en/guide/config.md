@@ -24,7 +24,6 @@ Configuration information:
 
   Data source switches:
     Serve source:     true
-    Omaha source:     true
     Firefox FTP:  true
 
   Disk space threshold:   5 GB (prompts when below this value)
@@ -91,7 +90,6 @@ Each configuration item supports multiple equivalent key names that can be used 
 | `repo-path` | `repo` |
 | `source` | `remote-source`, `remote` |
 | `source-serve` | `serve-source` |
-| `source-omaha` | `omaha-source` |
 | `source-firefox-ftp` | `firefox-ftp` |
 | `disk-threshold` | `disk-space-threshold`, `space-threshold` |
 | `proxy` | — |
@@ -228,26 +226,6 @@ bws cfg set source ""
 
 `source` and `remote-source` are equivalent; setting either one works.
 
-### source-omaha
-
-Chrome Omaha data source switch.
-
-| Attribute | Value |
-|------|-----|
-| Default value | `true` |
-| Optional values | `true`, `false` |
-| Description | Whether to enable the Chrome Omaha protocol data source |
-
-Example:
-
-```bash
-# Disable Omaha source
-bws cfg set source-omaha false
-
-# Re-enable
-bws cfg set source-omaha true
-```
-
 ### source-firefox-ftp
 
 Firefox data source switch.
@@ -336,7 +314,7 @@ bws supports multiple version data sources, queried in a fixed priority order:
 | Priority | Data Source | Description | Configuration Method |
 |--------|--------|------|----------|
 | 1 (Highest) | Offline Source | Distribution service built via `bws sv` | `bws cfg set source <url>` |
-| 2 (Lowest) | Built-in Online Source | Browser official update channels (Firefox FTP, Chromium GCS) | Built-in, no configuration needed |
+| 2 (Lowest) | Built-in Online Source | Browser official update channels (Firefox FTP) | Built-in, no configuration needed |
 
 ### Manually Downloading Chrome Historical Versions
 

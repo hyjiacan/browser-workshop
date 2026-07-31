@@ -9,6 +9,8 @@ import (
 	neturl "net/url"
 	"strings"
 	"time"
+
+	bmlog "github.com/bws/bws/internal/log"
 )
 
 // HTTPSource provides browser versions from a bm serve HTTP endpoint.
@@ -31,6 +33,8 @@ type manifestV1Response struct {
 type manifestV1File struct {
 	Filename     string `json:"filename"`
 	Version      string `json:"version"`
+	Browser      string `json:"browser"`
+	Channel      string `json:"channel"`
 	MajorVersion string `json:"major_version"`
 	Platform     string `json:"platform"`
 	Architecture string `json:"architecture"`
@@ -148,6 +152,8 @@ func (s *HTTPSource) SupportsBrowser(browser string) bool {
 }
 
 // List returns all available versions matching the filter.
+// It queries the manifest endpoint which returns local + online-cached files
+// as a single merged list. Filtering is done client-side via FilterVersions.
 func (s *HTTPSource) List(ctx context.Context, filter *Filter) ([]VersionInfo, error) {
 	filter = applyDefaults(filter)
 
@@ -156,60 +162,39 @@ func (s *HTTPSource) List(ctx context.Context, filter *Filter) ([]VersionInfo, e
 		return nil, err
 	}
 
-	var results []VersionInfo
-
-	if v1Manifest != nil {
-		results = s.processV1Manifest(v1Manifest, filter)
+	if v1Manifest == nil {
+		return nil, nil
 	}
 
-	return results, nil
+	// Convert manifest entries to VersionInfo, then apply shared filtering.
+	all := s.manifestToVersions(v1Manifest)
+	return FilterVersions(all, filter), nil
 }
 
-// processV1Manifest processes the new v1 API response and returns filtered version info.
-func (s *HTTPSource) processV1Manifest(m *manifestV1Response, filter *Filter) []VersionInfo {
+// manifestToVersions converts the v1 manifest response into a slice of
+// VersionInfo. It uses the explicit Browser/Channel fields from the manifest
+// when available, falling back to filename-based detection for older serve
+// instances that don't include those fields.
+func (s *HTTPSource) manifestToVersions(m *manifestV1Response) []VersionInfo {
 	var results []VersionInfo
-
 	for _, f := range m.Data {
-		// Detect browser from filename
-		browser := detectBrowserFromFilename(f.Filename)
+		// Use explicit browser field if present, otherwise detect from filename.
+		browser := f.Browser
+		if browser == "" {
+			browser = detectBrowserFromFilename(f.Filename)
+		}
 		if browser == "" {
 			continue
 		}
 
-		// Filter by browser
-		if filter.Browser != "" && !strings.EqualFold(filter.Browser, browser) {
-			continue
-		}
-
-		// Determine channel (from filename, since v1 API doesn't include it directly)
+		// Use explicit channel field if present, otherwise detect from filename.
 		channel := detectChannelFromFilename(f.Filename)
-
-		// Filter by channel
-		if filter.Channel != "" && filter.Channel != ChannelUnknown && filter.Channel != channel {
-			continue
+		if f.Channel != "" {
+			channel = Channel(f.Channel)
 		}
 
-		// Normalize platform
 		platform := normalizePlatform(f.Platform)
-
-		// Filter by platform
-		if filter.Platform != "" && filter.Platform != PlatformUnknown && filter.Platform != platform {
-			continue
-		}
-
-		// Normalize arch
 		arch := normalizeArch(f.Architecture)
-
-		// Filter by arch
-		if filter.Arch != "" && filter.Arch != ArchUnknown && filter.Arch != arch {
-			continue
-		}
-
-		// Filter by version prefix
-		if filter.VersionPrefix != "" && !strings.HasPrefix(f.Version, filter.VersionPrefix) {
-			continue
-		}
-
 		downloadURL := fmt.Sprintf("%s/api/v1/download/%s", s.baseURL, neturl.PathEscape(f.Filename))
 
 		results = append(results, VersionInfo{
@@ -223,7 +208,6 @@ func (s *HTTPSource) processV1Manifest(m *manifestV1Response, filter *Filter) []
 			SHA256:      f.Checksum,
 		})
 	}
-
 	return results
 }
 
@@ -305,9 +289,10 @@ func (s *HTTPSource) Resolve(ctx context.Context, browser string, version string
 }
 
 // fetchManifest fetches the manifest from the server.
-// When filter is non-nil, browser/platform/arch/channel query parameters are
-// forwarded to the server so it can narrow the manifest (and, for online
-// fallback servers, only query the requested browser from online sources).
+// The server returns all entries (local + online cache merged); query
+// parameters are sent for informational purposes but the server does not
+// filter by them. Filtering is performed client-side after receiving the
+// full manifest.
 // Returns (v1Manifest, error).
 func (s *HTTPSource) fetchManifest(ctx context.Context, filter *Filter) (*manifestV1Response, error) {
 	v1URL := s.baseURL + "/api/v1/manifest"
@@ -315,10 +300,15 @@ func (s *HTTPSource) fetchManifest(ctx context.Context, filter *Filter) (*manife
 		v1URL += "?" + params.Encode()
 	}
 
+	bmlog.Debug("[http-source] 请求 manifest: %s", v1URL)
+
 	v1Resp, v1Body, err := s.fetchJSON(ctx, v1URL)
 	if err != nil {
+		bmlog.Debug("[http-source] 请求失败: %v", err)
 		return nil, fmt.Errorf("fetching manifest: %w", err)
 	}
+	bmlog.Debug("[http-source] 响应状态码: %d 大小=%d", v1Resp.StatusCode, len(v1Body))
+
 	if v1Resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("manifest request returned status %d", v1Resp.StatusCode)
 	}
@@ -329,6 +319,7 @@ func (s *HTTPSource) fetchManifest(ctx context.Context, filter *Filter) (*manife
 	}
 
 	if v1.Status == "ok" && v1.Data != nil {
+		bmlog.Debug("[http-source] manifest 解析成功: %d 个文件", len(v1.Data))
 		return &v1, nil
 	}
 

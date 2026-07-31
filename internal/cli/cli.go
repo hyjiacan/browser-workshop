@@ -157,8 +157,6 @@ type SourceSettings interface {
 	ClearRemoteSource() error
 	IsServeSourceEnabled() bool
 	SetServeSourceEnabled(v bool) error
-	IsOmahaSourceEnabled() bool
-	SetOmahaSourceEnabled(v bool) error
 	IsFirefoxFTPEnabled() bool
 	SetFirefoxFTPEnabled(v bool) error
 }
@@ -323,7 +321,7 @@ type ShortcutProvider interface {
 // SourceProvider provides browser version data sources.
 type SourceProvider interface {
 	ResolveVersion(browser string, version string) (source.VersionInfo, error)
-	ListVersions(browser string, channel string) ([]source.VersionInfo, error)
+	ListVersions(browser string, channel string, versionPrefix string) ([]source.VersionInfo, error)
 	// Describe returns a human-readable description of the data source(s).
 	Describe() string
 }

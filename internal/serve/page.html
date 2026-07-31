@@ -359,7 +359,7 @@
           {{if eq .Platform "windows"}}&#x1F4BD;{{else if eq .Platform "macos"}}&#x1F4F1;{{else if eq .Platform "linux"}}&#x1F427;{{else}}&#x1F4C1;{{end}}
         </div>
         <div class="file-info">
-          <div class="file-name"><a href="/bin/{{.File}}">{{.Name}}</a></div>
+          <div class="file-name"><a href="/api/v1/bin/{{.File}}">{{.Name}}</a></div>
           <div class="file-meta">{{.PlatformLabel}} &middot; {{.Size}}</div>
         </div>
         <span class="file-size">{{.Size}}</span>

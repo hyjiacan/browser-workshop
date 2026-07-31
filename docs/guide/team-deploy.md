@@ -21,7 +21,7 @@ graph TD
 
 上图展示了完整的团队离线部署架构：
 
-1. **公网下载源**：GitHub Release、Firefox FTP、Chromium GCS、chromedownloads.net 等官方及第三方源
+1. **公网下载源**：GitHub Release、Firefox FTP、chromedownloads.net 等官方及第三方源
 2. **中央分发服务器**：运行 `bws sv`，负责从公网同步浏览器安装包并存储在 `packages/` 目录
 3. **团队成员客户端**：运行 `bws r` / `bws i`，通过局域网从服务器获取浏览器版本
 4. **数据流向**：服务器从公网同步 -> 团队成员从服务器安装/运行

@@ -19,7 +19,6 @@ func runConfigShow(ctx *Context, args []string) error {
 	ctx.Printf("  repo-path:           %s\n", ctx.Cfg.Repo.GetRepoPath())
 	ctx.Printf("\n  数据源开关:\n")
 	ctx.Printf("    source-serve:      %s\n", boolStr(ctx.Cfg.Source.IsServeSourceEnabled()))
-	ctx.Printf("    source-omaha:      %s\n", boolStr(ctx.Cfg.Source.IsOmahaSourceEnabled()))
 	ctx.Printf("    source-firefox-ftp:%s\n", boolStr(ctx.Cfg.Source.IsFirefoxFTPEnabled()))
 	ctx.Printf("\n  disk-threshold:      %d GB (低于此值会提示)\n", ctx.Cfg.Disk.GetDiskSpaceThresholdGB())
 
@@ -44,12 +43,16 @@ func runConfigShow(ctx *Context, args []string) error {
 			ctx.Printf("    %s -> %s\n", name, target)
 		}
 	}
+
+	ctx.Println()
+	ctx.Printf("提示: 您也可以直接编辑配置文件进行高级设置:\n  %s\n", ctx.Cfg.Data.ConfigPath())
 	return nil
 }
 
 func runConfigGet(ctx *Context, args []string) error {
 	if len(args) == 0 {
 		printConfigKeyList(ctx.Stdout, readableConfigKeys(), false)
+		ctx.Printf("提示: 您也可以直接编辑配置文件进行高级设置:\n  %s\n", ctx.Cfg.Data.ConfigPath())
 		return nil
 	}
 
@@ -74,8 +77,6 @@ func runConfigGet(ctx *Context, args []string) error {
 		}
 	case "source-serve", "serve-source":
 		ctx.Println(boolStr(ctx.Cfg.Source.IsServeSourceEnabled()))
-	case "source-omaha", "omaha-source":
-		ctx.Println(boolStr(ctx.Cfg.Source.IsOmahaSourceEnabled()))
 	case "source-firefox-ftp", "firefox-ftp":
 		ctx.Println(boolStr(ctx.Cfg.Source.IsFirefoxFTPEnabled()))
 	case "disk-threshold", "disk-space-threshold", "space-threshold":
@@ -110,6 +111,7 @@ func runConfigGet(ctx *Context, args []string) error {
 func runConfigSet(ctx *Context, args []string) error {
 	if len(args) == 0 {
 		printConfigKeyList(ctx.Stdout, writableConfigKeys(), true)
+		ctx.Printf("提示: 您也可以直接编辑配置文件进行高级设置:\n  %s\n", ctx.Cfg.Data.ConfigPath())
 		return nil
 	}
 	if len(args) < 2 {
@@ -180,17 +182,6 @@ func runConfigSet(ctx *Context, args []string) error {
 			ctx.Println("Serve 源已启用")
 		} else {
 			ctx.Println("Serve 源已禁用")
-		}
-
-	case "source-omaha", "omaha-source":
-		enabled := parseBool(value)
-		if err := ctx.Cfg.Source.SetOmahaSourceEnabled(enabled); err != nil {
-			return fmt.Errorf("设置 Omaha 源开关失败: %w", err)
-		}
-		if enabled {
-			ctx.Println("Omaha 源已启用")
-		} else {
-			ctx.Println("Omaha 源已禁用")
 		}
 
 	case "source-firefox-ftp", "firefox-ftp":

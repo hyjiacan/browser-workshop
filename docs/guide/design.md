@@ -35,9 +35,7 @@ graph TB
     end
 
     subgraph Online["在线源"]
-        OMAHA["Chrome Omaha"]
         FFTP["Firefox FTP"]
-        GCS["Chromium GCS"]
     end
 
     CLI --> CFG
@@ -50,15 +48,11 @@ graph TB
     LAUNCH --> PLUGIN
 
     SRC -->|HTTP| HTTP
-    SRC --> OMAHA
     SRC --> FFTP
-    SRC --> GCS
 
     HTTP --> SYNC
     HTTP --> OF
-    OF --> OMAHA
     OF --> FFTP
-    OF --> GCS
 
     HTTP --> PKG
     HTTP --> BIN
@@ -75,7 +69,7 @@ graph TB
 |------|------|
 | `internal/cli` | 命令解析、参数处理、命令分发 |
 | `internal/config` | INI 配置读写、默认值管理 |
-| `internal/source` | 多数据源抽象（Serve HTTP、Omaha、Firefox FTP、Chromium GCS） |
+| `internal/source` | 多数据源抽象（Serve HTTP、Firefox FTP） |
 | `internal/download` | 并发下载、断点续传、重试机制 |
 | `internal/install` | 浏览器安装、压缩包解压、文件识别 |
 | `internal/launch` | 浏览器启动、参数构建、Profile 管理 |
@@ -101,13 +95,13 @@ sequenceDiagram
 
     User->>Client: bws ls -R firefox@68.9.0esr
     Client->>Client: 构建 Filter（browser=firefox）
-    Client->>Serve: GET /api/v1/manifest?browser=firefox
+    Client->>Serve: GET /api/v1/manifest
     Serve->>Serve: 扫描本地 packages/ 目录
     Serve->>Serve: 按扩展名清单过滤文件
     alt online-fallback 启用
-        Serve->>Online: 查询 firefox 在线版本
+        Serve->>Online: 查询在线缓存（按浏览器分文件缓存）
         Online-->>Serve: 返回版本列表
-        Serve->>Serve: 合并本地 + 在线清单
+        Serve->>Serve: 合并本地 + 在线缓存清单
     end
     Serve-->>Client: JSON Manifest
     Client->>Client: 本地过滤（版本前缀匹配）
@@ -130,8 +124,8 @@ sequenceDiagram
     Client->>Client: 解析 browser=chrome, version=120
 
     alt 配置了 Serve 源
-        Client->>Serve: GET /api/v1/manifest?browser=chrome
-        Serve-->>Client: 返回清单
+        Client->>Serve: GET /api/v1/manifest
+        Serve-->>Client: 返回清单（含在线缓存）
         alt 清单中匹配到版本
             Client->>Serve: GET /api/v1/download/Chrome_120.xxx.exe
             alt Serve 本地有文件
@@ -145,7 +139,7 @@ sequenceDiagram
     end
 
     alt Serve 未匹配或无 Serve 源
-        Client->>Online: 直接查询 Omaha/FTP
+        Client->>Online: 直接查询 Firefox FTP
         Online-->>Client: 返回下载地址
         Client->>Online: 直接下载
         Online-->>Client: 文件数据
@@ -172,20 +166,16 @@ sequenceDiagram
     alt 本地存在
         Serve-->>Client: 直接返回文件
     else 本地不存在
-        Serve->>Cache: 检查在线缓存
-        alt 缓存有效
+        Serve->>Cache: 查找文件下载 URL
+        alt 缓存中存在 URL
             Serve->>Online: 按缓存 URL 下载
             Online-->>Serve: 文件数据
-        else 缓存过期/不存在
-            Serve->>Online: 查询可用版本
-            Online-->>Serve: 版本信息
-            Serve->>Cache: 更新缓存
-            Serve->>Online: 下载文件
-            Online-->>Serve: 文件数据
+            Serve->>Serve: 保存到 packages/
+            Serve->>Serve: 重新扫描更新清单
+            Serve-->>Client: 返回文件流
+        else 缓存中无此文件
+            Serve-->>Client: 404 Not Found
         end
-        Serve->>Serve: 保存到 packages/
-        Serve->>Serve: 更新清单缓存
-        Serve-->>Client: 返回文件流
     end
 ```
 
@@ -202,7 +192,6 @@ graph LR
     Filter["Filter 对象<br/>browser=chrome<br/>versionPrefix=120"]
     SourceMgr["源管理器<br/>按优先级遍历源"]
     ServeSrc["Serve HTTP 源"]
-    OmahaSrc["Omaha 源"]
     FFTP["Firefox FTP 源"]
     Merger["结果合并与去重"]
     LocalFilter["本地过滤<br/>版本前缀匹配"]
@@ -212,10 +201,8 @@ graph LR
     Parser --> Filter
     Filter --> SourceMgr
     SourceMgr --> ServeSrc
-    SourceMgr --> OmahaSrc
     SourceMgr --> FFTP
     ServeSrc --> Merger
-    OmahaSrc --> Merger
     FFTP --> Merger
     Merger --> LocalFilter
     LocalFilter --> Output
@@ -233,6 +220,7 @@ graph TB
     FilterExt["扩展名过滤<br/>仅处理支持格式"]
     Parallel["并行计算校验和<br/>scan-workers 线程"]
     BuildManifest["构建文件清单"]
+    PreloadCache["后台预加载在线缓存<br/>按浏览器分文件刷新"]
     StartHTTP["启动 HTTP 服务"]
     PrintInfo["输出启动信息<br/>包数量/总大小/API 列表"]
 
@@ -244,6 +232,7 @@ graph TB
     FilterExt --> Parallel
     Parallel --> BuildManifest
     BuildManifest --> StartHTTP
+    StartHTTP --> PreloadCache
     StartHTTP --> PrintInfo
 ```
 
@@ -447,7 +436,6 @@ download-ttl = 168h
 
 [source-switches]
 enable-serve-source = true
-enable-omaha-source = true
 enable-firefox-ftp = true
 
 [network]
@@ -467,7 +455,7 @@ sync = false
 sync-interval = 24h
 sync-browsers =
 sync-channels = stable
-online-fallback = false
+online-fallback = true
 scan-workers = 0
 ```
 
@@ -481,7 +469,7 @@ scan-workers = 0
 
 ### 2. 数据源优先级
 
-固定优先级：**Serve 离线源 > Omaha 在线源 > Firefox FTP**。优先级不可配置，通过开关控制各源启用/禁用。
+固定优先级：**Serve 离线源 > Firefox FTP**。优先级不可配置，通过开关控制各源启用/禁用。
 
 ### 3. 单配置文件管理
 
@@ -502,7 +490,7 @@ scan-workers = 0
 - **清单缓存**：`cache.manifest-ttl`（默认 24h），`--refresh` 强制刷新
 - **下载缓存**：`cache.download-ttl`（默认 168h）
 - **Firefox FTP 缓存**：独立缓存文件 `firefox-ftp-cache.json`，24h 有效期
-- **Serve 在线缓存**：`onlineCacheTTL`（10 分钟），`onlineListTimeout`（30 秒）
+- **Serve 在线缓存**：`onlineCacheTTL`（24 小时），按浏览器分文件存储（`online-cache-<browser>.json`），`onlineListTimeout`（30 秒）
 
 ### 6. 日志独立
 

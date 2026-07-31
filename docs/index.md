@@ -25,7 +25,7 @@ features:
     details: 从目录或压缩包自动识别并安装浏览器版本，支持 zip、7z、tar.gz 等多种格式。
   - icon: 🌐
     title: 远程下载
-    details: 从官方源（Chrome Omaha 协议、Firefox FTP）下载指定版本的浏览器。
+    details: 从官方源（Firefox FTP）下载指定版本的浏览器。
   - icon: 🔄
     title: 离线分发
     details: 内置 serve 命令，搭建局域网浏览器版本分发服务，支持自动同步、在线回退、并行扫描。

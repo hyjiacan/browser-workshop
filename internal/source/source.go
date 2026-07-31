@@ -166,11 +166,20 @@ type Source interface {
 // It queries all sources and deduplicates results.
 type MultiSource struct {
 	sources []Source
+	quiet   bool // when true, suppress [source]-level logs (used by serve adapter)
 }
 
 // NewMultiSource creates a new MultiSource from the given sources.
 func NewMultiSource(sources ...Source) *MultiSource {
 	return &MultiSource{sources: sources}
+}
+
+// SetQuiet controls whether the [source]-level query logs are emitted.
+// When true (used by the serve adapter), MultiSource.List skips its own
+// "开始查询源" / "查询成功" debug lines to avoid redundant logging —
+// the caller (e.g. OnlineCacheManager) already logs at a higher level.
+func (m *MultiSource) SetQuiet(q bool) {
+	m.quiet = q
 }
 
 // refreshableSource 是一个可选接口，支持强制刷新缓存的源应实现此接口。
@@ -239,11 +248,18 @@ func (m *MultiSource) List(ctx context.Context, filter *Filter) ([]VersionInfo, 
 	var result []VersionInfo
 
 	for _, src := range sources {
+		if !m.quiet {
+			bmlog.Debug("[source] 开始查询源: %s (browser=%s channel=%s platform=%s arch=%s)",
+				src.Name(), filter.Browser, filter.Channel, filter.Platform, filter.Arch)
+		}
 		versions, err := src.List(ctx, filter)
 		if err != nil {
 			// 记录失败日志，避免源错误被静默吞掉
 			bmlog.Debug("[source] 源 %s 查询失败: %v", src.Name(), err)
 			continue
+		}
+		if !m.quiet {
+			bmlog.Debug("[source] 源 %s 查询成功: 返回 %d 个版本", src.Name(), len(versions))
 		}
 		for _, v := range versions {
 			k := key{v.Browser, v.Version, v.Platform, v.Arch}
@@ -315,12 +331,19 @@ func normalizeVersionAlias(browser, version string) string {
 
 	switch b {
 	case "chrome", "chromium":
-		// ChromeSource/OmahaSource already handle: latest, stable, beta, dev, canary
+		// Chrome/Chromium (no online source with historical versions)
+		// Aliases are mapped to meaningful values for local/manifest sources.
 		switch v {
-		case "release":
-			return "stable" // "release" is synonymous with "stable"
+		case "release", "stable":
+			return "stable"
+		case "beta":
+			return "beta"
+		case "dev":
+			return "dev"
+		case "canary":
+			return "canary"
 		case "nightly", "esr":
-			return "latest" // Chrome has no nightly or ESR channels
+			return "stable" // Chrome has no nightly or ESR channels
 		}
 
 	case "firefox":
@@ -398,6 +421,38 @@ func applyDefaults(filter *Filter) *Filter {
 		f.Arch = CurrentArch()
 	}
 	return &f
+}
+
+// FilterVersions filters a version list by the given filter criteria.
+// This is the shared filtering logic used by all Source implementations
+// (FirefoxSource, HTTPSource, etc.) so that direct online access and
+// serve-cached access apply identical filtering rules.
+//
+// Empty/unknown filter fields are treated as wildcards (no filtering).
+func FilterVersions(versions []VersionInfo, filter *Filter) []VersionInfo {
+	if filter == nil {
+		return versions
+	}
+	var result []VersionInfo
+	for _, v := range versions {
+		if filter.Browser != "" && !strings.EqualFold(filter.Browser, v.Browser) {
+			continue
+		}
+		if filter.Channel != "" && filter.Channel != ChannelUnknown && filter.Channel != v.Channel {
+			continue
+		}
+		if filter.Platform != "" && filter.Platform != PlatformUnknown && filter.Platform != v.Platform {
+			continue
+		}
+		if filter.Arch != "" && filter.Arch != ArchUnknown && filter.Arch != v.Arch {
+			continue
+		}
+		if filter.VersionPrefix != "" && !strings.HasPrefix(v.Version, filter.VersionPrefix) {
+			continue
+		}
+		result = append(result, v)
+	}
+	return result
 }
 
 // compareVersions compares two version strings.

@@ -20,14 +20,6 @@ func TestMultiSource_filtersByBrowser(t *testing.T) {
 			{Browser: "edge", Version: "120.0.0.1", Channel: ChannelStable, Platform: PlatformWindows, Arch: ArchAMD64},
 		},
 	}
-	omahaSrc := &mockBrowserSource{
-		name:              "omaha",
-		supportedBrowsers: []string{"chrome", "chromium"},
-		versions: []VersionInfo{
-			{Browser: "chrome", Version: "121.0.0.1", Channel: ChannelStable, Platform: PlatformWindows, Arch: ArchAMD64},
-			{Browser: "chromium", Version: "121.0.0.1", Channel: ChannelStable, Platform: PlatformWindows, Arch: ArchAMD64},
-		},
-	}
 	firefoxSrc := &mockBrowserSource{
 		name:              "firefox",
 		supportedBrowsers: []string{"firefox"},
@@ -36,56 +28,47 @@ func TestMultiSource_filtersByBrowser(t *testing.T) {
 		},
 	}
 
-	multi := NewMultiSource(serveSrc, omahaSrc, firefoxSrc)
+	multi := NewMultiSource(serveSrc, firefoxSrc)
 	ctx := context.Background()
 
-	// --- Query chrome: all three sources should be queried ---
+	// --- Query chrome: only serve should be queried ---
 	serveSrc.queried = false
-	omahaSrc.queried = false
 	firefoxSrc.queried = false
 
 	versions, err := multi.List(ctx, &Filter{Browser: "chrome", Platform: PlatformWindows, Arch: ArchAMD64})
 	if err != nil {
 		t.Fatalf("List chrome failed: %v", err)
 	}
-	if len(versions) != 2 {
-		t.Errorf("chrome: expected 2 versions, got %d", len(versions))
+	if len(versions) != 1 {
+		t.Errorf("chrome: expected 1 version, got %d", len(versions))
 	}
 	if !serveSrc.queried {
 		t.Error("chrome: serve source should have been queried")
-	}
-	if !omahaSrc.queried {
-		t.Error("chrome: omaha source should have been queried")
 	}
 	if firefoxSrc.queried {
 		t.Error("chrome: firefox source should NOT have been queried")
 	}
 
-	// --- Query chromium: serve and omaha should be queried ---
+	// --- Query chromium: only serve should be queried ---
 	serveSrc.queried = false
-	omahaSrc.queried = false
 	firefoxSrc.queried = false
 
 	versions, err = multi.List(ctx, &Filter{Browser: "chromium", Platform: PlatformWindows, Arch: ArchAMD64})
 	if err != nil {
 		t.Fatalf("List chromium failed: %v", err)
 	}
-	if len(versions) != 2 {
-		t.Errorf("chromium: expected 2 versions, got %d", len(versions))
+	if len(versions) != 1 {
+		t.Errorf("chromium: expected 1 version, got %d", len(versions))
 	}
 	if !serveSrc.queried {
 		t.Error("chromium: serve source should have been queried")
-	}
-	if !omahaSrc.queried {
-		t.Error("chromium: omaha source should have been queried")
 	}
 	if firefoxSrc.queried {
 		t.Error("chromium: firefox source should NOT have been queried")
 	}
 
-	// --- Query firefox: only serve and firefox should be queried ---
+	// --- Query firefox: serve and firefox should both be queried ---
 	serveSrc.queried = false
-	omahaSrc.queried = false
 	firefoxSrc.queried = false
 
 	versions, err = multi.List(ctx, &Filter{Browser: "firefox", Platform: PlatformWindows, Arch: ArchAMD64})
@@ -98,16 +81,12 @@ func TestMultiSource_filtersByBrowser(t *testing.T) {
 	if !serveSrc.queried {
 		t.Error("firefox: serve source should have been queried")
 	}
-	if omahaSrc.queried {
-		t.Error("firefox: omaha source should NOT have been queried")
-	}
 	if !firefoxSrc.queried {
 		t.Error("firefox: firefox source should have been queried")
 	}
 
 	// --- Query edge: only serve should be queried ---
 	serveSrc.queried = false
-	omahaSrc.queried = false
 	firefoxSrc.queried = false
 
 	versions, err = multi.List(ctx, &Filter{Browser: "edge", Platform: PlatformWindows, Arch: ArchAMD64})
@@ -120,9 +99,6 @@ func TestMultiSource_filtersByBrowser(t *testing.T) {
 	if !serveSrc.queried {
 		t.Error("edge: serve source should have been queried")
 	}
-	if omahaSrc.queried {
-		t.Error("edge: omaha source should NOT have been queried")
-	}
 	if firefoxSrc.queried {
 		t.Error("edge: firefox source should NOT have been queried")
 	}
@@ -133,29 +109,29 @@ func TestMultiSource_filtersByBrowser(t *testing.T) {
 func TestMultiSource_continuesOnEmptyResult(t *testing.T) {
 	emptySrc := &mockBrowserSource{
 		name:              "empty",
-		supportedBrowsers: []string{"chrome"},
+		supportedBrowsers: []string{"firefox"},
 		versions:          nil, // returns empty
 	}
 	hasVersionsSrc := &mockBrowserSource{
 		name:              "has-versions",
-		supportedBrowsers: []string{"chrome"},
+		supportedBrowsers: []string{"firefox"},
 		versions: []VersionInfo{
-			{Browser: "chrome", Version: "120.0.0.1", Channel: ChannelStable, Platform: PlatformWindows, Arch: ArchAMD64},
+			{Browser: "firefox", Version: "120.0", Channel: ChannelStable, Platform: PlatformWindows, Arch: ArchAMD64},
 		},
 	}
 
 	multi := NewMultiSource(emptySrc, hasVersionsSrc)
 	ctx := context.Background()
 
-	versions, err := multi.List(ctx, &Filter{Browser: "chrome", Platform: PlatformWindows, Arch: ArchAMD64})
+	versions, err := multi.List(ctx, &Filter{Browser: "firefox", Platform: PlatformWindows, Arch: ArchAMD64})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
 	if len(versions) != 1 {
 		t.Errorf("expected 1 version from fallback source, got %d", len(versions))
 	}
-	if versions[0].Version != "120.0.0.1" {
-		t.Errorf("version = %s, want 120.0.0.1", versions[0].Version)
+	if versions[0].Version != "120.0" {
+		t.Errorf("version = %s, want 120.0", versions[0].Version)
 	}
 }
 
@@ -164,64 +140,26 @@ func TestMultiSource_continuesOnEmptyResult(t *testing.T) {
 func TestMultiSource_continuesOnError(t *testing.T) {
 	errSrc := &mockBrowserSource{
 		name:              "error",
-		supportedBrowsers: []string{"chrome"},
+		supportedBrowsers: []string{"firefox"},
 		listErr:           errors.New("network error"),
 	}
 	goodSrc := &mockBrowserSource{
 		name:              "good",
-		supportedBrowsers: []string{"chrome"},
+		supportedBrowsers: []string{"firefox"},
 		versions: []VersionInfo{
-			{Browser: "chrome", Version: "120.0.0.1", Channel: ChannelStable, Platform: PlatformWindows, Arch: ArchAMD64},
+			{Browser: "firefox", Version: "120.0", Channel: ChannelStable, Platform: PlatformWindows, Arch: ArchAMD64},
 		},
 	}
 
 	multi := NewMultiSource(errSrc, goodSrc)
 	ctx := context.Background()
 
-	versions, err := multi.List(ctx, &Filter{Browser: "chrome", Platform: PlatformWindows, Arch: ArchAMD64})
+	versions, err := multi.List(ctx, &Filter{Browser: "firefox", Platform: PlatformWindows, Arch: ArchAMD64})
 	if err != nil {
 		t.Fatalf("List failed: %v", err)
 	}
 	if len(versions) != 1 {
 		t.Errorf("expected 1 version from good source, got %d", len(versions))
-	}
-}
-
-// TestChromeOmahaSource_SupportsBrowser verifies that ChromeOmahaSource
-// supports both chrome and chromium.
-func TestChromeOmahaSource_SupportsBrowser(t *testing.T) {
-	src := NewChromeOmahaSource()
-
-	if !src.SupportsBrowser("chrome") {
-		t.Error("ChromeOmahaSource should support 'chrome'")
-	}
-	if !src.SupportsBrowser("chromium") {
-		t.Error("ChromeOmahaSource should support 'chromium'")
-	}
-	if !src.SupportsBrowser("Chrome") {
-		t.Error("ChromeOmahaSource should support 'Chrome' (case insensitive)")
-	}
-	if src.SupportsBrowser("firefox") {
-		t.Error("ChromeOmahaSource should NOT support 'firefox'")
-	}
-	if src.SupportsBrowser("edge") {
-		t.Error("ChromeOmahaSource should NOT support 'edge'")
-	}
-}
-
-// TestChromeSource_SupportsBrowser verifies that ChromeSource supports
-// both chrome and chromium.
-func TestChromeSource_SupportsBrowser(t *testing.T) {
-	src := NewChromeSource()
-
-	if !src.SupportsBrowser("chrome") {
-		t.Error("ChromeSource should support 'chrome'")
-	}
-	if !src.SupportsBrowser("chromium") {
-		t.Error("ChromeSource should support 'chromium'")
-	}
-	if src.SupportsBrowser("firefox") {
-		t.Error("ChromeSource should NOT support 'firefox'")
 	}
 }
 

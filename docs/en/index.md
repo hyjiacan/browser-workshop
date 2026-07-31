@@ -25,7 +25,7 @@ features:
     details: Automatically identify and install browser versions from directories or archives. Supports zip, 7z, tar.gz, tar.bz2, tar.xz, and more. Intelligent filename recognition eliminates the need to manually specify version information.
   - icon: 🌐
     title: Remote Download
-    details: Download specified browser versions from official sources (Chrome Omaha protocol).
+    details: Download specified browser versions from official sources (Firefox FTP).
   - icon: 🔄
     title: Offline Distribution
     details: Built-in `serve` command to set up a LAN browser version distribution service, supporting automatic synchronization.

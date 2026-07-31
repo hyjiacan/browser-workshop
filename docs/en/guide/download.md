@@ -10,7 +10,6 @@ bws supports two types of remote sources:
 
 Online sources are built-in official download sources for bws, directly obtaining version information and installation packages from the browser vendor's official servers.
 
-- **Chrome**: Obtains version lists and download addresses via the Google Omaha protocol (official update protocol)
 - **Firefox**: Obtains version information and download URLs via the Mozilla Product Details API
 - **Other browsers**: Their respective official update channels
 
@@ -57,7 +56,7 @@ Assuming an offline source `http://server:8080` is configured, when executing `b
 
 1. First query whether `http://server:8080` has the chrome 120 version
 2. If yes, download from the offline source (faster)
-3. If not, download from the Google Omaha online source
+3. If not, download from the online source
 4. If the online source also doesn't have it, report "Version not found"
 
 ## Configuring Offline Sources

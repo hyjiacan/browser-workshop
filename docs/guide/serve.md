@@ -96,7 +96,7 @@ sync-channels = stable,beta
 
 ### 启用在线回退
 
-在线回退功能允许 serve 在本地 `packages/` 目录中找不到请求的安装包时，自动从在线源（如 Mozilla FTP、Chrome Omaha）实时下载并提供给客户端。
+在线回退功能允许 serve 在本地 `packages/` 目录中找不到请求的安装包时，自动从在线源（如 Mozilla FTP）实时下载并提供给客户端。
 
 启用后：
 - **清单（manifest）** 会合并本地已有文件和在线源中所有可用的版本

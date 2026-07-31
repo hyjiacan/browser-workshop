@@ -67,7 +67,6 @@ max-backups = 5
 
 [source-switches]
 enable-serve-source = true
-enable-omaha-source = true
 enable-firefox-ftp = true
 ```
 

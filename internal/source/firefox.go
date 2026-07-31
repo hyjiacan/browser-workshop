@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	bmlog "github.com/bws/bws/internal/log"
 	"github.com/bws/bws/internal/paths"
 )
 
@@ -110,6 +111,13 @@ func (s *FirefoxSource) SupportsBrowser(browser string) bool {
 func (s *FirefoxSource) List(ctx context.Context, filter *Filter) ([]VersionInfo, error) {
 	filter = applyDefaults(filter)
 
+	chLog := string(filter.Channel)
+	if chLog == "" {
+		chLog = "all"
+	}
+	bmlog.Debug("[firefox-ftp] 查询版本: browser=firefox channel=%s platform=%s arch=%s",
+		chLog, filter.Platform, filter.Arch)
+
 	// 抓取顶层目录列表（带缓存）
 	dirs, err := s.fetchDirsWithCache(ctx)
 	if err != nil {
@@ -125,40 +133,33 @@ func (s *FirefoxSource) List(ctx context.Context, filter *Filter) ([]VersionInfo
 		arch = CurrentArch()
 	}
 
-	var results []VersionInfo
+	// 构建所有版本列表（不做过滤），交由共享的 FilterVersions 统一处理
+	var allVersions []VersionInfo
 	for _, dir := range dirs {
-		version := strings.TrimSuffix(dir, "/")
-		if !versionDirRegex.MatchString(version) {
+		ver := strings.TrimSuffix(dir, "/")
+		if !versionDirRegex.MatchString(ver) {
 			continue
 		}
-
-		channel := classifyFirefoxChannel(version)
-
-		// 按渠道过滤
-		if filter.Channel != "" && filter.Channel != ChannelUnknown && filter.Channel != channel {
-			continue
-		}
-
-		// 按版本前缀过滤
-		if filter.VersionPrefix != "" && !strings.HasPrefix(version, filter.VersionPrefix) {
-			continue
-		}
-
-		results = append(results, VersionInfo{
+		channel := classifyFirefoxChannel(ver)
+		allVersions = append(allVersions, VersionInfo{
 			Browser:     "firefox",
-			Version:     version,
+			Version:     ver,
 			Channel:     channel,
 			Platform:    plat,
 			Arch:        arch,
-			DownloadURL: s.buildDownloadURL(version, plat, arch),
+			DownloadURL: s.buildDownloadURL(ver, plat, arch),
 		})
 	}
+
+	// 使用共享过滤逻辑
+	results := FilterVersions(allVersions, filter)
 
 	// 按版本号降序排序
 	sort.Slice(results, func(i, j int) bool {
 		return compareVersions(results[i].Version, results[j].Version) > 0
 	})
 
+	bmlog.Debug("[firefox-ftp] 返回 %d 个匹配版本", len(results))
 	return results, nil
 }
 
@@ -350,6 +351,8 @@ func (s *FirefoxSource) fetchDirsWithCache(ctx context.Context) ([]string, error
 // fetchDirectoryListing 抓取 HTTPS 目录列表页面并提取目录名。
 // 仅返回以 "/" 结尾的条目（即目录），跳过父目录链接 ".."。
 func (s *FirefoxSource) fetchDirectoryListing(ctx context.Context, pageURL string) ([]string, error) {
+	bmlog.Debug("[firefox-ftp] 请求目录列表: %s", pageURL)
+
 	req, err := http.NewRequestWithContext(ctx, "GET", pageURL, nil)
 	if err != nil {
 		return nil, err
@@ -357,9 +360,12 @@ func (s *FirefoxSource) fetchDirectoryListing(ctx context.Context, pageURL strin
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
+		bmlog.Debug("[firefox-ftp] 请求失败: %v", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
+
+	bmlog.Debug("[firefox-ftp] 响应状态码: %d", resp.StatusCode)
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("目录列表返回状态码 %d", resp.StatusCode)
@@ -371,7 +377,9 @@ func (s *FirefoxSource) fetchDirectoryListing(ctx context.Context, pageURL strin
 		return nil, err
 	}
 
-	return parseDirectoryEntries(string(body)), nil
+	dirs := parseDirectoryEntries(string(body))
+	bmlog.Debug("[firefox-ftp] 解析到 %d 个目录条目", len(dirs))
+	return dirs, nil
 }
 
 // parseDirectoryEntries 从 HTML 目录列表中提取目录名。

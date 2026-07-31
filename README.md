@@ -12,7 +12,7 @@
 
 - **多版本管理**：同时安装和管理多个浏览器版本，支持版本前缀快速筛选
 - **本地导入**：从目录或压缩包自动识别并导入，支持 zip、7z、tar.gz、tar.bz2、tar.xz、exe 等多种格式
-- **远程下载**：从官方源下载指定版本（Chrome 通过 Omaha 协议，Firefox 通过 Mozilla FTP）
+- **远程下载**：从官方源下载指定版本（Firefox 通过 Mozilla FTP）
 - **离线分发**：内置 `serve` 命令，支持自动同步、在线回退、并行扫描，搭建局域网分发服务
 - **隔离运行**：每个版本独立 Profile，支持命名 Profile
 - **插件系统**：Lua 脚本插件和独立进程插件，可在启动时自动修改参数、注入配置、执行自定义逻辑
@@ -183,7 +183,6 @@ max-backups = 5
 
 [source-switches]
 enable-serve-source = true
-enable-omaha-source = true
 enable-firefox-ftp = true
 ```
 

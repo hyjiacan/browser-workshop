@@ -21,7 +21,7 @@ graph TD
 
 The diagram above shows the complete team offline deployment architecture:
 
-1. **Public download source**: GitHub Release, Firefox FTP, Chromium GCS, chromedownloads.net, and other official and third-party sources
+1. **Public download source**: GitHub Release, Firefox FTP, chromedownloads.net, and other official and third-party sources
 2. **Central distribution server**: Runs `bws sv`, responsible for syncing browser installer packages from the public internet and storing them in the `packages/` directory
 3. **Team member clients**: Run `bws r` / `bws i`, obtaining browser versions from the server via the LAN
 4. **Data flow**: Server syncs from public internet -> Team members install/run from server

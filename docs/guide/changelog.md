@@ -23,7 +23,6 @@
 
 #### 远程下载
 
-- Chrome：通过 Chrome Omaha 协议查询和下载
 - Firefox：通过 Mozilla Product Details API 获取版本信息
 - 支持稳定版、Beta、Dev、Canary、ESR 等多个发布渠道
 - 支持完整版本号或部分版本号匹配
@@ -49,7 +48,7 @@
 
 - 离线源（serve 服务）优先，内置在线源兜底
 - 按浏览器类型过滤源：查询特定浏览器时仅从支持该浏览器的源获取
-- 数据源开关：`serve-source`、`omaha-source`、`firefox-ftp`，可独立启用/禁用
+- 数据源开关：`serve-source`、`firefox-ftp`，可独立启用/禁用
 
 #### 配置管理
 

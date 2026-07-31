@@ -724,7 +724,6 @@ bws cfg <subcommand> [arguments]
 | `repo-path` | Local repository path | Empty |
 | `source` | Offline source address | Empty |
 | `source-serve` | Serve source switch | `true` |
-| `source-omaha` | Omaha source switch | `true` |
 | `source-firefox-ftp` | Firefox data source switch | `true` |
 | `disk-threshold` | Disk space alert threshold (GB) | `5` |
 | `proxy` | Proxy URL (for downloads and browser launching) | empty |

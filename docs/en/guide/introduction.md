@@ -14,7 +14,7 @@ Automatically identify and install browser versions from directories or archives
 
 ### Remote Download
 
-Download specified browser versions from official sources (Chrome Omaha protocol). Supports multiple release channels including Stable, Beta, Dev, and Canary. Download by full or partial version number.
+Download specified browser versions from official sources (Firefox FTP). Supports multiple release channels including Stable, Beta, Dev, and Canary. Download by full or partial version number.
 
 ### Offline Distribution
 

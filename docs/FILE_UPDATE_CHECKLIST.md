@@ -117,7 +117,6 @@
 | 文件 | 问题描述 | 优先级 |
 |------|----------|--------|
 | `internal/cli/commands.go` | `bws ls --json` 选项已注册但实际输出逻辑未实现 | 高 |
-| `internal/source/chrome.go` | Chrome 特定版本下载 URL 生成是 placeholder，实际需 Omaha update check | 中 |
 | `internal/plugin/*.go` | 插件 Hooks `post_run`/`pre_install`/`post_install`/`on_exit` 仅定义常量，代码中未实际调用 | 中 |
 | `docs/en/guide/commands.md` | 英文版命令参考文档未同步别名注释更新 | 中 |
 | `docs/en/guide/getting-started.md` | 英文版快速上手文档未同步 | 低 |

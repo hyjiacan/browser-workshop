@@ -3,8 +3,11 @@ package cli
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 
+	"github.com/bws/bws/internal/source"
 	"github.com/bws/bws/internal/version"
 )
 
@@ -162,11 +165,16 @@ func runRemoteQuery(ctx *Context, args []string) error {
 		return err
 	}
 
+	// 接受所有 runLs 中的 flag，local-only 的在此模式下忽略
 	flagVals, positional, err := ParseFlags(args, []*Flag{
 		{Name: "channel", Short: "c", Usage: "按渠道过滤", HasValue: true, Default: "stable"},
 		{Name: "limit", Short: "n", Usage: "限制结果数量", HasValue: true, Default: "20"},
 		{Name: "all", Short: "a", Usage: "显示所有版本（所有渠道）", HasValue: false, Default: "false"},
 		{Name: "refresh", Usage: "强制刷新远程源缓存", HasValue: false, Default: "false"},
+		// 以下为 local-only flag，remote 模式下接受但忽略
+		{Name: "json", Usage: "JSON 输出（远程模式暂不支持）", HasValue: false, Default: "false"},
+		{Name: "system", Short: "s", Usage: "（local-only）", HasValue: false, Default: "true"},
+		{Name: "no-system", Usage: "（local-only）", HasValue: false, Default: "false"},
 	})
 	if err != nil {
 		return err
@@ -186,9 +194,20 @@ func runRemoteQuery(ctx *Context, args []string) error {
 	}
 
 	channel := flagVals["channel"]
+	// 当版本是别名且为有效渠道名时，将其作为默认渠道
+	if spec.IsAlias {
+		if c := source.ParseChannel(spec.Version); c != source.ChannelUnknown {
+			channel = string(c)
+		}
+	}
+
 	limit := 20
 	if flagVals["limit"] != "" {
-		fmt.Sscanf(flagVals["limit"], "%d", &limit)
+		if n, err := strconv.Atoi(flagVals["limit"]); err == nil && n > 0 {
+			limit = n
+		} else {
+			return fmt.Errorf("无效的 limit 值: %s（必须为正整数）", flagVals["limit"])
+		}
 	}
 	showAll := flagVals["all"] == "true"
 
@@ -218,12 +237,6 @@ func runRemoteQuery(ctx *Context, args []string) error {
 				hasServe = true
 			}
 		}
-		if ctx.Cfg.Source.IsOmahaSourceEnabled() {
-			// Omaha 源支持 chrome 和 chromium
-			if spec.Browser == "chrome" || spec.Browser == "chromium" {
-				activeSources = append(activeSources, "Chrome Omaha 协议", "Chrome Omaha Proxy")
-			}
-		}
 		if ctx.Cfg.Source.IsFirefoxFTPEnabled() {
 			if spec.Browser == "firefox" {
 				activeSources = append(activeSources, "Mozilla FTP 目录")
@@ -231,7 +244,7 @@ func runRemoteQuery(ctx *Context, args []string) error {
 		}
 	} else {
 		// 无配置时默认显示所有
-		activeSources = append(activeSources, "远程 HTTP 源", "Chrome Omaha 协议", "Chrome Omaha Proxy")
+		activeSources = append(activeSources, "远程 HTTP 源")
 		if spec.Browser == "firefox" {
 			activeSources = append(activeSources, "Mozilla FTP 目录")
 		}
@@ -245,9 +258,6 @@ func runRemoteQuery(ctx *Context, args []string) error {
 	if len(activeSources) == 0 {
 		ctx.Printf("没有为 %s 配置可用的远程源。\n", spec.Browser)
 		if ctx.Cfg != nil {
-			if (spec.Browser == "chrome" || spec.Browser == "chromium") && !ctx.Cfg.Source.IsOmahaSourceEnabled() {
-				ctx.Println("提示: Omaha 源已禁用，使用 'bws cfg set source-omaha true' 启用。")
-			}
 			if spec.Browser == "firefox" && !ctx.Cfg.Source.IsFirefoxFTPEnabled() {
 				ctx.Println("提示: Firefox 源已禁用，使用 'bws cfg set source-firefox-ftp true' 启用。")
 			}
@@ -272,34 +282,65 @@ func runRemoteQuery(ctx *Context, args []string) error {
 	}
 	ctx.Println()
 
-	// 获取本地已安装版本，用于标记
+	// 获取本地已安装版本（含系统安装），用于标记
 	installedMap := make(map[string]bool)
 	if ctx.Install != nil {
-		installed, _ := ctx.Install.ListInstalledByBrowser(spec.Browser)
+		installed, _ := ctx.Install.ListWithSystemByBrowser(spec.Browser)
 		for _, v := range installed {
 			installedMap[v.Version] = true
 		}
 	}
 
+	// 版本前缀（非别名时传递给源进行服务端过滤）
+	versionPrefix := ""
+	if spec.Version != "" && !spec.IsAlias {
+		versionPrefix = spec.Version
+	}
+
+	// 并行查询所有渠道
+	type channelResult struct {
+		channel string
+		versions []source.VersionInfo
+		err      error
+	}
+
+	results := make([]channelResult, len(channels))
+	var wg sync.WaitGroup
+
+	for i, ch := range channels {
+		wg.Add(1)
+		go func(idx int, ch string) {
+			defer wg.Done()
+			if ctx.Logger != nil {
+				ctx.Logger.Debug("[list] 向源查询: source=%s browser=%s channel=%s versionPrefix=%s platform=%s arch=%s",
+					ctx.Source.Describe(), spec.Browser, ch, versionPrefix, source.CurrentPlatform(), source.CurrentArch())
+			}
+			versions, err := ctx.Source.ListVersions(spec.Browser, ch, versionPrefix)
+			results[idx] = channelResult{channel: ch, versions: versions, err: err}
+		}(i, ch)
+	}
+
+	wg.Wait()
+
+	// 按渠道顺序处理结果
 	rows := [][]string{}
 	totalShown := 0
 	installedCount := 0
 	totalResults := 0
-	channelResults := make(map[string]int) // channel -> count
+	channelResultCount := make(map[string]int) // channel -> count
 
-	for _, ch := range channels {
-		ctx.Printf("  正在查询 %s 渠道...", ch)
-		versions, err := ctx.Source.ListVersions(spec.Browser, ch)
-		if err != nil {
-			ctx.Printf(" 失败 (%v)\n", err)
+	for _, r := range results {
+		ch := r.channel
+		if r.err != nil {
+			ctx.Printf("  %s 渠道: 查询失败 (%v)\n", ch, r.err)
 			if ctx.Logger != nil {
-				ctx.Logger.Debug("[list] 源调用失败: channel=%s error=%v", ch, err)
+				ctx.Logger.Debug("[list] 源调用失败: channel=%s error=%v", ch, r.err)
 			}
 			continue
 		}
 
-		if len(versions) == 0 {
-			ctx.Println(" 无结果")
+		if len(r.versions) == 0 {
+			ctx.Printf("  %s 渠道: 无结果\n", ch)
 			if ctx.Logger != nil {
 				ctx.Logger.Debug("[list] 源调用成功: channel=%s 返回 0 个版本", ch)
 			}
@@ -307,27 +348,38 @@ func runRemoteQuery(ctx *Context, args []string) error {
 		}
 
 		if ctx.Logger != nil {
-			ctx.Logger.Debug("[list] 源调用成功: channel=%s 返回 %d 个版本", ch, len(versions))
+			ctx.Logger.Debug("[list] 源调用成功: channel=%s 返回 %d 个版本", ch, len(r.versions))
+			for _, v := range r.versions {
+				ctx.Logger.Debug("[list]   源返回: %s | url=%s | size=%d | platform=%s | arch=%s",
+					v.Version, v.DownloadURL, v.Size, v.Platform, v.Arch)
+			}
 		}
 
-		// 按版本前缀筛选
-		filtered := versions
-		if spec.Version != "" && !spec.IsAlias {
+		// 按版本前缀筛选（双重保障：源可能未执行过滤）
+		filtered := r.versions
+		if versionPrefix != "" {
 			filtered = nil
-			for _, v := range versions {
-				if matchesVersionPrefix(v.Version, spec.Version) {
+			for _, v := range r.versions {
+				if matchesVersionPrefix(v.Version, versionPrefix) {
 					filtered = append(filtered, v)
 				}
 			}
 		}
 
 		if len(filtered) == 0 {
-			ctx.Println(" 无匹配版本")
+			ctx.Printf("  %s 渠道: 无匹配版本\n", ch)
+			if ctx.Logger != nil {
+				ctx.Logger.Debug("[list] 版本前缀筛选后无匹配: channel=%s 原始 %d 个", ch, len(r.versions))
+			}
 			continue
 		}
 
-		channelResults[ch] = len(filtered)
-		ctx.Printf(" 找到 %d 个版本\n", len(filtered))
+		if ctx.Logger != nil {
+			ctx.Logger.Debug("[list] 版本前缀筛选: 从 %d 个匹配到 %d 个", len(r.versions), len(filtered))
+		}
+
+		channelResultCount[ch] = len(filtered)
+		ctx.Printf("  %s 渠道: 找到 %d 个版本\n", ch, len(filtered))
 		totalResults += len(filtered)
 
 		// 限制每个渠道显示的版本数量
@@ -343,6 +395,10 @@ func runRemoteQuery(ctx *Context, args []string) error {
 				status = "已安装"
 				installedCount++
 			}
+			if ctx.Logger != nil {
+				ctx.Logger.Debug("[list] 命中版本: %s | 下载地址: %s | 大小: %d | 平台: %s | 架构: %s | 状态: %s",
+					v.Version, v.DownloadURL, v.Size, v.Platform, v.Arch, status)
+			}
 			rows = append(rows, []string{v.Version, ch, string(v.Platform), string(v.Arch), status})
 			totalShown++
 		}
@@ -354,7 +410,7 @@ func runRemoteQuery(ctx *Context, args []string) error {
 	ctx.Println()
 
 	if ctx.Logger != nil {
-		ctx.Logger.Debug("[list] 远程查询完成: 共 %d 个匹配版本，%d 个渠道有结果", totalResults, len(channelResults))
+		ctx.Logger.Debug("[list] 远程查询完成: 共 %d 个匹配版本，%d 个渠道有结果", totalResults, len(channelResultCount))
 	}
 
 	// 结果标题

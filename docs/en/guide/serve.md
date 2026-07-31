@@ -114,7 +114,7 @@ For detailed instructions on automatic sync, please refer to the [Serve Auto Syn
 
 ### Enabling Online Fallback
 
-Online fallback allows serve to automatically fetch packages from online sources (e.g. Mozilla FTP, Chrome Omaha) in real-time when a requested package is not found in the local `packages/` directory.
+Online fallback allows serve to automatically fetch packages from online sources (e.g. Mozilla FTP) in real-time when a requested package is not found in the local `packages/` directory.
 
 When enabled:
 - **Manifest** merges locally cached files with all available versions from online sources

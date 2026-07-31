@@ -7,12 +7,14 @@ bws sv 提供了完整的 REST API 接口，用于查询文件清单、下载文
 | 路径 | 方法 | 说明 |
 |------|------|------|
 | `/` | GET | HTML 帮助页 / Web 界面 |
-| `/api/v1/manifest` | GET | 文件清单（含 XXH3 校验和） |
+| `/api/v1/manifest` | GET | 文件清单（本地 + 在线缓存合并，含 XXH3 校验和） |
 | `/api/v1/download/{filename}` | GET | 文件下载（支持断点续传） |
 | `/api/v1/status` | GET | 服务状态 |
 | `/api/v1/sync/status` | GET | 同步状态 |
 | `/api/v1/sync/trigger` | POST | 手动触发同步 |
-| `/bin/{filename}` | GET | 客户端二进制下载 |
+| `/api/v1/bin/{filename}` | GET | 客户端二进制下载 |
+
+> **manifest 合并机制**：当 `online-fallback` 启用时，`manifest` 返回本地 packages 目录中的文件与在线源缓存版本的合并结果（去重后）。本地文件携带真实 XXH3 校验和，在线缓存版本的校验和为空（下载到本地后计算）。过滤由客户端自行完成。
 
 ## 基础信息
 
@@ -83,26 +85,13 @@ GET /
 
 ## GET /api/v1/manifest
 
-获取文件清单，包含所有可识别的浏览器安装包信息及其 XXH3 校验和。
+获取文件清单，包含本地 packages 目录中的文件和在线源缓存版本（当 `online-fallback` 启用时）。返回所有平台、架构、版本和渠道的条目，过滤由客户端自行完成。
 
 ### 请求
 
 ```
 GET /api/v1/manifest
 ```
-
-### 查询参数
-
-支持通过查询参数筛选清单内容，客户端请求时会自动带上这些参数：
-
-| 参数 | 类型 | 说明 |
-|------|------|------|
-| `browser` | string | 浏览器名称（如 `chrome`、`firefox`） |
-| `platform` | string | 平台（`windows`、`linux`、`macos`） |
-| `arch` | string | 架构（`amd64`、`386`、`arm64`） |
-| `channel` | string | 发布渠道（`stable`、`beta`、`dev`、`canary`、`esr`） |
-
-当 `online-fallback` 启用时，serve 会根据这些参数向在线源查询，只获取请求中指定的浏览器类型，避免不必要的网络请求。
 
 ### 响应示例
 
@@ -113,6 +102,8 @@ GET /api/v1/manifest
     {
       "filename": "Chrome_120.0.6099.109_Windows_x64.exe",
       "version": "120.0.6099.109",
+      "browser": "chrome",
+      "channel": "stable",
       "major_version": "120",
       "platform": "windows",
       "architecture": "x64",
@@ -120,13 +111,15 @@ GET /api/v1/manifest
       "checksum": "xxh3:abcdef1234567890"
     },
     {
-      "filename": "Firefox_121.0_Linux_x64.tar.bz2",
-      "version": "121.0",
-      "major_version": "121",
-      "platform": "linux",
-      "architecture": "x64",
-      "size": 67108864,
-      "checksum": "xxh3:0987654321fedcba"
+      "filename": "Firefox Setup 141.0.exe",
+      "version": "141.0",
+      "browser": "firefox",
+      "channel": "stable",
+      "major_version": "141",
+      "platform": "windows",
+      "architecture": "amd64",
+      "size": 57671680,
+      "checksum": ""
     }
   ],
   "server": {
@@ -137,6 +130,8 @@ GET /api/v1/manifest
 }
 ```
 
+> 本地文件的 `checksum` 为真实 XXH3 校验和；在线缓存版本的 `checksum` 为空字符串，在下载到本地后才会计算。
+
 ### 响应字段说明
 
 | 字段 | 类型 | 说明 |
@@ -145,11 +140,13 @@ GET /api/v1/manifest
 | `data` | array | 文件列表 |
 | `data[].filename` | string | 文件名（相对路径） |
 | `data[].version` | string | 版本号 |
+| `data[].browser` | string | 浏览器名称（chrome / firefox / chromium） |
+| `data[].channel` | string | 发布渠道（stable / beta / dev / canary / esr） |
 | `data[].major_version` | string | 主版本号 |
 | `data[].platform` | string | 平台（windows / linux / macos） |
 | `data[].architecture` | string | 架构（x64 / x86 / arm64） |
 | `data[].size` | number | 文件大小（字节） |
-| `data[].checksum` | string | XXH3 校验和，格式为 `xxh3:` + 16 位十六进制 |
+| `data[].checksum` | string | XXH3 校验和，格式为 `xxh3:` + 16 位十六进制；在线缓存版本为空 |
 | `server` | object | 服务端信息 |
 | `server.name` | string | 服务名称 |
 | `server.version` | string | 服务端版本号 |
@@ -160,12 +157,6 @@ GET /api/v1/manifest
 ```bash
 # 获取完整清单
 curl http://localhost:8080/api/v1/manifest
-
-# 按浏览器筛选
-curl "http://localhost:8080/api/v1/manifest?browser=chrome"
-
-# 按平台和架构筛选
-curl "http://localhost:8080/api/v1/manifest?browser=firefox&platform=windows&arch=amd64"
 ```
 
 ---
@@ -365,14 +356,14 @@ curl -X POST http://localhost:8080/api/v1/sync/trigger
 
 ---
 
-## GET /bin/{filename}
+## GET /api/v1/bin/{filename}
 
 下载客户端二进制文件（仅在 bin 目录存在时可用）。
 
 ### 请求
 
 ```
-GET /bin/{filename}
+GET /api/v1/bin/{filename}
 ```
 
 ### 路径参数
@@ -389,7 +380,7 @@ GET /bin/{filename}
 
 ```bash
 # 下载 Windows 版本的 bws
-curl -O http://localhost:8080/bin/bws-windows-amd64.exe
+curl -O http://localhost:8080/api/v1/bin/bws-windows-amd64.exe
 ```
 
 ---

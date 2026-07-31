@@ -74,8 +74,6 @@ func (m *mockConfig) ClearRemoteSource() error {
 }
 func (m *mockConfig) IsServeSourceEnabled() bool     { return true }
 func (m *mockConfig) SetServeSourceEnabled(v bool) error { return nil }
-func (m *mockConfig) IsOmahaSourceEnabled() bool      { return true }
-func (m *mockConfig) SetOmahaSourceEnabled(v bool) error { return nil }
 func (m *mockConfig) IsFirefoxFTPEnabled() bool       { return true }
 func (m *mockConfig) SetFirefoxFTPEnabled(v bool) error { return nil }
 func (m *mockConfig) GetDiskSpaceThresholdGB() int     { return 5 }

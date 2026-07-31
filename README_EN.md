@@ -12,7 +12,7 @@
 
 - **Multi-version Management**: Install and manage multiple browser versions simultaneously, with quick filtering by version prefix
 - **Local Import**: Automatically detect and import from directories or archives, supporting zip, 7z, tar.gz, tar.bz2, tar.xz, exe, and more
-- **Remote Download**: Download specified versions from official sources (Chrome via Omaha protocol, Firefox via Mozilla Product Details API)
+- **Remote Download**: Download specified versions from official sources (Firefox via Mozilla FTP)
 - **Offline Distribution**: Built-in `serve` command with auto-sync support, set up a LAN distribution service
 - **Isolated Execution**: Independent profile for each version, with support for named profiles
 - **Plugin System**: Lua script plugins and standalone process plugins, automatically modify launch arguments, inject configs, and execute custom logic

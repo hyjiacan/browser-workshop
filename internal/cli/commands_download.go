@@ -50,7 +50,7 @@ func runDownload(ctx *Context, args []string) error {
 	if err != nil {
 		// 仅对别名（latest/beta/esr 等）回退到渠道列表
 		if spec.IsAlias {
-			versions, listErr := ctx.Source.ListVersions(spec.Browser, channel)
+			versions, listErr := ctx.Source.ListVersions(spec.Browser, channel, "")
 			if listErr == nil && len(versions) > 0 {
 				versionInfo = versions[0]
 			} else {

@@ -71,11 +71,12 @@ func main() {
 	}
 
 	// Initialize logger (dual output: file and console with separate levels)
+	fileLevel := bmlog.ParseLevel(cfg.Log.FileLevel)
 	consoleLevel := bmlog.ParseLevel(cfg.Log.ConsoleLevel)
 	if verbose {
-		consoleLevel = bmlog.LevelDebug
+		// -V 模式下，控制台日志级别与文件日志级别一致，输出所有日志
+		consoleLevel = fileLevel
 	}
-	fileLevel := bmlog.ParseLevel(cfg.Log.FileLevel)
 	maxSizeBytes := int64(cfg.Log.MaxSizeMB) * 1024 * 1024
 	logger, err := bmlog.NewDualLogger(p.LogFile, fileLevel, consoleLevel, true,
 		bmlog.WithMaxSize(maxSizeBytes),
@@ -112,26 +113,33 @@ func main() {
 	sysDetector := system.NewDetector(browser.DefaultRegistry)
 	inst.AttachSystem(sysDetector)
 
-	// 数据源：离线源（bws serve）优先，然后是内置在线源
-	var sources []source.Source
+	// 数据源配置
+	// - serve 源启用时：客户端仅通过 HTTPSource 访问 serve（manifest），
+	//   在线源仅用于 serve 内部（sync、online-fallback），客户端不直接访问
+	// - serve 源未启用时：客户端直接访问在线源（Firefox FTP）
+	var clientSources []source.Source
+	var onlineSources []source.Source // serve 专用：仅在线源，不含 HTTPSource（避免自引用死锁）
 
-	// 1. 离线源（如果配置了且启用）
-	if cfg.IsServeSourceEnabled() && cfg.RemoteSource != "" {
-		sources = append(sources, source.NewHTTPSourceWithProxy(cfg.RemoteSource, proxyURL))
+	serveEnabled := cfg.IsServeSourceEnabled() && cfg.RemoteSource != ""
+
+	// 1. HTTPSource（serve 离线源）——仅客户端使用
+	if serveEnabled {
+		clientSources = append(clientSources, source.NewHTTPSourceWithProxy(cfg.RemoteSource, proxyURL))
+		logger.Info("serve 源已启用，客户端将通过 serve 查询版本（地址: %s）", cfg.RemoteSource)
 	}
 
-	// 2. Chrome 在线源（根据开关）
-	if cfg.IsOmahaSourceEnabled() {
-		sources = append(sources, source.NewChromeOmahaSourceWithProxy(proxyURL))
-		sources = append(sources, source.NewChromeSourceWithProxy(proxyURL))
-	}
-
-	// 3. Firefox 在线源（根据开关）
+	// 2. Firefox FTP 在线源
 	if cfg.IsFirefoxFTPEnabled() {
-		sources = append(sources, source.NewFirefoxSourceWithProxy(proxyURL))
+		s := source.NewFirefoxSourceWithProxy(proxyURL)
+		onlineSources = append(onlineSources, s) // serve 始终需要在线源
+		if !serveEnabled {
+			clientSources = append(clientSources, s) // 无 serve 时客户端直接访问
+		}
 	}
 
-	sourceMgr := source.NewMultiSource(sources...)
+	sourceMgr := source.NewMultiSource(clientSources...)
+	onlineSourceMgr := source.NewMultiSource(onlineSources...)
+	onlineSourceMgr.SetQuiet(true) // serve 端静默 [source] 层日志，由 [online] 层统一记录
 
 	// Repository scanner and importer
 	var repoScanner *repo.Scanner
@@ -175,7 +183,7 @@ func main() {
 	ctx.Download = &downloadAdapter{mgr: downloadMgr, paths: p}
 	ctx.Source = &sourceAdapter{src: sourceMgr, cfg: cfg}
 	ctx.Shortcut = &shortcutAdapter{}
-	ctx.Serve = &serveAdapter{version: version, source: sourceMgr}
+	ctx.Serve = &serveAdapter{version: version, source: onlineSourceMgr, verbose: verbose}
 	ctx.Plugin = &pluginAdapter{mgr: pluginMgr}
 	ctx.Logger = logger
 	if repoImporter != nil {
@@ -428,11 +436,6 @@ func (a *configAdapter) ClearRemoteSource() error {
 func (a *configAdapter) IsServeSourceEnabled() bool { return a.cfg.IsServeSourceEnabled() }
 func (a *configAdapter) SetServeSourceEnabled(v bool) error {
 	a.cfg.SetServeSourceEnabled(v)
-	return config.Save(a.cfg, a.configPath)
-}
-func (a *configAdapter) IsOmahaSourceEnabled() bool { return a.cfg.IsOmahaSourceEnabled() }
-func (a *configAdapter) SetOmahaSourceEnabled(v bool) error {
-	a.cfg.SetOmahaSourceEnabled(v)
 	return config.Save(a.cfg, a.configPath)
 }
 func (a *configAdapter) IsFirefoxFTPEnabled() bool { return a.cfg.IsFirefoxFTPEnabled() }
@@ -909,6 +912,7 @@ func (a *repoAdapter) Import(force bool, onProgress func(int, int, string)) (*re
 type serveAdapter struct {
 	version string
 	source  source.Source // the multi-source for syncing
+	verbose bool
 }
 
 func (a *serveAdapter) StartFromConfig() error {
@@ -944,6 +948,10 @@ func (a *serveAdapter) StartFromConfig() error {
 	logFile := filepath.Join(dataDir, "logs", "serve.log")
 	consoleLevel := bmlog.ParseLevel(cfg.LogLevel)
 	fileLevel := bmlog.ParseLevel(cfg.FileLogLevel)
+	if a.verbose {
+		// -V 模式下，控制台日志级别与文件日志级别一致，输出所有日志
+		consoleLevel = fileLevel
+	}
 	maxSizeBytes := int64(cfg.LogMaxSizeMB) * 1024 * 1024
 	serveLogger, err := bmlog.NewDualLogger(logFile, fileLevel, consoleLevel, true,
 		bmlog.WithMaxSize(maxSizeBytes),
@@ -971,7 +979,6 @@ func (a *serveAdapter) StartFromConfig() error {
 	// Online fallback always queries all channels so that ESR, beta, etc.
 	// versions are discoverable even when sync-channels only lists "stable".
 	onlineBrowsers := syncBrowsers
-	onlineChannels := []string{"stable", "beta", "esr", "dev", "canary"}
 
 	if cfg.SyncEnabled && onlineSource != nil {
 		// Parse interval
@@ -995,7 +1002,6 @@ func (a *serveAdapter) StartFromConfig() error {
 			OnlineSource:   onlineSource,
 			OnlineFallback: cfg.OnlineFallback,
 			OnlineBrowsers: onlineBrowsers,
-			OnlineChannels: onlineChannels,
 			ScanWorkers:    cfg.ScanWorkers,
 			ConfigPath:     bmserve.ConfigPath(dataDir),
 			Logger:         serveLogger,
@@ -1011,7 +1017,6 @@ func (a *serveAdapter) StartFromConfig() error {
 		OnlineSource:   onlineSource,
 		OnlineFallback: cfg.OnlineFallback,
 		OnlineBrowsers: onlineBrowsers,
-		OnlineChannels: onlineChannels,
 		ScanWorkers:    cfg.ScanWorkers,
 		ConfigPath:     bmserve.ConfigPath(dataDir),
 		Logger:         serveLogger,
@@ -1139,10 +1144,12 @@ type sourceAdapter struct {
 }
 
 func (a *sourceAdapter) ResolveVersion(browser string, version string) (source.VersionInfo, error) {
-	return a.src.Resolve(context.TODO(), browser, version, source.CurrentPlatform(), source.CurrentArch())
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	return a.src.Resolve(ctx, browser, version, source.CurrentPlatform(), source.CurrentArch())
 }
 
-func (a *sourceAdapter) ListVersions(browser string, channel string) ([]source.VersionInfo, error) {
+func (a *sourceAdapter) ListVersions(browser string, channel string, versionPrefix string) ([]source.VersionInfo, error) {
 	filter := &source.Filter{
 		Browser:  browser,
 		Platform: source.CurrentPlatform(),
@@ -1151,7 +1158,12 @@ func (a *sourceAdapter) ListVersions(browser string, channel string) ([]source.V
 	if channel != "" {
 		filter.Channel = source.Channel(channel)
 	}
-	return a.src.List(context.TODO(), filter)
+	if versionPrefix != "" {
+		filter.VersionPrefix = versionPrefix
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	defer cancel()
+	return a.src.List(ctx, filter)
 }
 
 // ForceRefresh 对所有支持缓存刷新的底层源设置强制刷新标志。
@@ -1199,10 +1211,6 @@ func (a *sourceAdapter) Describe() string {
 // describeSourceName returns a human-readable description for a source name.
 func describeSourceName(name string) string {
 	switch name {
-	case "chrome-omaha":
-		return "Chrome Omaha 协议"
-	case "chrome-omahaproxy":
-		return "Chrome Omaha Proxy"
 	case "firefox-ftp":
 		return "Mozilla FTP 目录"
 	case "http":

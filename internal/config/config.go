@@ -48,7 +48,6 @@ type Config struct {
 
 	// Source switches control which data sources are active.
 	EnableServeSource bool // serve HTTP source
-	EnableOmahaSource bool // Chrome Omaha protocol
 	EnableFirefoxFTP  bool // Firefox FTP releases (reserved)
 
 	// DiskSpaceThresholdGB is the minimum free space (in GB) required before
@@ -162,7 +161,6 @@ func Default() *Config {
 			DownloadTTL:    168 * time.Hour,
 		},
 		EnableServeSource:    true,
-		EnableOmahaSource:    true,
 		EnableFirefoxFTP:     true,
 		DiskSpaceThresholdGB: 5,
 	}
@@ -294,8 +292,6 @@ func (c *Config) setINIValue(section, key, value string) {
 		switch key {
 		case "enable-serve-source", "enableservesource":
 			c.EnableServeSource = parseBool(value)
-		case "enable-omaha-source", "enableomahasource":
-			c.EnableOmahaSource = parseBool(value)
 		case "enable-firefox-ftp", "enablefirefoxftp":
 			c.EnableFirefoxFTP = parseBool(value)
 		}
@@ -457,9 +453,6 @@ func Save(cfg *Config, path string) error {
 	sb.WriteString("# 是否启用远程 serve 源\n")
 	sb.WriteString(fmt.Sprintf("enable-serve-source = %s\n", boolStr(cfg.EnableServeSource)))
 	sb.WriteString("\n")
-	sb.WriteString("# 是否启用 Chrome Omaha 源\n")
-	sb.WriteString(fmt.Sprintf("enable-omaha-source = %s\n", boolStr(cfg.EnableOmahaSource)))
-	sb.WriteString("\n")
 	sb.WriteString("# 是否启用 Firefox FTP 源\n")
 	sb.WriteString(fmt.Sprintf("enable-firefox-ftp = %s\n", boolStr(cfg.EnableFirefoxFTP)))
 	sb.WriteString("\n")
@@ -619,8 +612,6 @@ func (c *Config) ClearRemoteSource() {
 
 func (c *Config) IsServeSourceEnabled() bool   { return c.EnableServeSource }
 func (c *Config) SetServeSourceEnabled(v bool) { c.EnableServeSource = v }
-func (c *Config) IsOmahaSourceEnabled() bool   { return c.EnableOmahaSource }
-func (c *Config) SetOmahaSourceEnabled(v bool) { c.EnableOmahaSource = v }
 func (c *Config) IsFirefoxFTPEnabled() bool    { return c.EnableFirefoxFTP }
 func (c *Config) SetFirefoxFTPEnabled(v bool)  { c.EnableFirefoxFTP = v }
 

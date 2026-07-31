@@ -11,11 +11,13 @@ import (
 )
 
 // responseWriterWrapper wraps http.ResponseWriter to capture the status code
-// and implements http.Flusher and http.Hijacker for SSE/streaming support.
+// and response size, and implements http.Flusher and http.Hijacker for
+// SSE/streaming support.
 type responseWriterWrapper struct {
 	http.ResponseWriter
-	statusCode int
+	statusCode  int
 	wroteHeader bool
+	bytesWritten int64
 }
 
 // newResponseWriterWrapper creates a new responseWriterWrapper with default status 200.
@@ -36,12 +38,15 @@ func (w *responseWriterWrapper) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
-// Write ensures WriteHeader is called before writing the body.
+// Write ensures WriteHeader is called before writing the body and tracks the
+// number of bytes written for logging purposes.
 func (w *responseWriterWrapper) Write(b []byte) (int, error) {
 	if !w.wroteHeader {
 		w.WriteHeader(http.StatusOK)
 	}
-	return w.ResponseWriter.Write(b)
+	n, err := w.ResponseWriter.Write(b)
+	w.bytesWritten += int64(n)
+	return n, err
 }
 
 // Flush implements http.Flusher for SSE/streaming support.
@@ -66,8 +71,9 @@ type loggingHandler struct {
 	name   string
 }
 
-// ServeHTTP logs the request method, path, remote address, status code, and duration.
-// It skips logging for /api/v1/status (health check is too frequent).
+// ServeHTTP logs each HTTP request with a unified format.
+// It skips /api/v1/status (health check) to avoid log noise.
+// Format: [http] METHOD path status size duration clientIP "userAgent"
 func (h *loggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Skip health check endpoint
 	if r.URL.Path == "/api/v1/status" {
@@ -81,18 +87,31 @@ func (h *loggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.next.ServeHTTP(wrapped, r)
 
 	duration := time.Since(start)
-	remoteAddr := r.RemoteAddr
+	respSize := wrapped.bytesWritten
 
-	// Determine log level based on status code
+	// Build the request path with query string for more context.
+	reqPath := r.URL.Path
+	if r.URL.RawQuery != "" {
+		reqPath = reqPath + "?" + r.URL.RawQuery
+	}
+
+	// Extract client IP from RemoteAddr (strip port).
+	clientIP := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
+		clientIP = host
+	}
+
+	// Determine log level based on status code.
 	status := wrapped.statusCode
-	msg := "%s %s %d %v %s"
+	msg := "[http] %s %s %d %s %v %s"
+	args := []interface{}{r.Method, reqPath, status, formatSize(respSize), duration.Round(time.Millisecond), clientIP}
 
 	switch {
 	case status >= 500:
-		h.logger.Error(msg, r.Method, r.URL.Path, status, duration, remoteAddr)
+		h.logger.Error(msg+" \"%s\"", append(args, r.UserAgent())...)
 	case status >= 400:
-		h.logger.Warn(msg, r.Method, r.URL.Path, status, duration, remoteAddr)
+		h.logger.Warn(msg+" \"%s\"", append(args, r.UserAgent())...)
 	default:
-		h.logger.Info(msg, r.Method, r.URL.Path, status, duration, remoteAddr)
+		h.logger.Info(msg, args...)
 	}
 }

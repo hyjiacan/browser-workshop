@@ -23,7 +23,6 @@ This page records feature changes for each version of Browser Workshop, listed i
 
 #### Remote Download
 
-- Chrome: query and download via Chrome Omaha protocol
 - Firefox: fetch version info via Mozilla Product Details API
 - Supports multiple release channels: Stable, Beta, Dev, Canary, ESR
 - Full or partial version number matching
@@ -49,7 +48,7 @@ This page records feature changes for each version of Browser Workshop, listed i
 
 - Offline source (serve service) takes priority, built-in online source as fallback
 - Source filtering by browser type: only queries sources that support the specified browser
-- Source toggles: `serve-source`, `omaha-source`, `firefox-ftp`, independently enable/disable
+- Source toggles: `serve-source`, `firefox-ftp`, independently enable/disable
 
 #### Configuration Management
 

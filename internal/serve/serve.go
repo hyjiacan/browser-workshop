@@ -3,11 +3,11 @@
 // and provides a manifest API for clients to discover available versions.
 //
 // API v1:
-//   - GET /api/v1/manifest     - 文件清单（含 XXH3 校验和）
+//   - GET /api/v1/manifest     - 文件清单（本地 + 在线缓存，含 XXH3 校验和）
 //   - GET /api/v1/download/{filename} - 文件下载（支持 Range 断点续传）
 //   - GET /api/v1/status       - 服务状态
+//   - GET /api/v1/bin/{filename} - 客户端二进制下载
 //   - GET /                    - HTML 帮助页
-//   - GET /bin/{filename}      - 客户端二进制下载
 package serve
 
 import (
@@ -44,7 +44,8 @@ const (
 	cacheVersion = 1
 
 	// onlineCacheTTL is how long the online-version cache is considered fresh.
-	onlineCacheTTL = 10 * time.Minute
+	// Default: 24 hours so that serve doesn't hammer online sources.
+	onlineCacheTTL = 24 * time.Hour
 
 	// onlineListTimeout is the per-source timeout when listing online versions.
 	onlineListTimeout = 30 * time.Second
@@ -126,17 +127,7 @@ type Server struct {
 	// Online fallback: fetch packages from an online source when not cached locally.
 	onlineSrc      SyncSource
 	onlineFallback bool
-	onlineBrowsers []string
-	onlineChannels []string
-
-	// onlineMu protects the online cache fields below.
-	onlineMu        sync.RWMutex
-	onlineFiles     map[string]onlinePackage // filename -> download info
-	onlineList      []PackageFile            // cached manifest entries from online source
-	onlineCacheTime time.Time
-	// onlineRefreshMu serializes cache refreshes so concurrent requests
-	// don't all hit the online source at once.
-	onlineRefreshMu sync.Mutex
+	onlineCacheMgr *OnlineCacheManager
 
 	// dlMu + dlInflight deduplicate concurrent on-demand downloads of the
 	// same filename: the first requester downloads, others wait.
@@ -148,6 +139,8 @@ type Server struct {
 type PackageFile struct {
 	Filename     string `json:"filename"`
 	Version      string `json:"version"`
+	Browser      string `json:"browser"`
+	Channel      string `json:"channel"`
 	MajorVersion string `json:"major_version"`
 	Platform     string `json:"platform"`
 	Architecture string `json:"architecture"`
@@ -237,12 +230,8 @@ type ServerOptions struct {
 	OnlineFallback bool
 
 	// OnlineBrowsers is the list of browsers to query from OnlineSource when
-	// building the fallback manifest. If empty, defaults to [chrome, firefox].
+	// building the fallback manifest. If empty, defaults to [firefox].
 	OnlineBrowsers []string
-
-	// OnlineChannels is the list of channels to query from OnlineSource when
-	// building the fallback manifest. If empty, defaults to [stable].
-	OnlineChannels []string
 
 	// ScanWorkers is the number of worker goroutines used for parallel
 	// checksum computation during package scanning. 0 means auto
@@ -318,10 +307,14 @@ func NewServerWithOptions(opts ServerOptions) *Server {
 		logger:         logger,
 		onlineSrc:      opts.OnlineSource,
 		onlineFallback: opts.OnlineFallback,
-		onlineBrowsers: opts.OnlineBrowsers,
-		onlineChannels: opts.OnlineChannels,
 		scanWorkers:    opts.ScanWorkers,
 		dlInflight:     make(map[string]chan struct{}),
+	}
+
+	// Create online cache manager when online source is configured.
+	// The manager handles per-browser caching of online version data.
+	if opts.OnlineSource != nil {
+		srv.onlineCacheMgr = NewOnlineCacheManager(baseDir, opts.OnlineSource, logger, opts.OnlineBrowsers)
 	}
 
 	// Set up sync manager if source is provided
@@ -342,42 +335,62 @@ func NewServerWithOptions(opts ServerOptions) *Server {
 
 // Start starts the HTTP server. It blocks until the server stops.
 func (s *Server) Start() error {
-	// Print startup banner before doing any heavy work so the user sees that
-	// the server is coming up. scanPackages and printStartupInfo add the
-	// detailed progress and summary afterwards.
-	fmt.Println("bws serve 正在启动...")
-	fmt.Printf("  正在加载配置: %s\n", s.configPath)
-	fmt.Printf("  正在扫描软件包目录: %s\n", s.packagesDir)
+	s.logger.Info("[serve] 正在启动...")
 
 	// Ensure directories exist
 	if err := os.MkdirAll(s.packagesDir, 0o755); err != nil {
+		s.logger.Error("[serve] 创建软件包目录失败: %v", err)
 		return fmt.Errorf("creating packages directory: %w", err)
 	}
 	if err := os.MkdirAll(s.binDir, 0o755); err != nil {
+		s.logger.Error("[serve] 创建客户端二进制目录失败: %v", err)
 		return fmt.Errorf("creating bin directory: %w", err)
 	}
 
-	// Load cache
+	// Load checksum cache
 	cache, err := s.loadCache()
 	if err != nil {
-		cache = make(map[string]cacheEntry)
+		s.logger.Debug("[serve] 加载缓存失败（将使用空缓存）: %v", err)
+	} else if len(cache) > 0 {
+		s.logger.Debug("[serve] 已加载缓存: %d 个条目", len(cache))
 	}
 
 	// Scan packages and compute checksums
 	if err := s.scanPackages(cache); err != nil {
+		s.logger.Error("[serve] 扫描软件包失败: %v", err)
 		return fmt.Errorf("scanning packages: %w", err)
 	}
 
 	// Save updated cache
 	if err := s.saveCache(cache); err != nil {
-		s.logger.Warn("保存缓存失败: %v", err)
+		s.logger.Warn("[serve] 保存缓存失败: %v", err)
 	}
 
 	s.startTime = time.Now()
 
 	// Start sync manager
 	if s.syncMgr != nil {
+		s.logger.Info("[serve] 自动同步已启用 (间隔 %v)", s.syncMgr.config.Interval)
+		s.logger.Debug("[serve] 同步配置: browsers=%v channels=%v", s.syncMgr.config.Browsers, s.syncMgr.config.Channels)
 		s.syncMgr.Start()
+	}
+
+	// Online fallback
+	if s.onlineFallback && s.onlineSrc != nil {
+		s.logger.Info("[serve] 在线回退已启用 (browsers=%v)", s.onlineCacheMgr.Browsers())
+
+		// Load existing cache files from disk first (fast, no network).
+		s.onlineCacheMgr.LoadFromDisk()
+
+		// Preload online cache in the background.
+		go func() {
+			s.logger.Info("[online] 正在后台预加载在线缓存...")
+			preloadStart := time.Now()
+			s.onlineCacheMgr.RefreshAll()
+			s.logger.Info("[online] 在线缓存预加载完成 (耗时 %v)", time.Since(preloadStart).Round(time.Millisecond))
+		}()
+	} else if s.onlineFallback && s.onlineSrc == nil {
+		s.logger.Warn("[serve] 在线回退已启用但未配置在线源，功能不可用")
 	}
 
 	// Set up routes
@@ -387,7 +400,7 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/v1/status", s.handleStatus)
 	mux.HandleFunc("/api/v1/sync/status", s.handleSyncStatus)
 	mux.HandleFunc("/api/v1/sync/trigger", s.handleSyncTrigger)
-	mux.HandleFunc("/bin/", s.handleBin)
+	mux.HandleFunc("/api/v1/bin/", s.handleBin)
 	mux.HandleFunc("/", s.handleRoot)
 
 	s.httpSrv = &http.Server{
@@ -400,6 +413,7 @@ func (s *Server) Start() error {
 
 	s.printStartupInfo()
 
+	s.logger.Info("[serve] 服务器开始监听: %s", s.addr)
 	return s.httpSrv.ListenAndServe()
 }
 
@@ -412,17 +426,28 @@ func (s *Server) Stop() error {
 
 // Shutdown gracefully stops the server.
 func (s *Server) Shutdown(ctx context.Context) error {
+	s.logger.Info("[serve] 正在关闭服务器...")
+
 	// Stop sync manager first
 	if s.syncMgr != nil {
+		s.logger.Debug("[sync] 正在停止同步管理器...")
 		s.syncMgr.Stop()
 	}
 	if s.httpSrv == nil {
 		return nil
 	}
-	return s.httpSrv.Shutdown(ctx)
+
+	s.logger.Debug("[serve] 正在等待HTTP请求完成（超时 %v）...", ctx)
+	err := s.httpSrv.Shutdown(ctx)
+	if err != nil {
+		s.logger.Error("[serve] 服务器关闭失败: %v", err)
+	} else {
+		s.logger.Info("[serve] 服务器已安全关闭")
+	}
+	return err
 }
 
-// printStartupInfo prints server startup information.
+// printStartupInfo prints server startup information to stdout.
 func (s *Server) printStartupInfo() {
 	s.mu.RLock()
 	fileCount := len(s.files)
@@ -438,21 +463,28 @@ func (s *Server) printStartupInfo() {
 	fmt.Printf("  监听地址:     %s\n", s.addr)
 	fmt.Printf("  软件包数量:   %d 个 (%s)\n", fileCount, formatSize(totalSize))
 	if s.onlineFallback && s.onlineSrc != nil {
-		fmt.Printf("  在线回退:     已启用（本地缺失时自动从在线源获取）\n")
+		fmt.Printf("  在线回退:     已启用\n")
+	}
+	if s.syncMgr != nil {
+		fmt.Printf("  自动同步:     已启用 (间隔 %v)\n", s.syncMgr.config.Interval)
 	}
 	fmt.Println()
 	fmt.Println("  API 接口:")
 	fmt.Printf("    GET /                    - HTML 帮助页面\n")
-	fmt.Printf("    GET /api/v1/manifest     - 软件包清单 (JSON)\n")
+	fmt.Printf("    GET /api/v1/manifest     - 软件包清单 (含在线缓存)\n")
 	fmt.Printf("    GET /api/v1/download/    - 软件包下载\n")
 	fmt.Printf("    GET /api/v1/status       - 服务状态\n")
-	fmt.Printf("    GET /bin/                - 客户端二进制文件\n")
+	fmt.Printf("    GET /api/v1/bin/         - 客户端二进制文件\n")
 	fmt.Println()
 	fmt.Println("  客户端配置:")
 	fmt.Printf("    bws config set source http://<服务器地址>:<端口>\n")
 	fmt.Println()
 	fmt.Println("按 Ctrl+C 停止服务。")
 	fmt.Println()
+
+	// Debug: detailed config for troubleshooting
+	s.logger.Debug("[serve] 配置: addr=%s packages=%s bin=%s cache=%s config=%s workers=%d",
+		s.addr, s.packagesDir, s.binDir, s.cachePath, s.configPath, s.scanWorkers)
 }
 
 // supportedPackageExtensions lists file extensions (lowercase, leading dot) for
@@ -511,10 +543,11 @@ func isSupportedExtension(base string) bool {
 // Uses a worker pool for parallel checksum computation. The number of workers is
 // determined by s.scanWorkers (0 = runtime.NumCPU(), clamped to [1, 32]).
 func (s *Server) scanPackages(cache map[string]cacheEntry) error {
+	scanStart := time.Now()
 	if cache == nil {
 		cache = make(map[string]cacheEntry)
 	}
-	s.logger.Debug("正在扫描软件包目录: %s", s.packagesDir)
+	s.logger.Info("[scan] 正在扫描目录: %s", s.packagesDir)
 
 	// Create a scanner for filename parsing
 	scanner, err := repo.NewScanner(s.packagesDir, browser.DefaultRegistry)
@@ -533,8 +566,6 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 	if numWorkers > 32 {
 		numWorkers = 32
 	}
-
-	fmt.Printf("  正在扫描文件...\n")
 
 	// Phase 1: walk directory recursively to collect all files
 	type fileEntry struct {
@@ -557,7 +588,7 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 		// non-package files like .txt, .json, .html, .md, .png, .jpg, etc.
 		if !isSupportedExtension(d.Name()) {
 			skippedUnsupported++
-			s.logger.Debug("跳过不支持的文件类型: %s", d.Name())
+			s.logger.Debug("[scan] 跳过不支持的文件类型: %s", d.Name())
 			return nil
 		}
 		relPath, err := filepath.Rel(s.packagesDir, absPath)
@@ -578,20 +609,23 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 	})
 	if err != nil {
 		if os.IsNotExist(err) {
-			s.logger.Debug("软件包目录不存在，跳过扫描")
+			s.logger.Debug("[scan] 软件包目录不存在，跳过扫描")
 			return nil
 		}
 		return fmt.Errorf("scanning packages directory: %w", err)
 	}
 
 	if len(allFiles) == 0 {
-		s.logger.Debug("未找到任何文件")
+		s.logger.Debug("[scan] 未找到任何文件 (跳过 %d 个非安装包文件)", skippedUnsupported)
 		s.mu.Lock()
 		s.files = nil
 		s.totalSize = 0
 		s.mu.Unlock()
 		return nil
 	}
+
+	s.logger.Debug("[scan] 目录遍历完成: %d 个有效文件, 跳过 %d 个非安装包文件 (耗时 %v)",
+		len(allFiles), skippedUnsupported, time.Since(scanStart).Round(time.Millisecond))
 
 	// Phase 2: separate cache hits and misses
 	type missEntry struct {
@@ -631,7 +665,8 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 		if len(misses) < workers {
 			workers = len(misses)
 		}
-		fmt.Printf("  正在计算校验和（%d 个文件需要处理，使用 %d 个线程）...\n", len(misses), workers)
+		s.logger.Debug("[scan] 校验和计算: 缓存命中 %d, 需计算 %d (线程 %d)",
+			cacheHits, len(misses), workers)
 
 		type job struct {
 			idx     int
@@ -655,7 +690,6 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 			go func() {
 				defer wg.Done()
 				for j := range jobs {
-					s.logger.Debug("计算校验和: %s", j.relPath)
 					cs, err := computeXXH3(j.absPath)
 					results <- result{
 						idx:      j.idx,
@@ -692,7 +726,7 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 		// Collect results
 		for r := range results {
 			if r.err != nil {
-				s.logger.Warn("计算 %s 校验和失败: %v", r.relPath, r.err)
+				s.logger.Warn("[scan] 计算校验和失败: %s: %v", r.relPath, r.err)
 				continue
 			}
 			m, ok := missMap[r.idx]
@@ -732,17 +766,21 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 		return files[i].Filename < files[j].Filename
 	})
 
+	// Print discovery log for each valid file (jm.exe style).
+	for _, f := range files {
+		s.logger.Info("[scan] 发现: %s（%s/%s, 版本 %s, %s, %s）",
+			f.Filename, f.Platform, f.Architecture, f.Version, f.Browser, formatSize(f.Size))
+	}
+
 	s.mu.Lock()
 	s.files = files
 	s.totalSize = totalSize
 	s.mu.Unlock()
 
 	computedSuccessfully := len(files) - cacheHits
-	fmt.Printf("  扫描完成: 共 %d 个文件 (缓存命中 %d, 新计算 %d, 线程数 %d", len(files), cacheHits, computedSuccessfully, numWorkers)
-	if skippedUnsupported > 0 {
-		fmt.Printf(", 跳过 %d 个非安装包文件", skippedUnsupported)
-	}
-	fmt.Println(")")
+
+	s.logger.Info("[scan] 扫描完成: %d 个文件 (缓存命中 %d, 新计算 %d, 跳过 %d), 总大小 %s (耗时 %v)",
+		len(files), cacheHits, computedSuccessfully, skippedUnsupported, formatSize(totalSize), time.Since(scanStart).Round(time.Millisecond))
 
 	return nil
 }
@@ -760,6 +798,9 @@ func (s *Server) parsePackageFile(scanner *repo.Scanner, filename string, size i
 		Size:     size,
 		Checksum: "xxh3:" + checksum,
 	}
+
+	pkg.Browser = match.Browser
+	pkg.Channel = match.Channel
 
 	if match.Version != "" {
 		pkg.Version = match.Version
@@ -865,7 +906,10 @@ func (s *Server) saveCache(cache map[string]cacheEntry) error {
 
 // --- HTTP Handlers ---
 
-// handleManifest returns the package manifest as JSON.
+// handleManifest returns the merged manifest of local packages and online-cached
+// versions as JSON. When online fallback is enabled, the manifest includes both
+// locally hosted files (with real checksums) and online-cached version entries
+// (without checksums until downloaded). Filtering is done client-side.
 func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -876,92 +920,38 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse optional filter query parameters: browser, platform, arch, channel.
-	query := r.URL.Query()
-	browserFilter := strings.ToLower(strings.TrimSpace(query.Get("browser")))
-	platformFilter := strings.ToLower(strings.TrimSpace(query.Get("platform")))
-	archFilter := strings.ToLower(strings.TrimSpace(query.Get("arch")))
-	channelFilter := strings.ToLower(strings.TrimSpace(query.Get("channel")))
-
 	s.mu.RLock()
-	files := make([]PackageFile, len(s.files))
-	copy(files, s.files)
+	localFiles := make([]PackageFile, len(s.files))
+	copy(localFiles, s.files)
 	s.mu.RUnlock()
 
-	// Apply local filtering based on the query parameters. Local files only
-	// carry platform/arch metadata (no channel), so channel filtering only
-	// affects the online portion.
-	if browserFilter != "" || platformFilter != "" || archFilter != "" {
-		filtered := files[:0]
-		for _, f := range files {
-			if browserFilter != "" {
-				if !strings.Contains(strings.ToLower(f.Filename), browserFilter) {
-					continue
-				}
-			}
-			if platformFilter != "" {
-				if f.Platform != platformFilter && !(platformFilter == "darwin" && f.Platform == "macos") && !(platformFilter == "macos" && f.Platform == "darwin") {
-					continue
-				}
-			}
-			if archFilter != "" {
-				if f.Architecture != archFilter && !(archFilter == "amd64" && f.Architecture == "x64") && !(archFilter == "x64" && f.Architecture == "amd64") && !(archFilter == "386" && f.Architecture == "x86") && !(archFilter == "x86" && f.Architecture == "386") {
-					continue
-				}
-			}
-			filtered = append(filtered, f)
-		}
-		files = filtered
-	}
+	totalLocal := len(localFiles)
 
-	// When online fallback is enabled, merge in versions available from the
-	// online source so clients can discover (and on-demand download) packages
-	// that are not yet cached locally. Only the requested browser is queried
-	// (when a browser filter is present) to avoid hitting every configured
-	// browser on each request.
-	fileCount := len(files)
-	if s.onlineFallback && s.onlineSrc != nil {
-		online := s.getOnlinePackages(browserFilter)
-		// Apply platform/arch/channel filtering to the online list.
-		if platformFilter != "" || archFilter != "" || channelFilter != "" {
-			filtered := online[:0]
-			for _, f := range online {
-				if platformFilter != "" {
-					if f.Platform != platformFilter && !(platformFilter == "darwin" && f.Platform == "macos") && !(platformFilter == "macos" && f.Platform == "darwin") {
-						continue
-					}
-				}
-				if archFilter != "" {
-					if f.Architecture != archFilter && !(archFilter == "amd64" && f.Architecture == "x64") && !(archFilter == "x64" && f.Architecture == "amd64") && !(archFilter == "386" && f.Architecture == "x86") && !(archFilter == "x86" && f.Architecture == "386") {
-						continue
-					}
-				}
-				if channelFilter != "" {
-					if !strings.Contains(strings.ToLower(f.Filename), channelFilter) {
-						continue
-					}
-				}
-				filtered = append(filtered, f)
-			}
-			online = filtered
-		}
-		files = mergeManifest(files, online)
-		fileCount = len(files)
+	// Merge online cache entries when online fallback is enabled.
+	var merged []PackageFile
+	if s.onlineFallback && s.onlineCacheMgr != nil {
+		onlineFiles := s.onlineCacheMgr.GetAll()
+		merged = mergeManifest(localFiles, onlineFiles)
+		s.logger.Debug("[manifest] 返回 %d 个文件 (本地 %d + 在线缓存 %d, 合并去重后 %d)",
+			len(merged), totalLocal, len(onlineFiles), len(merged))
+	} else {
+		merged = localFiles
+		s.logger.Debug("[manifest] 返回 %d 个文件 (仅本地)", totalLocal)
 	}
 
 	resp := ManifestResponse{
 		Status: "ok",
-		Data:   files,
+		Data:   merged,
 	}
 	resp.Server.Name = serverName
 	resp.Server.Version = s.version
-	resp.Server.FileCount = fileCount
+	resp.Server.FileCount = len(merged)
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(resp); err != nil {
-		s.logger.Warn("编码 manifest 响应失败: %v", err)
+		s.logger.Warn("[manifest] 编码响应失败: %v", err)
 	}
 }
 
@@ -982,6 +972,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 	// Prevent path traversal
 	fullPath, err := safeJoin(s.packagesDir, filename)
 	if err != nil {
+		s.logger.Warn("[download] 路径遍历检测: %s (来自 %s)", filename, r.RemoteAddr)
 		http.Error(w, "invalid path", http.StatusBadRequest)
 		return
 	}
@@ -992,26 +983,36 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		if os.IsNotExist(err) {
 			// Online fallback: fetch the package on demand when not cached locally.
 			if s.onlineFallback && s.onlineSrc != nil {
+				s.logger.Info("[download] 本地未找到，触发在线回退: %s", filename)
 				if localPath, ferr := s.fetchOnlinePackage(filename); ferr == nil {
+					if dlInfo, statErr := os.Stat(localPath); statErr == nil {
+						s.logger.Info("[online] 在线回退成功: %s (%s)", filename, formatSize(dlInfo.Size()))
+					} else {
+						s.logger.Info("[online] 在线回退成功: %s", filename)
+					}
 					servePackageFile(w, r, localPath)
 					return
 				} else {
-					s.logger.Warn("在线回退获取 %s 失败: %v", filename, ferr)
+					s.logger.Warn("[online] 在线回退失败: %s: %v", filename, ferr)
 					http.Error(w, "file not found", http.StatusNotFound)
 					return
 				}
 			}
+			s.logger.Debug("[download] 文件不存在: %s", filename)
 			http.Error(w, "file not found", http.StatusNotFound)
 			return
 		}
+		s.logger.Error("[download] 检查文件失败: %s: %v", filename, err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	if info.IsDir() {
+		s.logger.Warn("[download] 请求的是目录: %s", filename)
 		http.Error(w, "not a file", http.StatusBadRequest)
 		return
 	}
 
+	s.logger.Debug("[download] 本地命中: %s (%s)", filename, formatSize(info.Size()))
 	// Serve the file with Range support
 	servePackageFile(w, r, fullPath)
 }
@@ -1050,6 +1051,8 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 
 	uptime := int64(time.Since(s.startTime).Seconds())
 
+	s.logger.Debug("[status] 返回服务状态: uptime=%ds files=%d size=%s", uptime, fileCount, formatSize(totalSize))
+
 	resp := StatusResponse{
 		Status: "ok",
 	}
@@ -1063,7 +1066,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(resp); err != nil {
-		s.logger.Warn("编码 status 响应失败: %v", err)
+		s.logger.Warn("[status] 编码响应失败: %v", err)
 	}
 }
 
@@ -1074,8 +1077,8 @@ func (s *Server) handleBin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Path is /bin/{filename}
-	filename := strings.TrimPrefix(r.URL.Path, "/bin/")
+	// Path is /api/v1/bin/{filename}
+	filename := strings.TrimPrefix(r.URL.Path, "/api/v1/bin/")
 	if filename == "" {
 		http.NotFound(w, r)
 		return
@@ -1084,6 +1087,7 @@ func (s *Server) handleBin(w http.ResponseWriter, r *http.Request) {
 	// Prevent path traversal
 	fullPath, err := safeJoin(s.binDir, filename)
 	if err != nil {
+		s.logger.Warn("[bin] 路径遍历检测: %s", filename)
 		http.Error(w, "invalid path", http.StatusBadRequest)
 		return
 	}
@@ -1092,16 +1096,21 @@ func (s *Server) handleBin(w http.ResponseWriter, r *http.Request) {
 	info, err := os.Stat(fullPath)
 	if err != nil {
 		if os.IsNotExist(err) {
+			s.logger.Debug("[bin] 文件不存在: %s", filename)
 			http.Error(w, "file not found", http.StatusNotFound)
 			return
 		}
+		s.logger.Error("[bin] 检查文件失败: %s: %v", filename, err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	if info.IsDir() {
+		s.logger.Warn("[bin] 请求的是目录: %s", filename)
 		http.Error(w, "not a file", http.StatusBadRequest)
 		return
 	}
+
+	s.logger.Debug("[bin] 发送: %s (%s)", filename, formatSize(info.Size()))
 
 	// Serve the file
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", info.Name()))
@@ -1116,6 +1125,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.URL.Path != "/" {
+		s.logger.Debug("[root] 未找到路径: %s", r.URL.Path)
 		http.NotFound(w, r)
 		return
 	}
@@ -1163,7 +1173,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		Features: []string{
 			"多版本管理：同时安装和管理多个浏览器版本，支持版本前缀快速筛选",
 			"本地导入：支持 zip、7z、tar.gz 等多种格式自动识别导入",
-			"远程下载：从官方源下载指定版本（Chrome Omaha、Firefox FTP）",
+			"远程下载：从官方源下载指定版本（Firefox FTP）",
 			"离线分发：局域网浏览器版本分发服务，支持自动同步",
 			"隔离运行：每个版本独立 Profile，互不干扰",
 			"便携模式：数据存储在 bws-data/ 子目录，U 盘随身携带",
@@ -1179,6 +1189,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	// Parse and execute template
 	tmpl, err := template.ParseFS(pageHTML, "page.html")
 	if err != nil {
+		s.logger.Error("[root] 模板解析失败: %v", err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -1186,7 +1197,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := tmpl.Execute(w, data); err != nil {
 		// Headers already written, just log the error
-		s.logger.Warn("模板渲染错误: %v", err)
+		s.logger.Warn("[root] 模板渲染错误: %v", err)
 	}
 }
 
@@ -1373,159 +1384,6 @@ func mergeManifest(local, online []PackageFile) []PackageFile {
 	return merged
 }
 
-// getOnlinePackages returns the cached online package entries, refreshing the
-// cache from the online source if it is stale. Refreshes are serialized so
-// concurrent requests share a single network query round.
-//
-// When browserFilter is non-empty, only that browser is queried from the
-// online source (the cached result is also filtered to that browser). When
-// empty, all configured browsers are queried (preserving the prior behavior).
-// Note: the cache is keyed only by whether a filter is present, not by the
-// specific browser value, so switching browsers within the TTL window does
-// not trigger a re-query but returns a filtered view of the cached entries.
-func (s *Server) getOnlinePackages(browserFilter string) []PackageFile {
-	s.onlineMu.RLock()
-	if !s.onlineCacheTime.IsZero() && time.Since(s.onlineCacheTime) < onlineCacheTTL {
-		list := s.onlineList
-		s.onlineMu.RUnlock()
-		// Return a copy to avoid callers mutating the cached slice.
-		out := filterOnlineListByBrowser(list, browserFilter)
-		return out
-	}
-	s.onlineMu.RUnlock()
-
-	// Serialize refreshes.
-	s.onlineRefreshMu.Lock()
-	defer s.onlineRefreshMu.Unlock()
-
-	// Double-check after acquiring the refresh lock: another goroutine may
-	// have just refreshed the cache.
-	s.onlineMu.RLock()
-	if !s.onlineCacheTime.IsZero() && time.Since(s.onlineCacheTime) < onlineCacheTTL {
-		list := s.onlineList
-		s.onlineMu.RUnlock()
-		out := filterOnlineListByBrowser(list, browserFilter)
-		return out
-	}
-	s.onlineMu.RUnlock()
-
-	s.doRefreshOnlineCache(browserFilter)
-
-	s.onlineMu.RLock()
-	defer s.onlineMu.RUnlock()
-	return filterOnlineListByBrowser(s.onlineList, browserFilter)
-}
-
-// filterOnlineListByBrowser returns a copy of list restricted to entries whose
-// filename contains the given browser keyword. When browserFilter is empty,
-// a full copy is returned. This is used so a single cached list (built from
-// all configured browsers) can still serve browser-specific requests without
-// a re-query.
-func filterOnlineListByBrowser(list []PackageFile, browserFilter string) []PackageFile {
-	if browserFilter == "" {
-		out := make([]PackageFile, len(list))
-		copy(out, list)
-		return out
-	}
-	out := make([]PackageFile, 0, len(list))
-	for _, f := range list {
-		if strings.Contains(strings.ToLower(f.Filename), browserFilter) {
-			out = append(out, f)
-		}
-	}
-	return out
-}
-
-// doRefreshOnlineCache queries the online source for all configured
-// browser/channel/platform/arch combinations and rebuilds the cache.
-// Failures for individual combinations are logged and skipped so a single
-// broken source does not invalidate the whole cache.
-//
-// When browserFilter is non-empty, only that browser is queried (instead of
-// all configured browsers). This keeps a browser-specific request from
-// triggering expensive queries for every other configured browser.
-func (s *Server) doRefreshOnlineCache(browserFilter string) {
-	browsers := s.onlineBrowsers
-	if len(browsers) == 0 {
-		browsers = []string{"chrome", "firefox"}
-	}
-	// If a specific browser filter is requested, only query that browser so
-	// we avoid hitting every configured browser on each request.
-	if browserFilter != "" {
-		browsers = []string{browserFilter}
-	}
-	channels := s.onlineChannels
-	if len(channels) == 0 {
-		channels = []string{"stable"}
-	}
-
-	filesMap := make(map[string]onlinePackage)
-	var list []PackageFile
-
-	for _, b := range browsers {
-		for _, ch := range channels {
-			for _, combo := range defaultOnlineCombos {
-				// ListVersions is not context-aware; bound it with a timeout
-				// via a goroutine so a slow source cannot stall the request.
-				versions, err := s.listVersionsWithTimeout(b, ch, combo.platform, combo.arch)
-				if err != nil {
-					s.logger.Warn("在线获取 %s/%s/%s/%s 版本失败: %v",
-						b, ch, combo.platform, combo.arch, err)
-					continue
-				}
-				for _, v := range versions {
-					fname := onlineFilename(v)
-					if fname == "" || v.DownloadURL == "" {
-						continue
-					}
-					if _, exists := filesMap[fname]; exists {
-						continue
-					}
-					filesMap[fname] = onlinePackage{
-						url:      v.DownloadURL,
-						browser:  b,
-						version:  v.Version,
-						platform: combo.platform,
-						arch:     combo.arch,
-						size:     v.Size,
-					}
-					list = append(list, s.onlinePackageFile(fname, v, combo.platform, combo.arch))
-				}
-			}
-		}
-	}
-
-	sort.Slice(list, func(i, j int) bool {
-		return list[i].Filename < list[j].Filename
-	})
-
-	s.onlineMu.Lock()
-	s.onlineFiles = filesMap
-	s.onlineList = list
-	s.onlineCacheTime = time.Now()
-	s.onlineMu.Unlock()
-}
-
-// listVersionsWithTimeout calls onlineSrc.ListVersions with a timeout so a
-// hanging source cannot block the manifest/download handlers indefinitely.
-func (s *Server) listVersionsWithTimeout(browser, channel, platform, arch string) ([]SyncVersionInfo, error) {
-	type result struct {
-		versions []SyncVersionInfo
-		err      error
-	}
-	ch := make(chan result, 1)
-	go func() {
-		versions, err := s.onlineSrc.ListVersions(browser, channel, platform, arch)
-		ch <- result{versions, err}
-	}()
-	select {
-	case r := <-ch:
-		return r.versions, r.err
-	case <-time.After(onlineListTimeout):
-		return nil, fmt.Errorf("查询超时（超过 %s）", onlineListTimeout)
-	}
-}
-
 // onlineFilename derives the local filename for an online version. It prefers
 // the explicit Filename field and falls back to the URL-decoded base name of
 // the download URL (so URL-encoded names like "Firefox%20Setup%20..." become
@@ -1541,25 +1399,6 @@ func onlineFilename(v SyncVersionInfo) string {
 	return base
 }
 
-// onlinePackageFile builds a PackageFile entry for an online-available
-// version. The checksum is empty until the file is actually downloaded
-// locally; the size is taken from the source when known.
-func (s *Server) onlinePackageFile(filename string, v SyncVersionInfo, platform, arch string) PackageFile {
-	pkg := PackageFile{
-		Filename: filename,
-		Version:  v.Version,
-		Size:     v.Size,
-	}
-	if v.Version != "" {
-		pkg.MajorVersion = strconv.Itoa(version.Major(v.Version))
-	} else {
-		pkg.MajorVersion = "0"
-	}
-	pkg.Platform = normalizePlatform(platform)
-	pkg.Architecture = normalizeArch(arch)
-	return pkg
-}
-
 // fetchOnlinePackage downloads a package on demand from the online source and
 // returns its local path. Concurrent requests for the same filename are
 // deduplicated: only the first requester performs the download, the rest wait
@@ -1569,9 +1408,11 @@ func (s *Server) fetchOnlinePackage(filename string) (string, error) {
 	s.dlMu.Lock()
 	if ch, ok := s.dlInflight[filename]; ok {
 		s.dlMu.Unlock()
+		s.logger.Debug("[online] 等待并发下载完成: %s", filename)
 		<-ch // wait for the in-flight download to finish
 		destPath := filepath.Join(s.packagesDir, filename)
 		if info, err := os.Stat(destPath); err == nil && !info.IsDir() {
+			s.logger.Debug("[online] 并发下载已完成，复用文件: %s", filename)
 			return destPath, nil
 		}
 		return "", fmt.Errorf("在线获取失败（并发请求未完成下载）")
@@ -1603,22 +1444,30 @@ func (s *Server) doOnlineDownload(filename string) error {
 		return err
 	}
 
-	s.logger.Info("在线回退: 正在下载 %s ...", filename)
+	s.logger.Info("[online] 开始在线下载: %s", filename)
+	s.logger.Debug("[online] 下载详情: url=%s browser=%s version=%s platform=%s arch=%s size=%s",
+		info.url, info.browser, info.version, info.platform, info.arch, formatSize(info.size))
 
 	// SyncSource.Download has its own 30-minute timeout via DefaultDownload.
+	downloadStart := time.Now()
 	downloadedPath, err := s.onlineSrc.Download(info.url, s.packagesDir, nil)
 	if err != nil {
+		s.logger.Warn("[online] 下载失败: %s: %v (耗时 %v)", filename, err, time.Since(downloadStart).Round(time.Millisecond))
 		return fmt.Errorf("下载失败: %w", err)
 	}
+
+	s.logger.Info("[online] 下载完成: %s (耗时 %v)", filename, time.Since(downloadStart).Round(time.Millisecond))
 
 	// The downloaded file may be named after the (possibly URL-encoded) URL
 	// base. Rename it to the canonical filename clients request by.
 	destPath := filepath.Join(s.packagesDir, filename)
 	if downloadedPath != destPath {
+		s.logger.Debug("[online] 重命名文件: %s -> %s", filepath.Base(downloadedPath), filename)
 		// Remove a stale destination if it exists, then rename.
 		_ = os.Remove(destPath)
 		if err := os.Rename(downloadedPath, destPath); err != nil {
 			// Rename can fail across volumes/devices; fall back to a copy.
+			s.logger.Debug("[online] 重命名失败，尝试复制: %s -> %s", downloadedPath, destPath)
 			if copyErr := copyFile(downloadedPath, destPath); copyErr != nil {
 				return fmt.Errorf("重命名下载文件失败: %w", copyErr)
 			}
@@ -1626,13 +1475,20 @@ func (s *Server) doOnlineDownload(filename string) error {
 		}
 	}
 
+	// Log final file size.
+	if fi, statErr := os.Stat(destPath); statErr == nil {
+		s.logger.Debug("[online] 文件已就绪: %s (%s)", destPath, formatSize(fi.Size()))
+	}
+
 	// Re-scan packages so the new file gets a checksum and is added to the
 	// manifest. The checksum cache makes this cheap for unchanged files.
+	s.logger.Debug("[online] 重新扫描软件包目录以更新清单...")
 	cache, _ := s.loadCache()
 	if err := s.scanPackages(cache); err != nil {
-		s.logger.Warn("重新扫描软件包失败: %v", err)
+		s.logger.Warn("[online] 重新扫描软件包失败: %v", err)
 	}
 	_ = s.saveCache(cache)
+	s.logger.Debug("[online] 清单已更新")
 
 	return nil
 }
@@ -1640,21 +1496,16 @@ func (s *Server) doOnlineDownload(filename string) error {
 // findOnlinePackage looks up the download info for a filename, refreshing the
 // online cache on miss.
 func (s *Server) findOnlinePackage(filename string) (onlinePackage, error) {
-	s.onlineMu.RLock()
-	info, ok := s.onlineFiles[filename]
-	s.onlineMu.RUnlock()
+	info, ok := s.onlineCacheMgr.FindPackage(filename)
 	if ok {
 		return info, nil
 	}
 
-	// Not in cache: refresh and try again. Pass an empty browser filter so we
-	// query all configured browsers (the filename alone doesn't tell us which
-	// browser it belongs to, and a download miss should still be resolvable).
-	s.getOnlinePackages("")
+	// Not in cache: refresh all browsers so we can resolve any filename
+	// regardless of which browser/platform/arch it belongs to.
+	s.onlineCacheMgr.RefreshAll()
 
-	s.onlineMu.RLock()
-	defer s.onlineMu.RUnlock()
-	info, ok = s.onlineFiles[filename]
+	info, ok = s.onlineCacheMgr.FindPackage(filename)
 	if !ok {
 		return onlinePackage{}, fmt.Errorf("在线源中未找到文件: %s", filename)
 	}
@@ -1695,14 +1546,19 @@ func (s *Server) handleSyncStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.logger.Debug("[sync] 查询同步状态 (来自 %s)", r.RemoteAddr)
+
 	var status SyncStatus
 	if s.syncMgr != nil {
 		status = s.syncMgr.Status()
+		s.logger.Debug("[sync] 状态: running=%v synced=%d/%d lastSync=%s",
+			status.Running, status.SyncedFiles, status.TotalFiles, status.LastSync.Format("2006-01-02 15:04:05"))
 	} else {
 		status = SyncStatus{
 			Running:  false,
 			Progress: "同步未启用（未配置同步源）",
 		}
+		s.logger.Debug("[sync] 同步未启用")
 	}
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -1727,10 +1583,12 @@ func (s *Server) handleSyncTrigger(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.syncMgr == nil {
+		s.logger.Warn("[sync] 触发同步失败：同步未启用 (来自 %s)", r.RemoteAddr)
 		http.Error(w, "sync not enabled", http.StatusServiceUnavailable)
 		return
 	}
 
+	s.logger.Info("[sync] 收到手动触发同步请求 (来自 %s)", r.RemoteAddr)
 	s.syncMgr.Trigger()
 
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

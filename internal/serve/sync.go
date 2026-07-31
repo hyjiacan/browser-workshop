@@ -87,15 +87,15 @@ type SyncStatus struct {
 
 // syncManager handles scheduled and manual sync operations.
 type syncManager struct {
-	server    *Server
-	source    SyncSource
-	config    SyncConfig
-	status    SyncStatus
-	mu        sync.Mutex
-	stopCh    chan struct{}
-	stopOnce  sync.Once
-	trigger   chan struct{}
-	running   bool
+	server   *Server
+	source   SyncSource
+	config   SyncConfig
+	status   SyncStatus
+	mu       sync.Mutex
+	stopCh   chan struct{}
+	stopOnce sync.Once
+	trigger  chan struct{}
+	running  bool
 }
 
 // newSyncManager creates a new sync manager for the server.
@@ -198,7 +198,8 @@ func (sm *syncManager) doSync() {
 	sm.status.Progress = "正在启动同步..."
 	sm.mu.Unlock()
 
-	sm.server.logger.Info("开始同步任务")
+	syncStart := time.Now()
+	sm.server.logger.Info("[sync] 开始同步任务")
 
 	defer func() {
 		sm.mu.Lock()
@@ -206,11 +207,12 @@ func (sm *syncManager) doSync() {
 		sm.status.Running = false
 		sm.status.LastSync = time.Now()
 		sm.mu.Unlock()
-		sm.server.logger.Info("同步任务结束")
+		sm.server.logger.Info("[sync] 同步任务结束 (总耗时 %v)", time.Since(syncStart).Round(time.Millisecond))
 	}()
 
 	if sm.source == nil {
 		sm.setError(fmt.Errorf("no sync source configured"))
+		sm.server.logger.Warn("[sync] 同步源未配置")
 		return
 	}
 
@@ -235,8 +237,13 @@ func (sm *syncManager) doSync() {
 		channels = []string{"stable"}
 	}
 
+	sm.server.logger.Debug("[sync] 同步配置: browsers=%v channels=%v platforms=%v arches=%v",
+		browsers, channels, platforms, arches)
+
 	totalFiles := 0
 	syncedFiles := 0
+	skippedExisting := 0
+	failedDownloads := 0
 	sm.setProgressCount(totalFiles, syncedFiles)
 
 	for _, browser := range browsers {
@@ -245,15 +252,16 @@ func (sm *syncManager) doSync() {
 				for _, arch := range arches {
 					key := fmt.Sprintf("%s/%s/%s/%s", browser, ch, platform, arch)
 					sm.setProgress("正在获取 " + key + " 的版本列表...")
-					sm.server.logger.Debug("正在获取 %s 的版本列表", key)
+					sm.server.logger.Debug("[sync] 正在获取 %s 的版本列表", key)
 
 					versions, err := sm.source.ListVersions(browser, ch, platform, arch)
 					if err != nil {
 						sm.setError(fmt.Errorf("listing %s: %w", key, err))
-						sm.server.logger.Warn("获取 %s 版本列表失败: %v", key, err)
+						sm.server.logger.Warn("[sync] 获取 %s 版本列表失败: %v", key, err)
 						continue
 					}
 
+					sm.server.logger.Debug("[sync] 获取 %s 版本列表成功: %d 个版本", key, len(versions))
 					totalFiles += len(versions)
 					sm.setProgressCount(totalFiles, syncedFiles)
 
@@ -268,26 +276,38 @@ func (sm *syncManager) doSync() {
 						destPath := filepath.Join(sm.server.packagesDir, filename)
 
 						if _, err := os.Stat(destPath); err == nil {
+							skippedExisting++
+							sm.server.logger.Debug("[sync] 文件已存在，跳过: %s", filename)
 							syncedFiles++
 							sm.setProgressCount(totalFiles, syncedFiles)
 							continue
 						}
 
+						sizeStr := "未知"
+						if v.Size > 0 {
+							sizeStr = formatSize(v.Size)
+						}
 						sm.setProgress(fmt.Sprintf("正在下载 %s %s (%s/%s)...",
 							browser, v.Version, platform, arch))
-						sm.server.logger.Debug("正在下载 %s %s (%s/%s)",
-							browser, v.Version, platform, arch)
+						sm.server.logger.Debug("[sync] 开始下载: %s %s (%s/%s) 大小=%s url=%s",
+							browser, v.Version, platform, arch, sizeStr, v.DownloadURL)
 
+						dlStart := time.Now()
 						// Download to temp file first
 						_, err := sm.source.Download(v.DownloadURL, sm.server.packagesDir,
 							func(downloaded, total int64) {
 								// Progress updates could be more granular, but we keep it simple
 							})
 						if err != nil {
+							failedDownloads++
 							sm.setError(fmt.Errorf("downloading %s@%s: %w", browser, v.Version, err))
-							sm.server.logger.Warn("下载 %s@%s 失败: %v", browser, v.Version, err)
+							sm.server.logger.Warn("[sync] 下载失败: %s@%s (%s/%s): %v (耗时 %v)",
+								browser, v.Version, platform, arch, err, time.Since(dlStart).Round(time.Millisecond))
 							continue
 						}
+
+						sm.server.logger.Debug("[sync] 下载完成: %s@%s (%s/%s) (耗时 %v)",
+							browser, v.Version, platform, arch, time.Since(dlStart).Round(time.Millisecond))
 
 						syncedFiles++
 						sm.setProgressCount(totalFiles, syncedFiles)
@@ -299,11 +319,11 @@ func (sm *syncManager) doSync() {
 
 	// Rescan packages after sync
 	sm.setProgress("正在刷新文件清单...")
-	sm.server.logger.Debug("正在刷新文件清单...")
+	sm.server.logger.Debug("[sync] 正在刷新文件清单...")
 	cache, _ := sm.server.loadCache()
 	if err := sm.server.scanPackages(cache); err != nil {
 		sm.setError(fmt.Errorf("rescanning packages: %w", err))
-		sm.server.logger.Warn("同步后刷新文件清单失败: %v", err)
+		sm.server.logger.Warn("[sync] 同步后刷新文件清单失败: %v", err)
 		return
 	}
 	sm.server.saveCache(cache)
@@ -314,7 +334,8 @@ func (sm *syncManager) doSync() {
 	total := sm.status.TotalFiles
 	synced := sm.status.SyncedFiles
 	sm.mu.Unlock()
-	sm.server.logger.Info("同步完成: 共 %d 个文件，已同步 %d 个", total, synced)
+	sm.server.logger.Info("[sync] 同步完成: 共 %d 个文件，已同步 %d 个 (跳过已存在 %d, 失败 %d, 总耗时 %v)",
+		total, synced, skippedExisting, failedDownloads, time.Since(syncStart).Round(time.Millisecond))
 }
 
 func (sm *syncManager) setProgress(msg string) {

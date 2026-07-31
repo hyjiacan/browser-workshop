@@ -24,7 +24,6 @@ bws cfg show
 
   数据源开关:
     Serve 源:     true
-    Omaha 源:     true
     Firefox FTP:  true
 
   磁盘空间阈值:   5 GB (低于此值会提示)
@@ -91,7 +90,6 @@ bws cfg set
 | `repo-path` | `repo` |
 | `source` | `remote-source`, `remote` |
 | `source-serve` | `serve-source` |
-| `source-omaha` | `omaha-source` |
 | `source-firefox-ftp` | `firefox-ftp` |
 | `disk-threshold` | `disk-space-threshold`, `space-threshold` |
 | `proxy` | — |
@@ -261,26 +259,6 @@ bws cfg get source
 bws cfg set source ""
 ```
 
-### source-omaha
-
-Chrome Omaha 数据源开关。
-
-| 属性 | 值 |
-|------|-----|
-| 默认值 | `true` |
-| 可选值 | `true`, `false` |
-| 说明 | 是否启用 Chrome Omaha 协议数据源 |
-
-示例：
-
-```bash
-# 禁用 Omaha 源
-bws cfg set source-omaha false
-
-# 重新启用
-bws cfg set source-omaha true
-```
-
 ### source-firefox-ftp
 
 Firefox 数据源开关。
@@ -369,7 +347,7 @@ bws 支持多个版本数据源，按固定优先级顺序查询：
 | 优先级 | 数据源 | 说明 | 配置方式 |
 |--------|--------|------|----------|
 | 1（最高） | 离线源 | 通过 `bws sv` 搭建的分发服务 | `bws cfg set source <url>` |
-| 2（最低） | 内置在线源 | 浏览器官方更新渠道（Firefox FTP、Chromium GCS） | 内置，无需配置 |
+| 2（最低） | 内置在线源 | 浏览器官方更新渠道（Firefox FTP） | 内置，无需配置 |
 
 ### 手动下载 Chrome 历史版本
 
@@ -448,7 +426,6 @@ download-ttl = 168h
 
 [source-switches]
 enable-serve-source = true
-enable-omaha-source = true
 enable-firefox-ftp = true
 
 [network]
