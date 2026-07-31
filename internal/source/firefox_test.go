@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -125,46 +126,46 @@ func TestBuildDownloadURL(t *testing.T) {
 		want     string
 	}{
 		{
-			name:    "Windows x64 stable",
-			version: "141.0",
+			name:     "Windows x64 stable",
+			version:  "141.0",
 			platform: PlatformWindows,
-			arch:    ArchAMD64,
-			want:    "https://ftp.mozilla.org/pub/firefox/releases/141.0/win64/en-US/Firefox%20Setup%20141.0.exe",
+			arch:     ArchAMD64,
+			want:     "https://ftp.mozilla.org/pub/firefox/releases/141.0/win64/en-US/Firefox%20Setup%20141.0.exe",
 		},
 		{
-			name:    "Windows x64 ESR",
-			version: "140.0esr",
+			name:     "Windows x64 ESR",
+			version:  "140.0esr",
 			platform: PlatformWindows,
-			arch:    ArchAMD64,
-			want:    "https://ftp.mozilla.org/pub/firefox/releases/140.0esr/win64/en-US/Firefox%20Setup%20140.0esr.exe",
+			arch:     ArchAMD64,
+			want:     "https://ftp.mozilla.org/pub/firefox/releases/140.0esr/win64/en-US/Firefox%20Setup%20140.0esr.exe",
 		},
 		{
-			name:    "Linux x64 stable",
-			version: "141.0",
+			name:     "Linux x64 stable",
+			version:  "141.0",
 			platform: PlatformLinux,
-			arch:    ArchAMD64,
-			want:    "https://ftp.mozilla.org/pub/firefox/releases/141.0/linux-x86_64/en-US/firefox-141.0.tar.xz",
+			arch:     ArchAMD64,
+			want:     "https://ftp.mozilla.org/pub/firefox/releases/141.0/linux-x86_64/en-US/firefox-141.0.tar.xz",
 		},
 		{
-			name:    "macOS stable",
-			version: "141.0",
+			name:     "macOS stable",
+			version:  "141.0",
 			platform: PlatformMacOS,
-			arch:    ArchAMD64,
-			want:    "https://ftp.mozilla.org/pub/firefox/releases/141.0/mac/en-US/Firefox%20141.0.dmg",
+			arch:     ArchAMD64,
+			want:     "https://ftp.mozilla.org/pub/firefox/releases/141.0/mac/en-US/Firefox%20141.0.dmg",
 		},
 		{
-			name:    "Windows ARM64",
-			version: "141.0",
+			name:     "Windows ARM64",
+			version:  "141.0",
 			platform: PlatformWindows,
-			arch:    ArchARM64,
-			want:    "https://ftp.mozilla.org/pub/firefox/releases/141.0/win64-aarch64/en-US/Firefox%20Setup%20141.0.exe",
+			arch:     ArchARM64,
+			want:     "https://ftp.mozilla.org/pub/firefox/releases/141.0/win64-aarch64/en-US/Firefox%20Setup%20141.0.exe",
 		},
 		{
-			name:    "Linux ARM64",
-			version: "141.0",
+			name:     "Linux ARM64",
+			version:  "141.0",
 			platform: PlatformLinux,
-			arch:    ArchARM64,
-			want:    "https://ftp.mozilla.org/pub/firefox/releases/141.0/linux-aarch64/en-US/firefox-141.0.tar.xz",
+			arch:     ArchARM64,
+			want:     "https://ftp.mozilla.org/pub/firefox/releases/141.0/linux-aarch64/en-US/firefox-141.0.tar.xz",
 		},
 	}
 
@@ -428,5 +429,329 @@ func TestFirefoxSource_Latest(t *testing.T) {
 	}
 	if v.Version != "140.0esr" {
 		t.Errorf("最新 ESR 版本 = %q, 期望 %q", v.Version, "140.0esr")
+	}
+}
+
+// TestParseFileEntries 验证从 HTML 目录列表中提取文件名（非目录）。
+func TestParseFileEntries(t *testing.T) {
+	html := `<!DOCTYPE html>
+<html><body>
+<table>
+<tr><td>Dir</td><td><a href="/pub/firefox/">..</a></td></tr>
+<tr><td>Dir</td><td><a href="/pub/firefox/releases/141.0/">141.0/</a></td></tr>
+<tr><td>File</td><td><a href="/pub/firefox/releases/141.0/linux-x86_64/en-US/firefox-141.0.tar.xz">firefox-141.0.tar.xz</a></td></tr>
+<tr><td>File</td><td><a href="/pub/firefox/releases/141.0/linux-x86_64/en-US/firefox-141.0.deb">firefox-141.0.deb</a></td></tr>
+<tr><td>File</td><td><a href="/pub/firefox/releases/KEY">KEY</a></td></tr>
+</table>
+</body></html>`
+
+	files := parseFileEntries(html)
+
+	// 应返回 3 个文件条目（跳过 .. 和目录）
+	if len(files) != 3 {
+		t.Fatalf("parseFileEntries returned %d files, want 3", len(files))
+	}
+
+	expected := []string{"firefox-141.0.tar.xz", "firefox-141.0.deb", "KEY"}
+	for i, want := range expected {
+		if files[i] != want {
+			t.Errorf("files[%d] = %q, want %q", i, files[i], want)
+		}
+	}
+}
+
+// TestParseSHA256Sums 验证 SHA256SUMS 文件解析逻辑。
+func TestParseSHA256Sums(t *testing.T) {
+	content := `abc123def4567890abc123def4567890abc123def4567890abc123def4567890  linux-x86_64/en-US/firefox-141.0.tar.xz
+fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210  win64/en-US/Firefox Setup 141.0.exe
+# this is a comment line
+
+short  linux-x86_64/en-US/invalid.tar.xz
+0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  mac/en-US/Firefox 141.0.dmg
+`
+
+	sums := parseSHA256Sums(content)
+
+	// 应返回 3 个有效条目（跳过注释、空行和短哈希行）
+	if len(sums) != 3 {
+		t.Fatalf("parseSHA256Sums returned %d entries, want 3", len(sums))
+	}
+
+	// 验证路径到哈希的映射
+	wantHash := "abc123def4567890abc123def4567890abc123def4567890abc123def4567890"
+	if h, ok := sums["linux-x86_64/en-US/firefox-141.0.tar.xz"]; !ok {
+		t.Error("missing linux-x86_64/en-US/firefox-141.0.tar.xz")
+	} else if h != wantHash {
+		t.Errorf("hash for firefox-141.0.tar.xz = %q, want %q", h, wantHash)
+	}
+
+	wantHash2 := "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+	if h, ok := sums["win64/en-US/Firefox Setup 141.0.exe"]; !ok {
+		t.Error("missing win64/en-US/Firefox Setup 141.0.exe")
+	} else if h != wantHash2 {
+		t.Errorf("hash for Firefox Setup 141.0.exe = %q, want %q", h, wantHash2)
+	}
+
+	// 验证短哈希行被跳过
+	if _, ok := sums["linux-x86_64/en-US/invalid.tar.xz"]; ok {
+		t.Error("短哈希行不应被解析")
+	}
+}
+
+// TestFindMatchingFile 验证文件匹配逻辑。
+func TestFindMatchingFile(t *testing.T) {
+	files := []string{
+		"firefox-141.0.tar.xz",
+		"firefox-141.0.tar.bz2",
+		"firefox-141.0.deb",
+		"Firefox Setup 141.0.exe",
+		"Firefox Setup 141.0.msi",
+		"Firefox 141.0.dmg",
+		"KEY",
+	}
+
+	tests := []struct {
+		name     string
+		version  string
+		platform Platform
+		want     string
+	}{
+		{"Linux xz preferred", "141.0", PlatformLinux, "firefox-141.0.tar.xz"},
+		{"Windows exe preferred", "141.0", PlatformWindows, "Firefox Setup 141.0.exe"},
+		{"macOS dmg", "141.0", PlatformMacOS, "Firefox 141.0.dmg"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := findMatchingFile(files, tt.version, tt.platform)
+			if got != tt.want {
+				t.Errorf("findMatchingFile() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestFindMatchingFile_Bz2Fallback 验证当 .tar.xz 不存在时回退到 .tar.bz2。
+func TestFindMatchingFile_Bz2Fallback(t *testing.T) {
+	files := []string{
+		"firefox-68.9.0esr.tar.bz2",
+		"firefox-68.9.0esr.deb",
+	}
+	got := findMatchingFile(files, "68.9.0esr", PlatformLinux)
+	if got != "firefox-68.9.0esr.tar.bz2" {
+		t.Errorf("findMatchingFile() = %q, want %q", got, "firefox-68.9.0esr.tar.bz2")
+	}
+}
+
+// TestFindMatchingFile_NotFound 验证未找到匹配文件时返回空字符串。
+func TestFindMatchingFile_NotFound(t *testing.T) {
+	files := []string{"KEY", "some-other-file.txt"}
+	got := findMatchingFile(files, "141.0", PlatformLinux)
+	if got != "" {
+		t.Errorf("findMatchingFile() = %q, want empty string", got)
+	}
+}
+
+// TestResolveDownloadURL 验证 ResolveDownloadURL 从 FTP 目录列表获取真实文件名和 SHA256。
+func TestResolveDownloadURL(t *testing.T) {
+	// 模拟 FTP 目录结构和 SHA256SUMS 文件
+	fileListingHTML := `<!DOCTYPE html>
+<html><body>
+<table>
+<tr><td>Dir</td><td><a href="/pub/firefox/">..</a></td></tr>
+<tr><td>File</td><td><a href="firefox-141.0.tar.xz">firefox-141.0.tar.xz</a></td></tr>
+<tr><td>File</td><td><a href="firefox-141.0.deb">firefox-141.0.deb</a></td></tr>
+</table>
+</body></html>`
+
+	sha256Content := `abc123def4567890abc123def4567890abc123def4567890abc123def4567890  linux-x86_64/en-US/firefox-141.0.tar.xz
+fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210  win64/en-US/Firefox Setup 141.0.exe
+`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if strings.HasSuffix(path, "/SHA256SUMS") {
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(sha256Content))
+			return
+		}
+		// 目录列表请求
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(fileListingHTML))
+	}))
+	defer server.Close()
+
+	src := &FirefoxSource{
+		baseURL:    server.URL + "/pub/firefox/releases/",
+		httpClient: server.Client(),
+	}
+
+	ctx := context.Background()
+	dlURL, sha256, err := src.ResolveDownloadURL(ctx, "141.0", PlatformLinux, ArchAMD64)
+	if err != nil {
+		t.Fatalf("ResolveDownloadURL 失败: %v", err)
+	}
+
+	// 验证 URL 使用了真实文件名（.tar.xz）
+	expectedURL := server.URL + "/pub/firefox/releases/141.0/linux-x86_64/en-US/firefox-141.0.tar.xz"
+	if dlURL != expectedURL {
+		t.Errorf("dlURL = %q, want %q", dlURL, expectedURL)
+	}
+
+	// 验证 SHA256
+	expectedSHA := "abc123def4567890abc123def4567890abc123def4567890abc123def4567890"
+	if sha256 != expectedSHA {
+		t.Errorf("sha256 = %q, want %q", sha256, expectedSHA)
+	}
+}
+
+// TestResolveDownloadURL_Cache 验证 URL 缓存机制。
+func TestResolveDownloadURL_Cache(t *testing.T) {
+	requestCount := 0
+	fileListingHTML := `<!DOCTYPE html>
+<html><body>
+<table>
+<tr><td>File</td><td><a href="firefox-141.0.tar.xz">firefox-141.0.tar.xz</a></td></tr>
+</table>
+</body></html>`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if strings.HasSuffix(r.URL.Path, "/SHA256SUMS") {
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  linux-x86_64/en-US/firefox-141.0.tar.xz\n"))
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(fileListingHTML))
+	}))
+	defer server.Close()
+
+	src := &FirefoxSource{
+		baseURL:    server.URL + "/pub/firefox/releases/",
+		httpClient: server.Client(),
+	}
+
+	ctx := context.Background()
+
+	// 第一次调用：发起网络请求
+	_, _, err := src.ResolveDownloadURL(ctx, "141.0", PlatformLinux, ArchAMD64)
+	if err != nil {
+		t.Fatalf("第一次 ResolveDownloadURL 失败: %v", err)
+	}
+	firstCount := requestCount
+
+	// 第二次调用：应命中缓存，不再发起网络请求
+	_, _, err = src.ResolveDownloadURL(ctx, "141.0", PlatformLinux, ArchAMD64)
+	if err != nil {
+		t.Fatalf("第二次 ResolveDownloadURL 失败: %v", err)
+	}
+	if requestCount != firstCount {
+		t.Errorf("第二次调用应命中缓存，但发起了额外请求: first=%d, second=%d", firstCount, requestCount)
+	}
+}
+
+// TestResolveDownloadURL_SHA256NotFound 验证 SHA256SUMS 不存在时优雅处理。
+func TestResolveDownloadURL_SHA256NotFound(t *testing.T) {
+	fileListingHTML := `<!DOCTYPE html>
+<html><body>
+<table>
+<tr><td>File</td><td><a href="firefox-141.0.tar.xz">firefox-141.0.tar.xz</a></td></tr>
+</table>
+</body></html>`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/SHA256SUMS") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(fileListingHTML))
+	}))
+	defer server.Close()
+
+	src := &FirefoxSource{
+		baseURL:    server.URL + "/pub/firefox/releases/",
+		httpClient: server.Client(),
+	}
+
+	ctx := context.Background()
+	dlURL, sha256, err := src.ResolveDownloadURL(ctx, "141.0", PlatformLinux, ArchAMD64)
+	if err != nil {
+		t.Fatalf("ResolveDownloadURL 失败: %v", err)
+	}
+	// URL 仍应正确
+	if !strings.HasSuffix(dlURL, "firefox-141.0.tar.xz") {
+		t.Errorf("dlURL = %q, should end with firefox-141.0.tar.xz", dlURL)
+	}
+	// SHA256 应为空
+	if sha256 != "" {
+		t.Errorf("sha256 = %q, want empty string when SHA256SUMS not found", sha256)
+	}
+}
+
+// TestResolveDownloadURL_FallbackToPattern 验证目录列表不可用时回退到模式构造。
+func TestResolveDownloadURL_FallbackToPattern(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// 目录列表返回 404
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	src := &FirefoxSource{
+		baseURL:    server.URL + "/pub/firefox/releases/",
+		httpClient: server.Client(),
+	}
+
+	ctx := context.Background()
+	dlURL, _, err := src.ResolveDownloadURL(ctx, "141.0", PlatformLinux, ArchAMD64)
+	if err != nil {
+		t.Fatalf("ResolveDownloadURL 失败: %v", err)
+	}
+	// 应回退到模式构造的 .tar.xz 文件名
+	if !strings.HasSuffix(dlURL, "firefox-141.0.tar.xz") {
+		t.Errorf("dlURL = %q, should end with firefox-141.0.tar.xz (pattern fallback)", dlURL)
+	}
+}
+
+// TestResolveDownloadURL_Bz2File 验证旧版本使用 .tar.bz2 时的文件名解析。
+func TestResolveDownloadURL_Bz2File(t *testing.T) {
+	fileListingHTML := `<!DOCTYPE html>
+<html><body>
+<table>
+<tr><td>File</td><td><a href="firefox-68.9.0esr.tar.bz2">firefox-68.9.0esr.tar.bz2</a></td></tr>
+<tr><td>File</td><td><a href="firefox-68.9.0esr.deb">firefox-68.9.0esr.deb</a></td></tr>
+</table>
+</body></html>`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/SHA256SUMS") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(fileListingHTML))
+	}))
+	defer server.Close()
+
+	src := &FirefoxSource{
+		baseURL:    server.URL + "/pub/firefox/releases/",
+		httpClient: server.Client(),
+	}
+
+	ctx := context.Background()
+	dlURL, _, err := src.ResolveDownloadURL(ctx, "68.9.0esr", PlatformLinux, ArchAMD64)
+	if err != nil {
+		t.Fatalf("ResolveDownloadURL 失败: %v", err)
+	}
+	// 应使用 .tar.bz2 而非 .tar.xz
+	if !strings.HasSuffix(dlURL, "firefox-68.9.0esr.tar.bz2") {
+		t.Errorf("dlURL = %q, should end with firefox-68.9.0esr.tar.bz2", dlURL)
 	}
 }

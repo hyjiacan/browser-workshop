@@ -422,34 +422,6 @@ bws run chrome@120 -d</code></pre>
 </div>
 
 <script>
-// 同步状态指示器动态更新
-(function() {
-  var indicator = document.querySelector('.sync-indicator');
-  var statusText = document.querySelector('.sync-status-text');
-  if (!indicator) return;
-
-  function updateStatus() {
-    fetch('/api/v1/sync/status')
-      .then(function(r) { return r.json(); })
-      .then(function(resp) {
-        if (!resp || !resp.data) return;
-        var s = resp.data;
-        if (s.running) {
-          indicator.className = 'sync-indicator running';
-          if (s.progress) statusText.textContent = s.progress;
-        } else if (s.error) {
-          indicator.className = 'sync-indicator error';
-        } else {
-          indicator.className = 'sync-indicator idle';
-        }
-      })
-      .catch(function() {});
-  }
-
-  updateStatus();
-  setInterval(updateStatus, 5000);
-})();
-
 // 立即同步
 function syncNow() {
   var btn = event.target;

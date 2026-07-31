@@ -25,14 +25,14 @@ bws sv 是一个轻量级的 HTTP 服务，主要功能包括：
 
 ## 快速开始
 
-serve 的配置通过 `bws-serve.ini` 文件管理。首次运行 `bws sv` 时会自动在 `bws-data/` 目录下创建默认配置文件，编辑后重新运行即可启动服务。
+serve 的配置通过 `bws-serve.ini` 文件管理。首次运行 `bws sv` 时会自动在与 bws 可执行文件同目录下创建默认配置文件，编辑后重新运行即可启动服务。
 
 ### 基本用法
 
 ```bash
 # 1. 首次运行（自动创建配置文件）
 bws sv
-# 输出: 配置文件已创建: bws-data/bws-serve.ini
+# 输出: 配置文件已创建: bws-serve.ini
 # 编辑配置文件后重新运行
 
 # 2. 编辑 bws-serve.ini 后启动服务
@@ -125,8 +125,8 @@ sync-channels = stable,beta
 ```
 程序目录/
 ├── bws.exe
+├── bws-serve.ini            # serve 配置文件
 ├── bws-data/                # serve 内部文件（与客户端共享数据目录）
-│   ├── bws-serve.ini        # serve 配置文件
 │   ├── .serve-cache.json    # 校验和缓存（自动生成）
 │   └── logs/
 │       └── serve.log        # serve 日志文件
@@ -156,9 +156,10 @@ sync-channels = stable,beta
 
 `bws-data/` 目录用于存放 serve 的内部文件：
 
-- `bws-serve.ini`：serve 的配置文件
 - `.serve-cache.json`：校验和缓存，加速清单生成
 - `logs/serve.log`：serve 的日志文件
+
+> `bws-serve.ini` 配置文件位于与 bws 可执行文件同目录下。
 
 ## 文件名识别规则
 

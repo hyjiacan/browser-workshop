@@ -15,7 +15,7 @@ Example output:
 ```
 Configuration information:
 
-  Config file:       D:\bws-data\config.ini
+  Config file:       D:\bws\bws-client.ini
   Data directory:       D:\bws-data
   Default browser:     chrome
   Default channel:       stable
@@ -168,7 +168,7 @@ Data storage directory.
 |------|-----|
 | Default value | Empty (in portable mode, uses the `bws-data/` directory at the same level as the program) |
 | Optional values | Any directory path |
-| Description | Sets the data storage directory for bws (configuration, versions, cache, logs, etc.); after setting, all data will be stored in the specified directory |
+| Description | Sets the data storage directory for bws (versions, cache, logs, runtime, etc.); after setting, all data will be stored in the specified directory |
 
 Example:
 
@@ -183,7 +183,7 @@ bws cfg get data-dir
 bws cfg set data-dir ""
 ```
 
-> **Note**: If this configuration item is set, all data (including configuration, installed versions, cache, and logs) will be stored in the specified directory. When not set, the `bws-data/` directory at the same level as the program is used by default.
+> **Note**: If this configuration item is set, all data (installed versions, cache, and logs, etc.) will be stored in the specified directory. The configuration file (`bws-client.ini`) is always located in the same directory as the bws executable. When not set, the `bws-data/` directory at the same level as the program is used by default.
 
 ### repo-path
 
@@ -355,11 +355,12 @@ When executing `bws i` or `bws ls --remote`:
 
 ## Configuration File
 
-Configurations are stored in the `config.ini` file under the data directory in INI format:
+Configurations are stored in the `bws-client.ini` file in the same directory as the bws executable in INI format:
 
 ```
-bws-data/
-└── config.ini
+bws/
+├── bws.exe
+└── bws-client.ini
 ```
 
 It is usually not necessary to manually edit the configuration file; it is recommended to use the `bws cfg` command for management.

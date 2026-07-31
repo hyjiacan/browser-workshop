@@ -1,6 +1,7 @@
 package source
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -64,6 +65,18 @@ type FirefoxSource struct {
 	cacheTTL     time.Duration // 缓存有效期（默认 24 小时）
 	forceRefresh bool          // 为 true 时跳过缓存，强制从网络抓取
 	mu           sync.Mutex    // 保护缓存文件访问及 forceRefresh 标志
+
+	// urlCache 缓存已解析的下载 URL 和 SHA256，避免对同一版本重复抓取目录列表。
+	// key 格式: "<version>|<platform>|<arch>"
+	urlCache   map[string]*urlCacheEntry
+	urlCacheMu sync.RWMutex
+}
+
+// urlCacheEntry 缓存 ResolveDownloadURL 的结果。
+type urlCacheEntry struct {
+	url    string
+	sha256 string
+	size   int64
 }
 
 // NewFirefoxSource creates a new FirefoxSource.
@@ -191,6 +204,7 @@ func (s *FirefoxSource) Latest(ctx context.Context, filter *Filter) (VersionInfo
 
 // Resolve 查找指定版本的 Firefox。
 // 支持别名(latest/beta/esr)、精确匹配和前缀匹配。
+// 找到匹配版本后，会调用 ResolveDownloadURL 获取实际下载地址和 SHA256 校验和。
 func (s *FirefoxSource) Resolve(ctx context.Context, browser string, version string, platform Platform, arch Arch) (VersionInfo, error) {
 	// 处理别名
 	if version == "latest" || version == "" {
@@ -219,7 +233,7 @@ func (s *FirefoxSource) Resolve(ctx context.Context, browser string, version str
 	// 精确匹配
 	for _, v := range list {
 		if v.Version == version {
-			return v, nil
+			return s.enrichVersionInfo(ctx, v)
 		}
 	}
 
@@ -239,10 +253,24 @@ func (s *FirefoxSource) Resolve(ctx context.Context, browser string, version str
 				latest = v
 			}
 		}
-		return latest, nil
+		return s.enrichVersionInfo(ctx, latest)
 	}
 
 	return VersionInfo{}, fmt.Errorf("未找到 firefox 版本 %s", version)
+}
+
+// enrichVersionInfo 使用 ResolveDownloadURL 更新 VersionInfo 的 DownloadURL 和 SHA256 字段。
+// 如果解析失败，保留原始（基于模式构造的）URL，不返回错误。
+func (s *FirefoxSource) enrichVersionInfo(ctx context.Context, v VersionInfo) (VersionInfo, error) {
+	dlURL, sha256, err := s.ResolveDownloadURL(ctx, v.Version, v.Platform, v.Arch)
+	if err != nil {
+		// 解析失败时保留原始 URL，不阻断流程
+		bmlog.Debug("[firefox-ftp] 解析下载 URL 失败，保留模式构造的 URL: %v", err)
+		return v, nil
+	}
+	v.DownloadURL = dlURL
+	v.SHA256 = sha256
+	return v, nil
 }
 
 // --- internal helpers ---
@@ -402,6 +430,285 @@ func parseDirectoryEntries(html string) []string {
 	return dirs
 }
 
+// parseFileEntries 从 HTML 目录列表中提取文件名（非目录条目）。
+// 返回不以 "/" 结尾的条目，跳过父目录链接。
+func parseFileEntries(html string) []string {
+	matches := dirLinkRegex.FindAllStringSubmatch(html, -1)
+	var files []string
+	for _, m := range matches {
+		name := m[2]
+		// 跳过父目录
+		if name == ".." || name == "../" {
+			continue
+		}
+		// 跳过目录（以 / 结尾）
+		if strings.HasSuffix(name, "/") {
+			continue
+		}
+		files = append(files, name)
+	}
+	return files
+}
+
+// fetchFileEntries 抓取 HTTPS 目录列表页面并提取文件名（非目录条目）。
+// 与 fetchDirectoryListing 不同，此方法返回文件而非目录。
+func (s *FirefoxSource) fetchFileEntries(ctx context.Context, pageURL string) ([]string, error) {
+	bmlog.Debug("[firefox-ftp] 请求文件列表: %s", pageURL)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", pageURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		bmlog.Debug("[firefox-ftp] 请求失败: %v", err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	bmlog.Debug("[firefox-ftp] 响应状态码: %d", resp.StatusCode)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("文件列表返回状态码 %d", resp.StatusCode)
+	}
+
+	// 限制响应体大小为 10MB
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+	if err != nil {
+		return nil, err
+	}
+
+	files := parseFileEntries(string(body))
+	bmlog.Debug("[firefox-ftp] 解析到 %d 个文件条目", len(files))
+	return files, nil
+}
+
+// fetchFileListing 获取指定版本/平台/语言目录下的文件列表。
+// platDir 是 Mozilla FTP 平台目录名（如 "linux-x86_64"、"win64"）。
+// lang 是语言代码（如 "en-US"）。
+func (s *FirefoxSource) fetchFileListing(ctx context.Context, version, platDir, lang string) ([]string, error) {
+	pageURL := fmt.Sprintf("%s%s/%s/%s/", s.baseURL, version, platDir, lang)
+	return s.fetchFileEntries(ctx, pageURL)
+}
+
+// fetchSHA256Sums 获取指定版本的 SHA256SUMS 文件并解析为 path→hash 映射。
+// SHA256SUMS 文件格式: 每行 "<64字符十六进制哈希>  <相对路径>\n"
+// 相对路径示例: "linux-x86_64/en-US/firefox-68.9.0esr.tar.bz2"
+// 如果文件不存在（旧版本可能没有），返回空映射和 nil 错误。
+func (s *FirefoxSource) fetchSHA256Sums(ctx context.Context, version string) (map[string]string, error) {
+	sumsURL := fmt.Sprintf("%s%s/SHA256SUMS", s.baseURL, version)
+	bmlog.Debug("[firefox-ftp] 请求 SHA256SUMS: %s", sumsURL)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", sumsURL, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		bmlog.Debug("[firefox-ftp] 请求 SHA256SUMS 失败: %v", err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		// 旧版本可能没有 SHA256SUMS 文件，优雅处理
+		bmlog.Debug("[firefox-ftp] SHA256SUMS 不存在 (版本 %s)", version)
+		return nil, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("SHA256SUMS 返回状态码 %d", resp.StatusCode)
+	}
+
+	// 限制响应体大小为 1MB
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, err
+	}
+
+	sums := parseSHA256Sums(string(body))
+	bmlog.Debug("[firefox-ftp] SHA256SUMS 解析到 %d 个条目 (版本 %s)", len(sums), version)
+	return sums, nil
+}
+
+// parseSHA256Sums 解析 SHA256SUMS 文件内容。
+// 每行格式: "<64字符十六进制哈希>  <相对路径>"
+// 路径可能包含空格（如 "win64/en-US/Firefox Setup 141.0.exe"），
+// 因此不能简单使用 strings.Fields 分割。
+// 返回 path→hash 映射，path 保持原始大小写。
+func parseSHA256Sums(content string) map[string]string {
+	sums := make(map[string]string)
+	scanner := bufio.NewScanner(strings.NewReader(content))
+	for scanner.Scan() {
+		line := scanner.Text()
+		// 跳过空行和注释
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		// 格式: <hash>  <path> （两个或多个空格分隔）
+		// 哈希固定为 64 个十六进制字符，之后是空白符，剩余部分为路径
+		if len(line) < 66 { // 至少 64 hash + 1 space + 1 path
+			continue
+		}
+		hash := line[:64]
+		// 验证哈希长度（SHA256 = 64 个十六进制字符）
+		if !isHexHash(hash) {
+			continue
+		}
+		// 跳过哈希后的空白字符，剩余部分为路径
+		path := strings.TrimLeft(line[64:], " \t")
+		if path == "" {
+			continue
+		}
+		sums[path] = hash
+	}
+	return sums
+}
+
+// isHexHash 检查字符串是否为 64 个十六进制字符（SHA256 哈希）。
+func isHexHash(s string) bool {
+	if len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+// ResolveDownloadURL 解析指定版本的实际下载 URL 和 SHA256 哈希。
+// 它从 FTP 目录列表获取真实文件名（而非依赖硬编码模式），
+// 并从 SHA256SUMS 文件获取对应的校验和。
+//
+// 匹配规则:
+//   - Linux: firefox-{version}.tar.* （匹配 .tar.xz 和 .tar.bz2）
+//   - Windows: Firefox Setup {version}.exe 或 .msi
+//   - macOS: Firefox {version}.dmg
+//
+// 如果无法获取目录列表或找不到匹配文件，回退到 buildDownloadURL 的模式构造。
+// 如果 SHA256SUMS 不可用，sha256 返回空字符串。
+func (s *FirefoxSource) ResolveDownloadURL(ctx context.Context, version string, platform Platform, arch Arch) (dlURL, sha256 string, err error) {
+	// 检查缓存
+	cacheKey := fmt.Sprintf("%s|%s|%s", version, platform, arch)
+	s.urlCacheMu.RLock()
+	if s.urlCache != nil {
+		if entry, ok := s.urlCache[cacheKey]; ok {
+			s.urlCacheMu.RUnlock()
+			bmlog.Debug("[firefox-ftp] URL 缓存命中: %s", cacheKey)
+			return entry.url, entry.sha256, nil
+		}
+	}
+	s.urlCacheMu.RUnlock()
+
+	platDir := mapToMozillaFTPPlatform(platform, arch)
+
+	// 尝试从目录列表获取实际文件名
+	files, listErr := s.fetchFileListing(ctx, version, platDir, firefoxFTPLang)
+
+	var actualFilename string
+	if listErr != nil {
+		bmlog.Debug("[firefox-ftp] 获取文件列表失败，回退到模式构造: %v", listErr)
+		actualFilename = buildFirefoxFilename(version, platform)
+	} else {
+		actualFilename = findMatchingFile(files, version, platform)
+		if actualFilename == "" {
+			bmlog.Debug("[firefox-ftp] 未在目录列表中找到匹配文件，回退到模式构造")
+			actualFilename = buildFirefoxFilename(version, platform)
+		}
+	}
+
+	// 构造下载 URL
+	encodedFilename := url.PathEscape(actualFilename)
+	dlURL = fmt.Sprintf("%s%s/%s/%s/%s",
+		s.baseURL, version, platDir, firefoxFTPLang, encodedFilename)
+
+	// 尝试获取 SHA256
+	sums, sumsErr := s.fetchSHA256Sums(ctx, version)
+	if sumsErr != nil {
+		bmlog.Debug("[firefox-ftp] 获取 SHA256SUMS 失败: %v", sumsErr)
+	} else if len(sums) > 0 {
+		// SHA256SUMS 中的路径格式: <platDir>/<lang>/<filename>
+		sumsPath := fmt.Sprintf("%s/%s/%s", platDir, firefoxFTPLang, actualFilename)
+		if h, ok := sums[sumsPath]; ok {
+			sha256 = h
+		} else {
+			bmlog.Debug("[firefox-ftp] SHA256SUMS 中未找到路径: %s", sumsPath)
+		}
+	}
+
+	// 写入缓存
+	s.urlCacheMu.Lock()
+	if s.urlCache == nil {
+		s.urlCache = make(map[string]*urlCacheEntry)
+	}
+	s.urlCache[cacheKey] = &urlCacheEntry{
+		url:    dlURL,
+		sha256: sha256,
+	}
+	s.urlCacheMu.Unlock()
+
+	return dlURL, sha256, nil
+}
+
+// findMatchingFile 从文件列表中查找匹配版本和平台的安装包文件名。
+// 匹配规则:
+//   - Linux: firefox-{version}.tar.* （优先 .tar.xz，其次 .tar.bz2）
+//   - Windows: Firefox Setup {version}.exe （优先 .exe，其次 .msi）
+//   - macOS: Firefox {version}.dmg
+//
+// 返回空字符串表示未找到匹配文件。
+func findMatchingFile(files []string, version string, platform Platform) string {
+	switch platform {
+	case PlatformLinux:
+		// 优先 .tar.xz，其次 .tar.bz2
+		xzName := fmt.Sprintf("firefox-%s.tar.xz", version)
+		bz2Name := fmt.Sprintf("firefox-%s.tar.bz2", version)
+		for _, f := range files {
+			if f == xzName {
+				return f
+			}
+		}
+		for _, f := range files {
+			if f == bz2Name {
+				return f
+			}
+		}
+		// 通配匹配 firefox-{version}.tar.*
+		prefix := fmt.Sprintf("firefox-%s.tar.", version)
+		for _, f := range files {
+			if strings.HasPrefix(f, prefix) {
+				return f
+			}
+		}
+	case PlatformWindows:
+		// 优先 .exe，其次 .msi
+		exeName := fmt.Sprintf("Firefox Setup %s.exe", version)
+		msiName := fmt.Sprintf("Firefox Setup %s.msi", version)
+		for _, f := range files {
+			if f == exeName {
+				return f
+			}
+		}
+		for _, f := range files {
+			if f == msiName {
+				return f
+			}
+		}
+	case PlatformMacOS:
+		dmgName := fmt.Sprintf("Firefox %s.dmg", version)
+		for _, f := range files {
+			if f == dmgName {
+				return f
+			}
+		}
+	}
+	return ""
+}
+
 // classifyFirefoxChannel 根据版本字符串判断渠道。
 // "esr" 后缀 → ESR，"b" + 数字 → Beta，其余 → Stable。
 func classifyFirefoxChannel(version string) Channel {
@@ -460,6 +767,9 @@ func mapToMozillaFTPPlatform(platform Platform, arch Arch) string {
 }
 
 // buildFirefoxFilename 根据版本和平台构造安装包文件名。
+// 注意: 这是一个基于已知命名模式的最佳猜测，并非从 FTP 目录列表获取的真实文件名。
+// 对于旧版本，实际文件名可能不同（如 Linux 旧版使用 .tar.bz2 而非 .tar.xz）。
+// 如需获取真实文件名，请使用 ResolveDownloadURL 方法。
 // Windows: Firefox Setup <version>.exe
 // macOS:   Firefox <version>.dmg
 // Linux:   firefox-<version>.tar.xz

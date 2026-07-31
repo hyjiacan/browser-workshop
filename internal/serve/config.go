@@ -98,13 +98,19 @@ func DefaultServeConfig() ServeConfig {
 }
 
 // ConfigPath returns the path to the bws-serve.ini config file.
-// It's located in the bws-data directory (next to config.ini and logs/).
-// If baseDir is empty, the default bws-data directory is used.
+// The config file is always located in the executable's directory
+// (same directory as the bws binary), not in the data directory.
+// If baseDir is non-empty, it is used instead (for testing purposes).
 func ConfigPath(baseDir string) string {
-	if baseDir == "" {
-		baseDir = paths.Default().Root
+	if baseDir != "" {
+		return filepath.Join(baseDir, "bws-serve.ini")
 	}
-	return filepath.Join(baseDir, "bws-serve.ini")
+	exeDir, err := paths.ExeDir()
+	if err != nil {
+		// Fallback: use default data dir if exe dir can't be determined
+		return filepath.Join(paths.Default().Root, "bws-serve.ini")
+	}
+	return filepath.Join(exeDir, "bws-serve.ini")
 }
 
 // LoadServeConfig loads the serve configuration from bws-serve.ini.
@@ -218,7 +224,7 @@ func SaveServeConfig(baseDir string, cfg ServeConfig) error {
 	var sb strings.Builder
 	sb.WriteString("# ===============================================================\n")
 	sb.WriteString("# bws serve 配置文件\n")
-	sb.WriteString("# 位置: bws-data/bws-serve.ini（bws-data 为程序所在目录下的数据目录）\n")
+	sb.WriteString("# 位置: 与 bws 二进制文件同一目录下的 bws-serve.ini\n")
 	sb.WriteString("# ===============================================================\n")
 	sb.WriteString("#\n")
 	sb.WriteString("# 修改此文件后，重新运行 bws serve 即可生效。\n")

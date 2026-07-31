@@ -134,7 +134,7 @@
 | SRV-01 | 首次运行 — 创建配置 | `bws sv`（无 bws-serve.ini） | 创建默认配置文件，提示编辑后重新运行 | P0 |
 | SRV-02 | 正常 — 启动服务 | `bws sv`（已有 bws-serve.ini） | 启动 HTTP 服务，监听配置端口 | P0 |
 | SRV-03 | 异常 — 端口占用 | `bws sv`（端口占用） | 报错 "端口已被占用" | P1 |
-| SRV-04 | 正常 — 指定目录 | `bws sv -d D:\bws-data` | 从指定目录读取配置并启动服务 | P1 |
+| SRV-04 | 正常 — 指定目录 | `bws sv -d D:\bws-data` | 使用指定基础目录（packages/bin）启动服务 | P1 |
 
 ---
 

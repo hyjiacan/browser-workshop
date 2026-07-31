@@ -171,7 +171,7 @@ bws r chrome
 # 首次运行，自动创建配置文件
 bws sv
 
-# 编辑 bws-data/bws-serve.ini 配置文件
+# 编辑 bws-serve.ini 配置文件
 # 启动服务
 bws sv
 ```

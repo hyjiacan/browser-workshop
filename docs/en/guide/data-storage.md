@@ -1,6 +1,6 @@
 # Data Storage
 
-bws stores all data (configuration, versions, cache, logs, Profiles, etc.) uniformly in the data directory. This chapter introduces the directory structure and the purpose of each directory.
+bws stores all runtime data (versions, cache, logs, Profiles, etc.) uniformly in the data directory. Configuration files (`bws-client.ini` and `bws-serve.ini`) are located in the same directory as the bws executable. This chapter introduces the directory structure and the purpose of each directory.
 
 ## Portable Mode (Default)
 
@@ -11,12 +11,16 @@ By default, bws uses portable mode, storing data in the `bws-data/` directory at
 ```
 bws/
 ├── bws.exe                    # Main program file
+├── bws-client.ini             # Client configuration file (INI format)
+├── bws-serve.ini              # Serve service configuration file (created on first run of serve)
 └── bws-data/                  # Data root directory
-    ├── config.ini             # Configuration file
+    ├── .serve-cache.json      # serve checksum cache
     ├── logs/                  # Log directory
-    │   └── bws.log            # Main log file
+    │   ├── bws.log            # Main log file
+    │   └── serve.log          # serve service log file
     ├── cache/                 # Download cache
     │   ├── manifests/         # Version manifest cache
+    │   │   └── firefox-ftp-cache.json  # Firefox FTP source cache
     │   └── downloads/         # Downloaded file cache
     ├── versions/              # Installed browser versions
     │   ├── chrome/
@@ -46,7 +50,7 @@ bws/
 
 ## Directory Descriptions
 
-### config.ini
+### bws-client.ini
 
 Configuration file, storing all user configuration items. INI format.
 
@@ -73,6 +77,24 @@ If you need to store data in another location, you can set a custom data directo
 
 ```bash
 bws cfg set data-dir D:\browser-data
+```
+
+### bws-serve.ini
+
+Serve service configuration file, automatically created in the same directory as the bws executable on first run of `bws sv`.
+
+```ini
+[serve]
+host = 0.0.0.0
+port = 8080
+packages-dir =
+bin-dir =
+sync = false
+sync-interval = 24h
+sync-browsers =
+sync-channels = stable
+online-fallback = false
+scan-workers = 0
 ```
 
 ### logs/
@@ -198,12 +220,12 @@ bws pf clean
 | `runtime/` | Medium | Each Profile is approximately tens to hundreds of MB |
 | `cache/downloads/` | Medium | Each installer package is approximately 50-100MB |
 | `logs/` | Very small | Usually tens of MB |
-| `config.ini` | Extremely small | A few KB |
+| `bws-client.ini` | Extremely small | A few KB |
 
 ## Notes
 
-1. **Backup recommendation**: Regularly back up `config.ini` and important Profile data
-2. **Manual editing**: It is not recommended to manually edit `config.ini`; use the `bws cfg` command
+1. **Backup recommendation**: Regularly back up `bws-client.ini` and important Profile data
+2. **Manual editing**: It is not recommended to manually edit `bws-client.ini`; use the `bws cfg` command
 3. **Deletion safety**: Uninstalling a version does not delete the Profile, preventing accidental loss of important data
 4. **Permissions**: Ensure bws has read/write permissions for the data directory
 5. **Antivirus**: Some antivirus software may falsely flag browser files; it is recommended to add the `versions/` directory to the whitelist

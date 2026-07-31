@@ -60,7 +60,7 @@ func TestLoad_NonExistentFile(t *testing.T) {
 
 func TestSaveAndLoad(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "config.ini")
+	path := filepath.Join(dir, "bws-client.ini")
 
 	original := Default()
 	original.DefaultBrowser = "firefox"
@@ -282,7 +282,7 @@ func TestLogConfig_Defaults(t *testing.T) {
 
 func TestLogConfig_LoadNewStyle(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "new-config.ini")
+	path := filepath.Join(dir, "new-bws-client.ini")
 
 	// New-style config with full log section
 	newConfig := `[log]

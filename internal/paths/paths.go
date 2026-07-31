@@ -15,7 +15,7 @@ type Paths struct {
 	// Root is the base directory for all bm data
 	Root string
 
-	// Config is the path to the main config file
+	// Config is the path to the main config file (bws-client.ini)
 	Config string
 
 	// LogDir is the directory for log files
@@ -62,7 +62,7 @@ func Default() *Paths {
 func New(root string) *Paths {
 	p := &Paths{
 		Root:             root,
-		Config:           filepath.Join(root, "config.ini"),
+		Config:           filepath.Join(root, "bws-client.ini"),
 		LogDir:           filepath.Join(root, "logs"),
 		LogFile:          filepath.Join(root, "logs", "bws.log"),
 		VersionsDir:      filepath.Join(root, "versions"),

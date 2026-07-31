@@ -104,4 +104,4 @@ The `socks5h` protocol routes DNS queries through the proxy server, preventing D
 
 1. **TLS certificates**: bws download requests skip TLS certificate verification by default (`InsecureSkipVerify: true`) for compatibility with self-signed bws serve instances. The browser's own certificate verification is unaffected.
 2. **Proxy authentication**: Supports including credentials in the URL, e.g. `http://user:pass@proxy:8080`.
-3. **Persistent config**: Global proxy is set via `bws cfg set proxy`, saved in `config.ini`, and persists across restarts.
+3. **Persistent config**: Global proxy is set via `bws cfg set proxy`, saved in `bws-client.ini`, and persists across restarts.

@@ -12,7 +12,9 @@ package serve
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -60,6 +62,7 @@ type onlinePackage struct {
 	platform string
 	arch     string
 	size     int64
+	sha256   string
 }
 
 // defaultOnlineCombos lists the platform/arch combinations queried from the
@@ -158,6 +161,7 @@ type PackageFile struct {
 	Architecture string `json:"architecture"`
 	Size         int64  `json:"size"`
 	Checksum     string `json:"checksum"`
+	SHA256       string `json:"sha256,omitempty"` // expected SHA-256 hash from upstream (empty if unknown)
 }
 
 // cacheFile represents the on-disk checksum cache.
@@ -308,10 +312,10 @@ func NewServerWithOptions(opts ServerOptions) *Server {
 		logger = bmlog.Default()
 	}
 
-	// configPath is used only for startup logging. Default to bws-serve.ini in baseDir.
+	// configPath is used only for startup logging. Default to bws-serve.ini in exe dir.
 	configPath := opts.ConfigPath
 	if configPath == "" {
-		configPath = filepath.Join(baseDir, "bws-serve.ini")
+		configPath = ConfigPath("")
 	}
 
 	srv := &Server{
@@ -1179,9 +1183,9 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data := pageData{
-		Version:        s.version,
-		ServerName:     serverName,
-		Description:    "多版本浏览器管理工具，支持本地导入、远程下载、版本切换、隔离运行。",
+		Version:     s.version,
+		ServerName:  serverName,
+		Description: "多版本浏览器管理工具，支持本地导入、远程下载、版本切换、隔离运行。",
 		Features: []string{
 			"多版本管理：同时安装和管理多个浏览器版本，支持版本前缀快速筛选",
 			"本地导入：支持 zip、7z、tar.gz 等多种格式自动识别导入",
@@ -1462,6 +1466,31 @@ func (s *Server) doOnlineDownload(filename string) error {
 			}
 			_ = os.Remove(downloadedPath)
 		}
+	}
+
+	// Verify SHA256 checksum if the online source provided one.
+	if info.sha256 != "" {
+		f, err := os.Open(destPath)
+		if err != nil {
+			s.logger.Warn("[online] SHA256 校验失败: 无法打开文件: %s: %v", filename, err)
+			_ = os.Remove(destPath)
+			return fmt.Errorf("SHA256 校验失败: 无法打开文件: %w", err)
+		}
+		h := sha256.New()
+		if _, err := io.Copy(h, f); err != nil {
+			f.Close()
+			s.logger.Warn("[online] SHA256 校验失败: 读取文件错误: %s: %v", filename, err)
+			_ = os.Remove(destPath)
+			return fmt.Errorf("SHA256 校验失败: 读取文件错误: %w", err)
+		}
+		f.Close()
+		actualHash := hex.EncodeToString(h.Sum(nil))
+		if actualHash != info.sha256 {
+			s.logger.Warn("[online] SHA256 校验失败: %s: 预期=%s 实际=%s", filename, info.sha256, actualHash)
+			_ = os.Remove(destPath)
+			return fmt.Errorf("SHA256 校验失败: %s: 预期=%s 实际=%s", filename, info.sha256, actualHash)
+		}
+		s.logger.Debug("[online] SHA256 校验通过: %s", filename)
 	}
 
 	// Log final file size.

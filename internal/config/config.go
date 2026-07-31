@@ -365,7 +365,7 @@ func Save(cfg *Config, path string) error {
 	var sb strings.Builder
 	sb.WriteString("# ===============================================================\n")
 	sb.WriteString("# bws 客户端配置文件\n")
-	sb.WriteString("# 位置: " + filepath.Base(path) + "\n")
+	sb.WriteString("# 位置: 与 bws 二进制文件同一目录下的 bws-client.ini\n")
 	sb.WriteString("# ===============================================================\n")
 	sb.WriteString("#\n")
 	sb.WriteString("# 修改此文件后，下次运行 bws 命令时自动生效。\n")
@@ -779,4 +779,3 @@ func boolStr(b bool) string {
 	}
 	return "false"
 }
-

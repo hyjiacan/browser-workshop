@@ -2,6 +2,8 @@ package serve
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,6 +28,7 @@ type SyncVersionInfo struct {
 	DownloadURL string
 	Size        int64
 	Filename    string // optional: preferred filename
+	SHA256      string // expected SHA-256 hash (empty if unknown)
 }
 
 // SyncSource provides version listing and download capability for sync.
@@ -325,6 +328,37 @@ func (sm *syncManager) doSync() {
 								_ = os.Remove(dlPath)
 								continue
 							}
+						}
+
+						// Verify SHA256 checksum if available
+						if v.SHA256 != "" {
+							f, err := os.Open(dlPath)
+							if err != nil {
+								failedDownloads++
+								sm.setError(fmt.Errorf("opening downloaded %s@%s for sha256: %w", browser, v.Version, err))
+								sm.server.logger.Warn("[sync] 打开已下载文件失败: %s@%s: %v", browser, v.Version, err)
+								_ = os.Remove(dlPath)
+								continue
+							}
+							h := sha256.New()
+							if _, err := io.Copy(h, f); err != nil {
+								f.Close()
+								failedDownloads++
+								sm.setError(fmt.Errorf("computing sha256 for %s@%s: %w", browser, v.Version, err))
+								sm.server.logger.Warn("[sync] 计算 SHA256 失败: %s@%s: %v", browser, v.Version, err)
+								_ = os.Remove(dlPath)
+								continue
+							}
+							f.Close()
+							actualHash := hex.EncodeToString(h.Sum(nil))
+							if actualHash != v.SHA256 {
+								failedDownloads++
+								sm.setError(fmt.Errorf("SHA256 mismatch for %s@%s: expected %s, got %s", browser, v.Version, v.SHA256, actualHash))
+								sm.server.logger.Warn("[sync] SHA256 校验失败: %s@%s: 预期=%s 实际=%s", browser, v.Version, v.SHA256, actualHash)
+								_ = os.Remove(dlPath)
+								continue
+							}
+							sm.server.logger.Debug("[sync] SHA256 校验通过: %s@%s", browser, v.Version)
 						}
 
 						sm.server.logger.Debug("[sync] 下载完成: %s@%s (%s/%s) (耗时 %v)",

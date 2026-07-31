@@ -1,6 +1,6 @@
 ﻿# 数据存储
 
-bws 将所有数据（配置、版本、缓存、日志、Profile 等）统一存储在数据目录中。本章介绍数据存储的目录结构和各目录的用途。
+bws 将所有运行时数据（版本、缓存、日志、Profile 等）统一存储在数据目录中，配置文件（`bws-client.ini` 和 `bws-serve.ini`）位于与 bws 可执行文件同目录下。本章介绍数据存储的目录结构和各目录的用途。
 
 ## 便携模式（默认）
 
@@ -11,9 +11,9 @@ bws 将所有数据（配置、版本、缓存、日志、Profile 等）统一�
 ```
 bws/
 ├── bws.exe                    # 程序主文件
+├── bws-client.ini             # 客户端配置文件（INI 格式）
+├── bws-serve.ini              # serve 服务配置文件（首次运行 serve 时创建）
 └── bws-data/                  # 数据根目录
-    ├── config.ini             # 配置文件（INI 格式）
-    ├── bws-serve.ini          # serve 服务配置文件（首次运行 serve 时创建）
     ├── .serve-cache.json      # serve 校验和缓存
     ├── logs/                  # 日志目录
     │   ├── bws.log            # 客户端主日志文件
@@ -50,7 +50,7 @@ bws/
 
 ## 各目录说明
 
-### config.ini
+### bws-client.ini
 
 配置文件，存储所有用户配置项。INI 格式。
 
@@ -80,7 +80,7 @@ bws cfg set data-dir D:\browser-data
 
 ### bws-serve.ini
 
-Serve 服务的配置文件，首次运行 `bws sv` 时自动在 `bws-data/` 目录下创建。
+Serve 服务的配置文件，首次运行 `bws sv` 时自动在与 bws 可执行文件同目录下创建。
 
 ```ini
 [serve]
@@ -222,12 +222,12 @@ bws pf clean
 | `runtime/` | 中等 | 每个 Profile 约几十到几百 MB |
 | `cache/downloads/` | 中等 | 每个安装包约 50-100MB |
 | `logs/` | 很小 | 通常几十 MB |
-| `config.ini` | 极小 | 几 KB |
+| `bws-client.ini` | 极小 | 几 KB |
 
 ## 注意事项
 
-1. **备份建议**：定期备份 `config.ini` 和重要的 Profile 数据
-2. **手动编辑**：不建议手动编辑 `config.ini`，使用 `bws cfg` 命令
+1. **备份建议**：定期备份 `bws-client.ini` 和重要的 Profile 数据
+2. **手动编辑**：不建议手动编辑 `bws-client.ini`，使用 `bws cfg` 命令
 3. **删除安全**：卸载版本不会删除 Profile，防止误删重要数据
 4. **权限**：确保 bws 对数据目录有读写权限
 5. **防病毒**：某些杀毒软件可能会误报浏览器文件，建议将 `versions/` 目录加入白名单

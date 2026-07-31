@@ -15,7 +15,7 @@ bws cfg show
 ```
 配置信息：
 
-  配置文件:       D:\bws-data\config.ini
+  配置文件:       D:\bws\bws-client.ini
   数据目录:       D:\bws-data
   默认浏览器:     chrome
   默认渠道:       stable
@@ -203,7 +203,7 @@ bws cfg set log.file-level warn
 |------|-----|
 | 默认值 | 空（便携模式下使用程序同级 `bws-data/` 目录） |
 | 可选值 | 任意目录路径 |
-| 说明 | 设置 bws 的数据存储目录（配置、版本、缓存、日志等），设置后所有数据将存储到指定目录 |
+| 说明 | 设置 bws 的数据存储目录（版本、缓存、日志、运行时等），设置后所有数据将存储到指定目录 |
 
 示例：
 
@@ -218,7 +218,7 @@ bws cfg get data-dir
 bws cfg set data-dir ""
 ```
 
-> **注意**：如果设置此配置项，所有数据（包括配置、已安装版本、缓存和日志）都将存储在指定目录中。未设置时，默认使用程序同级的 `bws-data/` 目录。
+> **注意**：如果设置此配置项，所有数据（已安装版本、缓存和日志等）都将存储在指定目录中。配置文件（`bws-client.ini`）始终位于与 bws 可执行文件同目录下。未设置时，默认使用程序同级的 `bws-data/` 目录。
 
 ### repo-path
 
@@ -388,11 +388,12 @@ bws i -d D:\chrome-120-win64 chrome@120
 
 ## 配置文件
 
-配置以 INI 格式存储在数据目录下的 `config.ini` 文件中：
+配置以 INI 格式存储在与 bws 可执行文件同目录下的 `bws-client.ini` 文件中：
 
 ```
-bws-data/
-└── config.ini
+bws/
+├── bws.exe
+└── bws-client.ini
 ```
 
 通常不需要手动编辑配置文件，建议使用 `bws cfg` 命令进行管理。

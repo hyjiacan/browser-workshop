@@ -654,7 +654,7 @@ bws sv [-d <directory>]
 
 ### Configuration File (bws-serve.ini)
 
-The first time you run `bws sv`, a configuration file is automatically created. Edit it and rerun to start the service.
+The first time you run `bws sv`, a configuration file is automatically created in the same directory as the bws executable. Edit it and rerun to start the service.
 
 | Configuration Item | Default Value | Description |
 |--------------------|---------------|-------------|

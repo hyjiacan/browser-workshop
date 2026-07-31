@@ -213,6 +213,7 @@ func (m *OnlineCacheManager) refresh(browser string) {
 				platform: combo.platform,
 				arch:     combo.arch,
 				size:     v.Size,
+				sha256:   v.SHA256,
 			})
 		}
 	}
@@ -321,6 +322,7 @@ func (m *OnlineCacheManager) loadOneFromDisk(browser string) {
 				platform: f.Platform,
 				arch:     f.Architecture,
 				size:     f.Size,
+				sha256:   f.SHA256,
 			}
 			if cf.URLs != nil {
 				pkg.url = cf.URLs[f.Filename]
@@ -392,6 +394,7 @@ func buildOnlinePackageFile(filename string, v SyncVersionInfo, platform, arch s
 		Size:         v.Size,
 		Platform:     platform,
 		Architecture: arch,
+		SHA256:       v.SHA256,
 	}
 	if v.Version != "" {
 		pkg.MajorVersion = strconv.Itoa(version.Major(v.Version))

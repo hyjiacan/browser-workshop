@@ -283,7 +283,7 @@ flowchart TD
     F -->|否| G["报错: 无效值"]
     F -->|是| H["更新内存配置对象"]
     H --> I["序列化为 INI 格式"]
-    I --> J["写入 config.ini"]
+    I --> J["写入 bws-client.ini"]
     J --> K["输出成功信息"]
 ```
 
@@ -473,8 +473,8 @@ scan-workers = 0
 
 ### 3. 单配置文件管理
 
-客户端配置和 Serve 配置完全分离：
-- 客户端：`config.ini`（INI 格式）
+客户端配置和 Serve 配置完全分离，均位于与 bws 可执行文件同目录下：
+- 客户端：`bws-client.ini`（INI 格式）
 - Serve：`bws-serve.ini`（INI 格式）
 
 不再支持 JSON 格式，不保留向后兼容。

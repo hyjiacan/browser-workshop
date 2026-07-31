@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/bws/bws/internal/browser"
@@ -201,38 +202,25 @@ func main() {
 }
 
 // resolvePaths determines the config file path and data root directory.
-// Portable mode: bm-data subdirectory next to the executable.
-// Otherwise, use ~/.bm/
+// The config file (bws-client.ini) is always located in the executable's directory.
+// The data root directory defaults to bws-data/ next to the executable,
+// but can be overridden via BM_HOME environment variable.
 func resolvePaths() (configPath string, dataRoot string, isNew bool) {
-	// Check for BM_HOME environment variable (highest priority)
-	if home := os.Getenv("BM_HOME"); home != "" {
-		configPath := filepath.Join(home, "config.ini")
-		if _, err := os.Stat(configPath); err == nil {
-			return configPath, home, false
-		}
-		return configPath, home, true
-	}
-
-	// Default: bm-data subdirectory next to the executable (portable mode)
 	exeDir, err := paths.ExeDir()
-	if err == nil {
-		dataDir := filepath.Join(exeDir, "bws-data")
-		configPath := filepath.Join(dataDir, "config.ini")
-		if _, err := os.Stat(configPath); err == nil {
-			return configPath, dataDir, false
-		}
-		// Config doesn't exist yet, but we still use bm-data as default
-		return configPath, dataDir, true
-	}
-
-	// Fallback: ~/.bws
-	home, err := os.UserHomeDir()
 	if err != nil {
 		wd, _ := os.Getwd()
-		home = wd
+		exeDir = wd
 	}
-	dataRoot = filepath.Join(home, ".bws")
-	configPath = filepath.Join(dataRoot, "config.ini")
+
+	// Config file is always in the executable directory
+	configPath = filepath.Join(exeDir, "bws-client.ini")
+
+	// Data directory: BM_HOME env var, or bws-data/ next to exe
+	if home := os.Getenv("BM_HOME"); home != "" {
+		dataRoot = home
+	} else {
+		dataRoot = filepath.Join(exeDir, "bws-data")
+	}
 
 	// Check if config exists
 	if _, err := os.Stat(configPath); err == nil {
@@ -267,7 +255,7 @@ func firstTimeSetup(configPath string, cfg *config.Config) *config.Config {
 	fmt.Println()
 
 	// Ask about data directory
-	defaultDataDir := filepath.Dir(configPath)
+	defaultDataDir := filepath.Join(filepath.Dir(configPath), "bws-data")
 	fmt.Printf("Data directory [default: %s]: ", defaultDataDir)
 
 	reader := bufio.NewReader(os.Stdin)
@@ -924,24 +912,26 @@ func (a *serveAdapter) StartFromConfig(baseDir string) error {
 	// dataDir is the bws-data directory (shared with client config, logs, etc.)
 	dataDir := paths.Default().Root
 
-	// exeDir is the executable directory (used for resolving relative packages/bin paths)
-	// If --dir flag is provided, use it as the base directory instead.
+	// exeDir is the executable directory (used for config file location and
+	// resolving relative packages/bin paths).
+	// If --dir flag is provided, use it as the base directory for packages/bin instead.
 	exeDir, err := paths.ExeDir()
 	if err != nil {
 		wd, _ := os.Getwd()
 		exeDir = wd
 	}
+	packagesBaseDir := exeDir
 	if baseDir != "" {
 		abs, err := filepath.Abs(baseDir)
 		if err == nil {
-			exeDir = abs
+			packagesBaseDir = abs
 		} else {
-			exeDir = baseDir
+			packagesBaseDir = baseDir
 		}
 	}
 
-	// Load serve config from bws-serve.ini (in the bws-data directory)
-	cfg, err := bmserve.LoadServeConfig(dataDir)
+	// Load serve config from bws-serve.ini (always in the executable directory)
+	cfg, err := bmserve.LoadServeConfig("")
 	if err != nil {
 		return fmt.Errorf("加载 serve 配置失败: %w", err)
 	}
@@ -950,12 +940,12 @@ func (a *serveAdapter) StartFromConfig(baseDir string) error {
 
 	// Resolve packages directory:
 	// If config has an absolute path, use it directly.
-	// If relative, resolve relative to the exe directory.
-	// If empty, default to {exeDir}/packages.
-	packagesDir := resolveServeDir(cfg.PackagesDir, exeDir, "packages")
+	// If relative, resolve relative to the base directory.
+	// If empty, default to {packagesBaseDir}/packages.
+	packagesDir := resolveServeDir(cfg.PackagesDir, packagesBaseDir, "packages")
 
 	// Resolve bin directory (same logic)
-	binDir := resolveServeDir(cfg.BinDir, exeDir, "bin")
+	binDir := resolveServeDir(cfg.BinDir, packagesBaseDir, "bin")
 
 	// Create serve logger: dual output (file + console)
 	// File log: at {dataDir}/logs/serve.log (alongside client logs/bws.log)
@@ -1002,25 +992,25 @@ func (a *serveAdapter) StartFromConfig(baseDir string) error {
 		}
 
 		srv := bmserve.NewServerWithOptions(bmserve.ServerOptions{
-		Addr:        addr,
-		Version:     a.version,
-		PackagesDir: packagesDir,
-		BinDir:      binDir,
-		SyncSource:  onlineSource,
-		SyncConfig: bmserve.SyncConfig{
-			Enabled:  true,
-			Interval: interval,
-			Browsers: syncBrowsers,
-			Channels: syncChannels,
-		},
-		OnlineSource:   onlineSource,
-		OnlineFallback: cfg.OnlineFallback,
-		OnlineBrowsers: onlineBrowsers,
-		ScanWorkers:    cfg.ScanWorkers,
-		ConfigPath:     bmserve.ConfigPath(dataDir),
-		AuthToken:      cfg.AuthToken,
-		Logger:         serveLogger,
-	})
+			Addr:        addr,
+			Version:     a.version,
+			PackagesDir: packagesDir,
+			BinDir:      binDir,
+			SyncSource:  onlineSource,
+			SyncConfig: bmserve.SyncConfig{
+				Enabled:  true,
+				Interval: interval,
+				Browsers: syncBrowsers,
+				Channels: syncChannels,
+			},
+			OnlineSource:   onlineSource,
+			OnlineFallback: cfg.OnlineFallback,
+			OnlineBrowsers: onlineBrowsers,
+			ScanWorkers:    cfg.ScanWorkers,
+			ConfigPath:     bmserve.ConfigPath(""),
+			AuthToken:      cfg.AuthToken,
+			Logger:         serveLogger,
+		})
 		return srv.Start()
 	}
 
@@ -1033,7 +1023,7 @@ func (a *serveAdapter) StartFromConfig(baseDir string) error {
 		OnlineFallback: cfg.OnlineFallback,
 		OnlineBrowsers: onlineBrowsers,
 		ScanWorkers:    cfg.ScanWorkers,
-		ConfigPath:     bmserve.ConfigPath(dataDir),
+		ConfigPath:     bmserve.ConfigPath(""),
 		Logger:         serveLogger,
 	})
 	return srv.Start()
@@ -1095,8 +1085,41 @@ func (s *serveSyncSource) ListVersions(browser string, channel string, platform 
 			Arch:        string(v.Arch),
 			DownloadURL: v.DownloadURL,
 			Size:        v.Size,
+			SHA256:      v.SHA256,
 		})
 	}
+
+	// For Firefox, resolve actual download URLs and SHA256 hashes
+	// by fetching the FTP directory listing and SHA256SUMS file.
+	// This is done concurrently to avoid blocking for too long.
+	if browser == "firefox" && len(result) > 0 {
+		sem := make(chan struct{}, 10) // limit concurrency
+		var wg sync.WaitGroup
+		for i := range result {
+			wg.Add(1)
+			go func(idx int) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+
+				// Use a per-resolve timeout so one slow version doesn't block everything.
+				ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+				defer cancel()
+
+				resolved, err := s.src.Resolve(ctx, browser, result[idx].Version,
+					source.Platform(platform), source.Arch(arch))
+				if err == nil {
+					result[idx].DownloadURL = resolved.DownloadURL
+					result[idx].SHA256 = resolved.SHA256
+					if resolved.Size > 0 {
+						result[idx].Size = resolved.Size
+					}
+				}
+			}(i)
+		}
+		wg.Wait()
+	}
+
 	return result, nil
 }
 

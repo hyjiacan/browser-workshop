@@ -52,15 +52,16 @@ bws defaults to portable mode, with all data stored in the `bws-data/` directory
 
 ### How It Works
 
-Place `bws.exe` in any directory. The `bws-data/` folder will be automatically generated in the same directory on first run. All data (configuration, versions, cache, logs) is stored within it. The entire program along with its data can be copied to a USB drive or another computer for use.
+Place `bws.exe` in any directory. The `bws-data/` folder will be automatically generated in the same directory on first run, storing data (versions, cache, logs, runtime, etc.). The configuration files (`bws-client.ini` and `bws-serve.ini`) are located in the same directory as `bws.exe`. The entire program along with its data can be copied to a USB drive or another computer for use.
 
 ### Directory Structure
 
 ```
 bws/
 ├── bws.exe
-└── bws-data/              # All data is here
-    ├── config.ini        # Configuration file
+├── bws-client.ini        # Client configuration file (INI format)
+├── bws-serve.ini         # Serve service configuration file
+└── bws-data/              # Data directory (versions, cache, logs, runtime, etc.)
     ├── logs/             # Log directory
     ├── cache/            # Download cache
     ├── versions/         # Installed browser versions
@@ -71,7 +72,7 @@ bws/
 
 - **Plug-and-play**: Copy the entire directory to use on another machine
 - **Data isolation**: All data is under the program directory, no system pollution
-- **Easy backup**: Simply back up the `bws-data/` directory to completely back up all configuration and data
+- **Easy backup**: Back up the entire program directory to completely back up all configuration and data
 - **USB-friendly**: Can be placed on a USB drive and carried around for use on different computers
 
 ### Custom Data Directory
@@ -82,7 +83,7 @@ If you do not want to use the `bws-data/` directory at the same level as the pro
 bws cfg set data-dir D:\browser-data
 ```
 
-After setting, all data (configuration, versions, cache, logs) will be stored in the specified directory. Clear this configuration to restore the default portable mode:
+After setting, all data (versions, cache, logs, runtime, etc.) will be stored in the specified directory. The configuration files (`bws-client.ini` and `bws-serve.ini`) remain in the same directory as the bws executable. Clear this configuration to restore the default portable mode:
 
 ```bash
 bws cfg set data-dir ""

@@ -65,7 +65,7 @@ func (m *mockConfig) SetDataDir(path string) error {
 }
 func (m *mockConfig) ConfigPath() string {
 	if m.configPath == "" {
-		return "/tmp/bm-data/config.ini"
+		return "/tmp/bm-data/bws-client.ini"
 	}
 	return m.configPath
 }
@@ -78,11 +78,11 @@ func (m *mockConfig) SetRemoteSource(url string) error {
 func (m *mockConfig) ClearRemoteSource() error {
 	return nil
 }
-func (m *mockConfig) IsServeSourceEnabled() bool     { return true }
-func (m *mockConfig) SetServeSourceEnabled(v bool) error { return nil }
-func (m *mockConfig) IsFirefoxFTPEnabled() bool       { return true }
-func (m *mockConfig) SetFirefoxFTPEnabled(v bool) error { return nil }
-func (m *mockConfig) GetDiskSpaceThresholdGB() int     { return 5 }
+func (m *mockConfig) IsServeSourceEnabled() bool          { return true }
+func (m *mockConfig) SetServeSourceEnabled(v bool) error  { return nil }
+func (m *mockConfig) IsFirefoxFTPEnabled() bool           { return true }
+func (m *mockConfig) SetFirefoxFTPEnabled(v bool) error   { return nil }
+func (m *mockConfig) GetDiskSpaceThresholdGB() int        { return 5 }
 func (m *mockConfig) SetDiskSpaceThresholdGB(v int) error { return nil }
 func (m *mockConfig) GetProxy() string                    { return "" }
 func (m *mockConfig) SetProxy(proxy string) error         { return nil }
@@ -112,7 +112,7 @@ func (m *mockConfig) SetRepoPath(path string) error {
 	m.repoPath = path
 	return nil
 }
-func (m *mockConfig) GetLanguage() string         { return "zh" }
+func (m *mockConfig) GetLanguage() string           { return "zh" }
 func (m *mockConfig) SetLanguage(lang string) error { return nil }
 
 type mockBrowsers struct {
@@ -599,8 +599,8 @@ func TestUseCommand(t *testing.T) {
 
 func TestParseBrowserVersion(t *testing.T) {
 	tests := []struct {
-		input          string
-		defaultBrowser string
+		input           string
+		defaultBrowser  string
 		expectedBrowser string
 		expectedVersion string
 		expectedAlias   bool
