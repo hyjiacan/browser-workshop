@@ -8,6 +8,7 @@ import (
 	"net/http"
 	neturl "net/url"
 	"strings"
+	"sync"
 	"time"
 
 	bmlog "github.com/bws/bws/internal/log"
@@ -19,7 +20,20 @@ type HTTPSource struct {
 	baseURL    string
 	name       string
 	httpClient *http.Client
+
+	// manifestCache holds a short-lived cache of the manifest response so
+	// that multiple List() calls within the same query session (e.g. when
+	// the client iterates over channels) don't re-fetch the same 1.7 MB
+	// payload 5 times. The cache is valid for manifestCacheTTL.
+	manifestCache    *manifestV1Response
+	manifestCacheAge time.Time
+	manifestCacheMu  sync.Mutex
 }
+
+// manifestCacheTTL is how long a cached manifest is considered fresh.
+// 30 seconds is enough for a single query session (which typically
+// completes in <5 seconds) while still allowing rapid re-queries.
+const manifestCacheTTL = 30 * time.Second
 
 // --- New API v1 types ---
 
@@ -288,13 +302,27 @@ func (s *HTTPSource) Resolve(ctx context.Context, browser string, version string
 	return latest, nil
 }
 
-// fetchManifest fetches the manifest from the server.
+// fetchManifest fetches the manifest from the server, with a short-lived
+// in-memory cache to avoid redundant requests when the client iterates
+// over multiple channels (each channel triggers a separate List() call
+// that would otherwise re-fetch the same full manifest).
 // The server returns all entries (local + online cache merged); query
 // parameters are sent for informational purposes but the server does not
 // filter by them. Filtering is performed client-side after receiving the
 // full manifest.
 // Returns (v1Manifest, error).
 func (s *HTTPSource) fetchManifest(ctx context.Context, filter *Filter) (*manifestV1Response, error) {
+	// Check cache first — if we have a fresh manifest, reuse it.
+	s.manifestCacheMu.Lock()
+	if s.manifestCache != nil && time.Since(s.manifestCacheAge) < manifestCacheTTL {
+		cached := s.manifestCache
+		s.manifestCacheMu.Unlock()
+		bmlog.Debug("[http-source] manifest 缓存命中 (条目数=%d, 缓存年龄=%v)",
+			len(cached.Data), time.Since(s.manifestCacheAge).Round(time.Millisecond))
+		return cached, nil
+	}
+	s.manifestCacheMu.Unlock()
+
 	v1URL := s.baseURL + "/api/v1/manifest"
 	if params := buildManifestQuery(filter); len(params) > 0 {
 		v1URL += "?" + params.Encode()
@@ -320,6 +348,13 @@ func (s *HTTPSource) fetchManifest(ctx context.Context, filter *Filter) (*manife
 
 	if v1.Status == "ok" && v1.Data != nil {
 		bmlog.Debug("[http-source] manifest 解析成功: %d 个文件", len(v1.Data))
+
+		// Cache for reuse by subsequent List() calls.
+		s.manifestCacheMu.Lock()
+		s.manifestCache = &v1
+		s.manifestCacheAge = time.Now()
+		s.manifestCacheMu.Unlock()
+
 		return &v1, nil
 	}
 

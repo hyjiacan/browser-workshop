@@ -80,8 +80,6 @@ func (m *OnlineCacheManager) Get(browser string) []PackageFile {
 		out := make([]PackageFile, len(entry.files))
 		copy(out, entry.files)
 		m.mu.RUnlock()
-		m.logger.Debug("[online] 缓存命中: browser=%s 条目数=%d 缓存年龄=%v",
-			browser, len(out), time.Since(entry.time).Round(time.Second))
 		return out
 	}
 	m.mu.RUnlock()
@@ -175,6 +173,7 @@ func (m *OnlineCacheManager) refresh(browser string) {
 	var list []PackageFile
 	var newFiles []onlinePackage
 	successQueries := 0
+	seen := make(map[string]bool) // deduplicate by filename across platform/arch combos
 
 	for _, combo := range defaultOnlineCombos {
 		m.logger.Debug("[online] 查询在线源: browser=%s channel=all platform=%s arch=%s",
@@ -196,6 +195,12 @@ func (m *OnlineCacheManager) refresh(browser string) {
 			if fname == "" || v.DownloadURL == "" {
 				continue
 			}
+			// Skip duplicate filenames (same file returned for different
+			// platform/arch combos). Keep the first occurrence.
+			if seen[fname] {
+				continue
+			}
+			seen[fname] = true
 			list = append(list, buildOnlinePackageFile(fname, v, combo.platform, combo.arch))
 			newFiles = append(newFiles, onlinePackage{
 				url:      v.DownloadURL,

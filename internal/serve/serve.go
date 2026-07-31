@@ -381,14 +381,6 @@ func (s *Server) Start() error {
 
 		// Load existing cache files from disk first (fast, no network).
 		s.onlineCacheMgr.LoadFromDisk()
-
-		// Preload online cache in the background.
-		go func() {
-			s.logger.Info("[online] 正在后台预加载在线缓存...")
-			preloadStart := time.Now()
-			s.onlineCacheMgr.RefreshAll()
-			s.logger.Info("[online] 在线缓存预加载完成 (耗时 %v)", time.Since(preloadStart).Round(time.Millisecond))
-		}()
 	} else if s.onlineFallback && s.onlineSrc == nil {
 		s.logger.Warn("[serve] 在线回退已启用但未配置在线源，功能不可用")
 	}
@@ -412,6 +404,16 @@ func (s *Server) Start() error {
 	}
 
 	s.printStartupInfo()
+
+	// Start online cache preload AFTER printing startup info so logs don't interleave.
+	if s.onlineFallback && s.onlineSrc != nil {
+		go func() {
+			s.logger.Info("[online] 正在后台预加载在线缓存...")
+			preloadStart := time.Now()
+			s.onlineCacheMgr.RefreshAll()
+			s.logger.Info("[online] 在线缓存预加载完成 (耗时 %v)", time.Since(preloadStart).Round(time.Millisecond))
+		}()
+	}
 
 	s.logger.Info("[serve] 服务器开始监听: %s", s.addr)
 	return s.httpSrv.ListenAndServe()
