@@ -26,7 +26,7 @@ var Chromium = &BrowserDescriptor{
 	MultiInstanceArgs: []string{
 		"--no-default-browser-check",
 	},
-	DisableUpdateArgs: []string{},
+	DisableUpdateArgs: []string{"--disable-update"},
 	FirstRunSkipArgs:  []string{"--no-first-run"},
 
 	PackageFormats: []string{"zip", "tar.gz", "tar.bz2"},

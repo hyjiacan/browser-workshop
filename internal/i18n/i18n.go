@@ -116,8 +116,7 @@ func loadExternal(lang string, externalDir string) {
 	path := filepath.Join(externalDir, lang+".json")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		// 外部翻译文件不存在或无法读取，记录调试日志（非致命错误）
-		log.Printf("[i18n] 无法读取外部翻译文件 %s: %v", path, err)
+		// 外部翻译文件不存在是正常情况（用户未提供自定义翻译），静默跳过
 		return
 	}
 

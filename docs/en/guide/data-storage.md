@@ -16,8 +16,7 @@ bws/
 └── bws-data/                  # Data root directory
     ├── .serve-cache.json      # serve checksum cache
     ├── logs/                  # Log directory
-    │   ├── bws.log            # Main log file
-    │   └── serve.log          # serve service log file
+    │   └── bws.log            # bws log file (shared with client)
     ├── cache/                 # Download cache
     │   ├── manifests/         # Version manifest cache
     │   │   └── firefox-ftp-cache.json  # Firefox FTP source cache
@@ -109,7 +108,7 @@ For more log-related information, please refer to the [Logging System](./logging
 
 ### cache/
 
-Cache directory, storing downloaded temporary files and manifest caches.
+Cache directory, storing downloaded installer packages and manifest caches.
 
 #### cache/manifests/
 
@@ -117,16 +116,19 @@ Version manifest cache, storing version lists fetched from remote sources to avo
 
 - Speeds up response for commands like `ls --remote`
 - Has an expiration time; automatically re-fetches after expiry
+- Firefox FTP source cache stored as `firefox-ftp-cache.json`, default 24-hour validity
+- Can be force-refreshed via `bws ls -R --refresh`
 - Can be cleaned via `bws cc clear`
 
 #### cache/downloads/
 
-Downloaded file cache, storing installer packages downloaded via the `download` command and temporary files downloaded via the `install` command.
+Download file cache, permanently storing installer packages downloaded from serve via the `install` command.
 
-- Downloaded files are retained here for easy subsequent reuse
-- May occupy a large amount of space; can be cleaned periodically
-- Can be cleaned via `bws cc clear`
-- Can check occupied space via `bws cc size`
+- Files are retained in the cache after installation; reused for subsequent installs of the same version
+- Automatically re-downloaded when the file on the serve side is updated (size changes)
+- Use `--refresh-cache` flag to force re-download from serve (ignoring local cache)
+- May occupy a large amount of space; can be cleaned periodically via `bws cc clear`
+- View cache file list and space usage via `bws cc info`
 
 ### versions/
 

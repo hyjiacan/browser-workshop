@@ -27,6 +27,9 @@ func TestNew(t *testing.T) {
 	if p.ManifestCacheDir != filepath.Join(root, "cache", "manifests") {
 		t.Errorf("ManifestCacheDir incorrect")
 	}
+	if p.ServeCacheDir != filepath.Join(root, "cache", "serve") {
+		t.Errorf("ServeCacheDir incorrect")
+	}
 	if p.DownloadCacheDir != filepath.Join(root, "cache", "downloads") {
 		t.Errorf("DownloadCacheDir incorrect")
 	}
@@ -48,6 +51,7 @@ func TestEnsureAll(t *testing.T) {
 		p.VersionsDir,
 		p.CacheDir,
 		p.ManifestCacheDir,
+		p.ServeCacheDir,
 		p.DownloadCacheDir,
 		p.RuntimeDir,
 	}

@@ -27,6 +27,17 @@ var Firefox = &BrowserDescriptor{
 	DisableUpdateArgs: []string{},
 	FirstRunSkipArgs:  []string{},
 
+	// Firefox does not support command-line flags for disabling updates or
+	// default-browser checks. These preferences are written to user.js in the
+	// profile directory at launch time.
+	StandardPrefs: []string{
+		`user_pref("app.update.enabled", false);`,
+		`user_pref("app.update.auto", false);`,
+		`user_pref("app.update.doorhanger", false);`,
+		`user_pref("app.update.silent", false);`,
+		`user_pref("browser.shell.checkDefaultBrowser", false);`,
+	},
+
 	PackageFormats: []string{"zip", "tar.bz2", "exe", "dmg"},
 	Channels:       []string{"release", "beta", "esr", "nightly"},
 	DefaultChannel: "release",

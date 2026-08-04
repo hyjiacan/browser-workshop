@@ -139,6 +139,19 @@ bws r chrome@120 --native
 
 > **注意**：原生模式下，不同版本共享 Profile 可能导致配置冲突或数据损坏，建议谨慎使用。
 
+### 标准隔离参数
+
+在非原生模式下，bws 会自动为所有浏览器添加以下标准参数（原生模式下不添加）：
+
+| 参数 | Chrome/Chromium | Firefox |
+|------|----------------|---------|
+| 多实例隔离 | 通过独立 Profile 目录实现 | `-no-remote` |
+| 禁止检查更新 | `--disable-update` | `user.js`: `app.update.enabled=false` |
+| 禁止默认浏览器检查 | `--no-default-browser-check` | `user.js`: `browser.shell.checkDefaultBrowser=false` |
+| 跳过首次运行向导 | `--no-first-run` | - |
+
+Firefox 的偏好设置通过 `user.js` 文件写入 Profile 目录，包含去重标记，不会重复写入。
+
 ## 后台运行
 
 使用 `-d` 或 `--detached` 参数让浏览器在后台运行，bws 命令立即返回，不等待浏览器进程结束。

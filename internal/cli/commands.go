@@ -114,12 +114,14 @@ func NewInstallCommand() *Command {
 			"i -d /path/to/browsers",
 			"i -f /path/to/installer.exe chrome@120",
 			"i -d /path/to/browser-dir chrome@120",
+			"i chrome@120 --refresh-cache",
 		},
 		Flags: []*Flag{
 			{Name: "from-dir", Short: "d", Usage: "从本地目录安装", HasValue: true, Default: ""},
 			{Name: "from-file", Short: "", Usage: "从本地压缩包安装", HasValue: true, Default: ""},
 			{Name: "force", Short: "f", Usage: "强制重新安装", HasValue: false, Default: "false"},
 			{Name: "channel", Short: "c", Usage: "发布渠道（stable, beta, dev, canary）", HasValue: true, Default: "stable"},
+			{Name: "refresh-cache", Short: "", Usage: "强制从 serve 重新下载（忽略本地缓存）", HasValue: false, Default: "false"},
 		},
 		Run: runInstall,
 	}

@@ -121,8 +121,9 @@ type VersionInfo struct {
 	// Size is the expected file size in bytes (0 if unknown)
 	Size int64
 
-	// SHA256 is the expected SHA-256 hash of the download (empty if unknown)
-	SHA256 string
+	// Checksum is the expected checksum hash with algo prefix (e.g. "sha256:hash").
+	// Empty if unknown — the checksum can be fetched on-demand via GetChecksum.
+	Checksum string
 
 	// ReleaseNotes is a URL to release notes (empty if unknown)
 	ReleaseNotes string

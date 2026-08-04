@@ -42,6 +42,12 @@ type BrowserDescriptor struct {
 	DisableUpdateArgs []string // Args to disable auto-update
 	FirstRunSkipArgs  []string // Args to skip first-run wizard
 
+	// StandardPrefs contains browser-specific preferences to be written to
+	// user.js (for Firefox) or equivalent config files. Each entry is a
+	// complete preference line, e.g. `user_pref("app.update.enabled", false);`.
+	// Used for settings that cannot be passed as command-line arguments.
+	StandardPrefs []string
+
 	// Supported package formats, in priority order
 	PackageFormats []string // e.g. ["zip", "exe", "msi"]
 

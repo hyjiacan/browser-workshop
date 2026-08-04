@@ -143,5 +143,5 @@ The `fingerprint-enhanced` plugin adds extra WebRTC protection and Canvas protec
 
 1. **User-Agent limitation**: Chrome's `--user-agent` only modifies HTTP request headers; it does not affect the JavaScript `navigator.userAgent` return value. For full JS UA spoofing, use a plugin.
 2. **Firefox RFP**: Firefox's `privacy.resistFingerprinting` is very powerful — when enabled, it automatically unifies multiple fingerprint parameters. This is a different strategy from Chrome's per-flag approach.
-3. **user.js dedup**: Firefox `user.js` writes include dedup markers to prevent repeated appending on each launch. Proxy config and fingerprint config can coexist.
+3. **user.js dedup**: Firefox `user.js` writes include dedup markers to prevent repeated appending on each launch. Standard prefs (disable updates, disable default browser check), proxy config, and fingerprint config can coexist.
 4. **Fingerprint uniqueness**: The `random` preset has a limited random pool (3 UAs x 7 languages x 8 resolutions), so repeated fingerprints may occur in high-frequency usage scenarios.

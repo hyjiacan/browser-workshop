@@ -221,10 +221,10 @@ Get-Content bws-data\logs\bws.log -Wait -Tail 50
 
 ## Serve 日志
 
-`bws sv` 服务也有独立的日志系统：
+`bws sv` 服务与客户端共用同一日志文件：
 
 - **控制台输出**：启动进度、HTTP 请求摘要（跳过 `/api/v1/status` 健康检查）
-- **文件日志**：`bws-data/logs/serve.log`，记录完整的 HTTP 请求信息（方法、路径、状态码、耗时、客户端 IP）
+- **文件日志**：`bws-data/logs/bws.log`（与客户端共用），记录完整的 HTTP 请求信息（方法、路径、状态码、耗时、客户端 IP）
 
 Serve 日志同样支持轮转，配置与客户端日志共享 `log.max-size-mb` 和 `log.max-backups`（通过 `bws-serve.ini` 中的独立配置项，或沿用客户端配置）。
 

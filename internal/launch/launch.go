@@ -242,6 +242,15 @@ func (m *Manager) buildArgs(desc *browser.BrowserDescriptor, opts Options, profi
 		if desc.Features.SupportsProfile {
 			args = append(args, desc.BuildProfileArgs(profileDir)...)
 		}
+
+		// Standard preferences (e.g. Firefox user.js for disabling updates
+		// and default-browser check). Written before proxy/fingerprint prefs
+		// so that those can append without conflict.
+		if len(desc.StandardPrefs) > 0 && profileDir != "" {
+			if err := writeStandardPrefs(desc, profileDir); err != nil {
+				return nil, fmt.Errorf("writing standard prefs: %w", err)
+			}
+		}
 	}
 
 	// Mode flags
@@ -366,6 +375,45 @@ func writeFirefoxProxyPrefs(profileDir, proxyURL string) error {
 		content = existing // already written, keep as-is
 	}
 	return os.WriteFile(prefsPath, []byte(content), 0o644)
+}
+
+// writeStandardPrefs writes browser-standard preferences (e.g. disabling
+// update checks and default-browser checks) to user.js in the profile
+// directory. If the preferences are already present (identified by a marker
+// comment), the file is left unchanged. This is used for browsers like Firefox
+// that do not support these settings via command-line flags.
+func writeStandardPrefs(desc *browser.BrowserDescriptor, profileDir string) error {
+	if len(desc.StandardPrefs) == 0 || profileDir == "" {
+		return nil
+	}
+
+	prefsPath := filepath.Join(profileDir, "user.js")
+
+	var existing string
+	if data, err := os.ReadFile(prefsPath); err == nil {
+		existing = string(data)
+	}
+
+	// Skip if already written (idempotent across launches)
+	if strings.Contains(existing, "Standard prefs written by bws") {
+		return nil
+	}
+
+	var content strings.Builder
+	content.WriteString("// Standard prefs written by bws\n")
+	for _, pref := range desc.StandardPrefs {
+		content.WriteString(pref)
+		content.WriteString("\n")
+	}
+
+	// Append existing content (e.g. proxy or fingerprint prefs from a prior
+	// launch) after the standard prefs so that later prefs can override.
+	if existing != "" {
+		content.WriteString("\n")
+		content.WriteString(existing)
+	}
+
+	return os.WriteFile(prefsPath, []byte(content.String()), 0o644)
 }
 
 // buildFingerprintArgs constructs fingerprint-related arguments for the browser.

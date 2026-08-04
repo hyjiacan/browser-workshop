@@ -13,6 +13,7 @@ func runInstall(ctx *Context, args []string) error {
 		{Name: "from-file", Short: "", Usage: "从本地压缩包安装（未指定版本时自动检测）", HasValue: true, Default: ""},
 		{Name: "force", Short: "f", Usage: "强制重新安装", HasValue: false, Default: "false"},
 		{Name: "channel", Short: "c", Usage: "发布渠道", HasValue: true, Default: "stable"},
+		{Name: "refresh-cache", Short: "", Usage: "强制从 serve 重新下载（忽略本地缓存）", HasValue: false, Default: "false"},
 	}
 
 	flagVals, positional, err := ParseFlags(args, flags)
@@ -24,6 +25,7 @@ func runInstall(ctx *Context, args []string) error {
 	fromFile := flagVals["from-file"]
 	force := flagVals["force"] == "true"
 	channel := flagVals["channel"]
+	refreshCache := flagVals["refresh-cache"] == "true"
 
 	if len(positional) == 0 && fromDir == "" && fromFile == "" {
 		return fmt.Errorf("请指定要安装的版本，例如 'bws i chrome@120'")
@@ -49,8 +51,8 @@ func runInstall(ctx *Context, args []string) error {
 		} else if fromFile != "" {
 			ctx.Logger.Debug("[install] 从本地文件安装: file=%s spec=%s@%s force=%v", fromFile, spec.Browser, spec.Version, force)
 		} else {
-			ctx.Logger.Debug("[install] 远程安装: spec=%s@%s channel=%s force=%v", spec.Browser, spec.Version, channel, force)
-		}
+		ctx.Logger.Debug("[install] 远程安装: spec=%s@%s channel=%s force=%v refresh-cache=%v", spec.Browser, spec.Version, channel, force, refreshCache)
+	}
 	}
 
 	// 本地目录安装
@@ -158,36 +160,67 @@ func runInstall(ctx *Context, args []string) error {
 
 	ctx.Printf("正在下载 %s@%s...\n", spec.Browser, versionInfo.Version)
 
-	// Create temp directory for download
-	tempDir, err := os.MkdirTemp("", "bws-download-*")
-	if err != nil {
-		return fmt.Errorf("creating temp dir: %w", err)
+	// Use permanent download cache directory instead of a temp directory.
+	// Cached files are kept across installs and only re-downloaded when
+	// the file is missing, corrupt, or --refresh-cache is specified.
+	cacheDir := ctx.Paths.DownloadCacheDir()
+	if cacheDir == "" {
+		return fmt.Errorf("下载缓存目录未配置")
 	}
-	defer os.RemoveAll(tempDir)
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return fmt.Errorf("creating download cache dir: %w", err)
+	}
 
 	if ctx.Logger != nil {
-		ctx.Logger.Debug("[install] 临时目录: %s", tempDir)
+		ctx.Logger.Debug("[install] 下载缓存目录: %s", cacheDir)
 	}
 
 	// Determine filename from URL
 	fileName := getDownloadFilename(spec.Browser, versionInfo.Version, versionInfo.DownloadURL, string(versionInfo.Platform))
-	downloadDest := filepath.Join(tempDir, fileName)
-	if ctx.Logger != nil {
-		ctx.Logger.Debug("[install] 下载目标: %s", downloadDest)
+	downloadDest := filepath.Join(cacheDir, fileName)
+
+	// Check if the file is already cached and valid.
+	// A cached file is valid when:
+	//   1. --refresh-cache is not set
+	//   2. The file exists and is non-empty
+	//   3. If the manifest provides a size, it matches the local file size
+	cacheValid := false
+	if !refreshCache {
+		if info, err := os.Stat(downloadDest); err == nil && info.Size() > 0 {
+			if versionInfo.Size > 0 && info.Size() != versionInfo.Size {
+				if ctx.Logger != nil {
+					ctx.Logger.Debug("[install] 缓存文件大小不匹配: 本地=%d 远程=%d，将重新下载", info.Size(), versionInfo.Size)
+				}
+			} else {
+				cacheValid = true
+				if ctx.Logger != nil {
+					ctx.Logger.Debug("[install] 命中本地缓存: %s (大小: %s)", downloadDest, FormatSize(info.Size()))
+				}
+				ctx.Printf("✓ 命中本地缓存，跳过下载: %s\n", fileName)
+			}
+		}
 	}
 
 	var downloadedPath string
-	downloadedPath, err = ctx.Download.Download(versionInfo.DownloadURL, downloadDest, func(downloaded, total int64, percent float64) {
-		if total > 0 {
-			ctx.Printf("\r  下载进度: %.1f%%", percent)
-		} else {
-			ctx.Printf("\r  下载中...")
+	if cacheValid {
+		downloadedPath = downloadDest
+	} else {
+		if ctx.Logger != nil {
+			ctx.Logger.Debug("[install] 下载目标: %s", downloadDest)
 		}
-	})
-	ctx.Println() // newline after progress
 
-	if err != nil {
-		return fmt.Errorf("下载失败: %w", err)
+		downloadedPath, err = ctx.Download.Download(versionInfo.DownloadURL, downloadDest, func(downloaded, total int64, percent float64) {
+			if total > 0 {
+				ctx.Printf("\r  下载进度: %.1f%%", percent)
+			} else {
+				ctx.Printf("\r  下载中...")
+			}
+		})
+		ctx.Println() // newline after progress
+
+		if err != nil {
+			return fmt.Errorf("下载失败: %w", err)
+		}
 	}
 
 	// 强制模式：下载成功后再卸载旧版本，确保下载失败时不会丢失已安装的版本

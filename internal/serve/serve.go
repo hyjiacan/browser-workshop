@@ -12,11 +12,13 @@ package serve
 
 import (
 	"context"
+	"crypto/sha1"
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"html/template"
 	"io"
 	"net/http"
@@ -51,7 +53,8 @@ const (
 	onlineCacheTTL = 24 * time.Hour
 
 	// onlineListTimeout is the per-source timeout when listing online versions.
-	onlineListTimeout = 30 * time.Second
+	// Firefox 需要逐版本解析下载 URL（含 500ms 请求间隔），100+ 版本需要较长时间。
+	onlineListTimeout = 5 * time.Minute
 )
 
 // onlinePackage describes a package available from the online fallback source.
@@ -62,7 +65,7 @@ type onlinePackage struct {
 	platform string
 	arch     string
 	size     int64
-	sha256   string
+	checksum string // upstream checksum with algo prefix, e.g. "sha256:hash" or "sha1:hash"
 }
 
 // defaultOnlineCombos lists the platform/arch combinations queried from the
@@ -109,11 +112,12 @@ type binFileView struct {
 type Server struct {
 	addr        string
 	version     string
-	baseDir     string // 程序所在目录
-	packagesDir string // baseDir/packages
-	binDir      string // baseDir/bin
-	cachePath   string // baseDir/.serve-cache.json
-	configPath  string // bws-serve.ini path (for startup logging)
+	baseDir       string // 程序所在目录
+	packagesDir   string // baseDir/packages
+	binDir        string // baseDir/bin
+	serveCacheDir string // baseDir/cache/serve (扫描缓存、在线缓存)
+	cachePath     string // serveCacheDir/scan-cache.json
+	configPath    string // bws-serve.ini path (for startup logging)
 
 	logger    *bmlog.Logger
 	startTime time.Time
@@ -141,8 +145,7 @@ type Server struct {
 	// cacheMu protects saveCache from concurrent writes to the cache file.
 	cacheMu sync.Mutex
 
-	// scanMu serializes concurrent scanPackages calls so that multiple
-	// on-demand online fallback downloads don't trigger parallel scans.
+	// scanMu serializes concurrent scanPackages calls.
 	scanMu sync.Mutex
 
 	// authToken is the optional bearer token for API authentication.
@@ -152,16 +155,16 @@ type Server struct {
 
 // PackageFile represents a single package file with its metadata.
 type PackageFile struct {
-	Filename     string `json:"filename"`
-	Version      string `json:"version"`
-	Browser      string `json:"browser"`
-	Channel      string `json:"channel"`
-	MajorVersion string `json:"major_version"`
-	Platform     string `json:"platform"`
-	Architecture string `json:"architecture"`
-	Size         int64  `json:"size"`
-	Checksum     string `json:"checksum"`
-	SHA256       string `json:"sha256,omitempty"` // expected SHA-256 hash from upstream (empty if unknown)
+	Filename         string `json:"filename"`
+	Version          string `json:"version"`
+	Browser          string `json:"browser"`
+	Channel          string `json:"channel"`
+	MajorVersion     string `json:"major_version"`
+	Platform         string `json:"platform"`
+	Architecture     string `json:"architecture"`
+	Size             int64  `json:"size"`
+	Checksum         string `json:"checksum"`                     // locally computed XXH3 checksum
+	UpstreamChecksum string `json:"upstream_checksum,omitempty"`  // upstream checksum with algo prefix (e.g. "sha256:hash"), empty if unknown
 }
 
 // cacheFile represents the on-disk checksum cache.
@@ -318,13 +321,18 @@ func NewServerWithOptions(opts ServerOptions) *Server {
 		configPath = ConfigPath("")
 	}
 
+	// serveCacheDir holds serve's internal cache files (scan cache, online cache).
+	// These live under baseDir/cache/serve/ to keep bws-data/ root clean.
+	serveCacheDir := filepath.Join(baseDir, "cache", "serve")
+
 	srv := &Server{
 		addr:           opts.Addr,
 		version:        opts.Version,
 		baseDir:        baseDir,
 		packagesDir:    packagesDir,
 		binDir:         binDir,
-		cachePath:      filepath.Join(baseDir, ".serve-cache.json"),
+		serveCacheDir:  serveCacheDir,
+		cachePath:      filepath.Join(serveCacheDir, "scan-cache.json"),
 		configPath:     configPath,
 		logger:         logger,
 		onlineSrc:      opts.OnlineSource,
@@ -337,7 +345,7 @@ func NewServerWithOptions(opts ServerOptions) *Server {
 	// Create online cache manager when online source is configured.
 	// The manager handles per-browser caching of online version data.
 	if opts.OnlineSource != nil {
-		srv.onlineCacheMgr = NewOnlineCacheManager(baseDir, opts.OnlineSource, logger, opts.OnlineBrowsers)
+		srv.onlineCacheMgr = NewOnlineCacheManager(serveCacheDir, opts.OnlineSource, logger, opts.OnlineBrowsers)
 	}
 
 	// Set up sync manager if source is provided
@@ -368,6 +376,10 @@ func (s *Server) Start() error {
 	if err := os.MkdirAll(s.binDir, 0o755); err != nil {
 		s.logger.Error("[serve] 创建客户端二进制目录失败: %v", err)
 		return fmt.Errorf("creating bin directory: %w", err)
+	}
+	if err := os.MkdirAll(s.serveCacheDir, 0o755); err != nil {
+		s.logger.Error("[serve] 创建缓存目录失败: %v", err)
+		return fmt.Errorf("creating serve cache directory: %w", err)
 	}
 
 	// Load checksum cache
@@ -574,8 +586,7 @@ func isSupportedExtension(base string) bool {
 // Uses a worker pool for parallel checksum computation. The number of workers is
 // determined by s.scanWorkers (0 = runtime.NumCPU(), clamped to [1, 32]).
 func (s *Server) scanPackages(cache map[string]cacheEntry) error {
-	// Serialize concurrent scan calls — multiple on-demand downloads may
-	// trigger scans simultaneously.
+	// Serialize concurrent scan calls.
 	s.scanMu.Lock()
 	defer s.scanMu.Unlock()
 
@@ -701,7 +712,7 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 		if len(misses) < workers {
 			workers = len(misses)
 		}
-		s.logger.Debug("[scan] 校验和计算: 缓存命中 %d, 需计算 %d (线程 %d)",
+		s.logger.Info("[scan] 校验和计算: 缓存命中 %d, 需计算 %d (线程 %d)",
 			cacheHits, len(misses), workers)
 
 		type job struct {
@@ -779,6 +790,13 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 				Size:     m.info.Size(),
 			}
 		}
+
+		// 及时保存缓存，避免程序意外中断导致全部 checksum 重算
+		if err := s.saveCache(cache); err != nil {
+			s.logger.Warn("[scan] 增量保存缓存失败: %v", err)
+		} else {
+			s.logger.Debug("[scan] 校验和计算完成，缓存已及时保存")
+		}
 	}
 
 	// Phase 4: remove nil entries (failed checksums) and cleanup
@@ -802,10 +820,21 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 		return files[i].Filename < files[j].Filename
 	})
 
-	// Print discovery log for each valid file (jm.exe style).
+	// Print discovery log for each valid file.
+	// 新计算 checksum 的文件使用 Info 级别，缓存命中的文件使用 Debug 级别。
+	// 构建 seenMisses 集合用于区分变更项与未变更项
+	missedFiles := make(map[string]bool, len(misses))
+	for _, m := range misses {
+		missedFiles[m.relPath] = true
+	}
 	for _, f := range files {
-		s.logger.Info("[scan] 发现: %s（%s/%s, 版本 %s, %s, %s）",
-			f.Filename, f.Platform, f.Architecture, f.Version, f.Browser, util.FormatSize(f.Size))
+		if missedFiles[f.Filename] {
+			s.logger.Info("[scan] 发现: %s（%s/%s, 版本 %s, %s, %s）",
+				f.Filename, f.Platform, f.Architecture, f.Version, f.Browser, util.FormatSize(f.Size))
+		} else {
+			s.logger.Debug("[scan] 发现: %s（%s/%s, 版本 %s, %s, %s）",
+				f.Filename, f.Platform, f.Architecture, f.Version, f.Browser, util.FormatSize(f.Size))
+		}
 	}
 
 	s.mu.Lock()
@@ -904,6 +933,8 @@ func (s *Server) loadCache() (map[string]cacheEntry, error) {
 }
 
 // saveCache saves the checksum cache to disk.
+// 采用原子写入：先写入临时文件，成功后重命名为正式文件名，
+// 避免写入过程中程序意外中断导致缓存文件损坏。
 func (s *Server) saveCache(cache map[string]cacheEntry) error {
 	cf := cacheFile{
 		Version: cacheVersion,
@@ -917,7 +948,18 @@ func (s *Server) saveCache(cache map[string]cacheEntry) error {
 
 	s.cacheMu.Lock()
 	defer s.cacheMu.Unlock()
-	return os.WriteFile(s.cachePath, data, 0o600)
+	// 确保缓存目录存在（测试场景可能未调用 Start）
+	_ = os.MkdirAll(filepath.Dir(s.cachePath), 0o755)
+	// 先写入临时文件，成功后重命名为正式文件
+	tmpPath := s.cachePath + ".tmp"
+	if err := os.WriteFile(tmpPath, data, 0o644); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, s.cachePath); err != nil {
+		_ = os.Remove(tmpPath) // 清理临时文件
+		return err
+	}
+	return nil
 }
 
 // --- HTTP Handlers ---
@@ -1429,8 +1471,8 @@ func (s *Server) fetchOnlinePackage(filename string) (string, error) {
 }
 
 // doOnlineDownload resolves the download URL for filename and downloads it
-// into the local packages directory, then refreshes the manifest so the new
-// file (with its checksum) becomes visible.
+// into the local packages directory. The file is already visible in the
+// manifest via the online cache; no local rescan is needed.
 func (s *Server) doOnlineDownload(filename string) error {
 	info, err := s.findOnlinePackage(filename)
 	if err != nil {
@@ -1468,45 +1510,58 @@ func (s *Server) doOnlineDownload(filename string) error {
 		}
 	}
 
-	// Verify SHA256 checksum if the online source provided one.
-	if info.sha256 != "" {
-		f, err := os.Open(destPath)
-		if err != nil {
-			s.logger.Warn("[online] SHA256 校验失败: 无法打开文件: %s: %v", filename, err)
-			_ = os.Remove(destPath)
-			return fmt.Errorf("SHA256 校验失败: 无法打开文件: %w", err)
+	// 按需获取校验并校验（支持 SHA256 和 SHA1 两种算法）
+	if s.onlineSrc != nil && info.version != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		expectedChecksum, chkErr := s.onlineSrc.GetChecksum(ctx, info.browser, info.version, info.platform, info.arch)
+		cancel()
+		if chkErr != nil {
+			s.logger.Debug("[online] 获取校验和失败: %s: %v", filename, chkErr)
 		}
-		h := sha256.New()
-		if _, err := io.Copy(h, f); err != nil {
-			f.Close()
-			s.logger.Warn("[online] SHA256 校验失败: 读取文件错误: %s: %v", filename, err)
-			_ = os.Remove(destPath)
-			return fmt.Errorf("SHA256 校验失败: 读取文件错误: %w", err)
+		if expectedChecksum != "" {
+			algo, expectedHash, ok := strings.Cut(expectedChecksum, ":")
+			if !ok || expectedHash == "" {
+				s.logger.Debug("[online] 校验和格式无效，跳过校验: %s: %s", filename, expectedChecksum)
+			} else {
+				var h hash.Hash
+				switch algo {
+				case "sha256":
+					h = sha256.New()
+				case "sha1":
+					h = sha1.New()
+				default:
+					s.logger.Warn("[online] 不支持的校验算法: %s: %s", filename, algo)
+				}
+				if h != nil {
+					f, err := os.Open(destPath)
+					if err != nil {
+						s.logger.Warn("[online] %s 校验失败: 无法打开文件: %s: %v", algo, filename, err)
+						_ = os.Remove(destPath)
+						return fmt.Errorf("%s 校验失败: 无法打开文件: %w", algo, err)
+					}
+					if _, err := io.Copy(h, f); err != nil {
+						f.Close()
+						s.logger.Warn("[online] %s 校验失败: 读取文件错误: %s: %v", algo, filename, err)
+						_ = os.Remove(destPath)
+						return fmt.Errorf("%s 校验失败: 读取文件错误: %w", algo, err)
+					}
+					f.Close()
+					actualHash := hex.EncodeToString(h.Sum(nil))
+					if actualHash != expectedHash {
+						s.logger.Warn("[online] %s 校验失败: %s: 预期=%s 实际=%s", algo, filename, expectedHash, actualHash)
+						_ = os.Remove(destPath)
+						return fmt.Errorf("%s 校验失败: %s: 预期=%s 实际=%s", algo, filename, expectedHash, actualHash)
+					}
+					s.logger.Debug("[online] %s 校验通过: %s", algo, filename)
+				}
+			}
 		}
-		f.Close()
-		actualHash := hex.EncodeToString(h.Sum(nil))
-		if actualHash != info.sha256 {
-			s.logger.Warn("[online] SHA256 校验失败: %s: 预期=%s 实际=%s", filename, info.sha256, actualHash)
-			_ = os.Remove(destPath)
-			return fmt.Errorf("SHA256 校验失败: %s: 预期=%s 实际=%s", filename, info.sha256, actualHash)
-		}
-		s.logger.Debug("[online] SHA256 校验通过: %s", filename)
 	}
 
 	// Log final file size.
 	if fi, statErr := os.Stat(destPath); statErr == nil {
 		s.logger.Debug("[online] 文件已就绪: %s (%s)", destPath, util.FormatSize(fi.Size()))
 	}
-
-	// Re-scan packages so the new file gets a checksum and is added to the
-	// manifest. The checksum cache makes this cheap for unchanged files.
-	s.logger.Debug("[online] 重新扫描软件包目录以更新清单...")
-	cache, _ := s.loadCache()
-	if err := s.scanPackages(cache); err != nil {
-		s.logger.Warn("[online] 重新扫描软件包失败: %v", err)
-	}
-	_ = s.saveCache(cache)
-	s.logger.Debug("[online] 清单已更新")
 
 	return nil
 }

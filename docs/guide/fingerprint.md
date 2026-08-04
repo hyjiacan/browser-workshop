@@ -143,5 +143,5 @@ bws r chrome@120 --fingerprint standard --plugin workspace
 
 1. **User-Agent 局限性**：Chrome 的 `--user-agent` 仅修改 HTTP 请求头，不影响 JavaScript 中 `navigator.userAgent` 的返回值。如需完全伪装 JS UA，需使用插件。
 2. **Firefox RFP**：Firefox 的 `privacy.resistFingerprinting` 功能非常强大，启用后会自动统一多项指纹参数，与 Chrome 的实现策略不同。
-3. **user.js 重复写入保护**：Firefox 的 `user.js` 写入包含去重标记，不会在每次启动时重复追加内容。代理配置和指纹配置可以共存。
+3. **user.js 重复写入保护**：Firefox 的 `user.js` 写入包含去重标记，不会在每次启动时重复追加内容。标准参数（禁止更新、禁止默认浏览器检查）、代理配置和指纹配置可以共存。
 4. **指纹唯一性**：`random` 预设的随机池有限（3 UA x 7 语言 x 8 分辨率），在高频使用场景中可能出现重复指纹。

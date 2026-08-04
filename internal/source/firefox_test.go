@@ -130,42 +130,42 @@ func TestBuildDownloadURL(t *testing.T) {
 			version:  "141.0",
 			platform: PlatformWindows,
 			arch:     ArchAMD64,
-			want:     "https://ftp.mozilla.org/pub/firefox/releases/141.0/win64/en-US/Firefox%20Setup%20141.0.exe",
+			want:     "https://ftp.mozilla.org/pub/firefox/releases/141.0/win64/zh-CN/Firefox%20Setup%20141.0.exe",
 		},
 		{
 			name:     "Windows x64 ESR",
 			version:  "140.0esr",
 			platform: PlatformWindows,
 			arch:     ArchAMD64,
-			want:     "https://ftp.mozilla.org/pub/firefox/releases/140.0esr/win64/en-US/Firefox%20Setup%20140.0esr.exe",
+			want:     "https://ftp.mozilla.org/pub/firefox/releases/140.0esr/win64/zh-CN/Firefox%20Setup%20140.0esr.exe",
 		},
 		{
 			name:     "Linux x64 stable",
 			version:  "141.0",
 			platform: PlatformLinux,
 			arch:     ArchAMD64,
-			want:     "https://ftp.mozilla.org/pub/firefox/releases/141.0/linux-x86_64/en-US/firefox-141.0.tar.xz",
+			want:     "https://ftp.mozilla.org/pub/firefox/releases/141.0/linux-x86_64/zh-CN/firefox-141.0.tar.bz2",
 		},
 		{
 			name:     "macOS stable",
 			version:  "141.0",
 			platform: PlatformMacOS,
 			arch:     ArchAMD64,
-			want:     "https://ftp.mozilla.org/pub/firefox/releases/141.0/mac/en-US/Firefox%20141.0.dmg",
+			want:     "https://ftp.mozilla.org/pub/firefox/releases/141.0/mac/zh-CN/Firefox%20141.0.dmg",
 		},
 		{
 			name:     "Windows ARM64",
 			version:  "141.0",
 			platform: PlatformWindows,
 			arch:     ArchARM64,
-			want:     "https://ftp.mozilla.org/pub/firefox/releases/141.0/win64-aarch64/en-US/Firefox%20Setup%20141.0.exe",
+			want:     "https://ftp.mozilla.org/pub/firefox/releases/141.0/win64-aarch64/zh-CN/Firefox%20Setup%20141.0.exe",
 		},
 		{
 			name:     "Linux ARM64",
 			version:  "141.0",
 			platform: PlatformLinux,
 			arch:     ArchARM64,
-			want:     "https://ftp.mozilla.org/pub/firefox/releases/141.0/linux-aarch64/en-US/firefox-141.0.tar.xz",
+			want:     "https://ftp.mozilla.org/pub/firefox/releases/141.0/linux-aarch64/zh-CN/firefox-141.0.tar.bz2",
 		},
 	}
 
@@ -439,8 +439,8 @@ func TestParseFileEntries(t *testing.T) {
 <table>
 <tr><td>Dir</td><td><a href="/pub/firefox/">..</a></td></tr>
 <tr><td>Dir</td><td><a href="/pub/firefox/releases/141.0/">141.0/</a></td></tr>
-<tr><td>File</td><td><a href="/pub/firefox/releases/141.0/linux-x86_64/en-US/firefox-141.0.tar.xz">firefox-141.0.tar.xz</a></td></tr>
-<tr><td>File</td><td><a href="/pub/firefox/releases/141.0/linux-x86_64/en-US/firefox-141.0.deb">firefox-141.0.deb</a></td></tr>
+<tr><td>File</td><td><a href="/pub/firefox/releases/141.0/linux-x86_64/zh-CN/firefox-141.0.tar.xz">firefox-141.0.tar.xz</a></td></tr>
+<tr><td>File</td><td><a href="/pub/firefox/releases/141.0/linux-x86_64/zh-CN/firefox-141.0.deb">firefox-141.0.deb</a></td></tr>
 <tr><td>File</td><td><a href="/pub/firefox/releases/KEY">KEY</a></td></tr>
 </table>
 </body></html>`
@@ -460,40 +460,40 @@ func TestParseFileEntries(t *testing.T) {
 	}
 }
 
-// TestParseSHA256Sums 验证 SHA256SUMS 文件解析逻辑。
-func TestParseSHA256Sums(t *testing.T) {
-	content := `abc123def4567890abc123def4567890abc123def4567890abc123def4567890  linux-x86_64/en-US/firefox-141.0.tar.xz
-fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210  win64/en-US/Firefox Setup 141.0.exe
+// TestParseSums 验证校验文件解析逻辑（SHA256SUMS 格式）。
+func TestParseSums(t *testing.T) {
+	content := `abc123def4567890abc123def4567890abc123def4567890abc123def4567890  linux-x86_64/zh-CN/firefox-141.0.tar.xz
+fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210  win64/zh-CN/Firefox Setup 141.0.exe
 # this is a comment line
 
-short  linux-x86_64/en-US/invalid.tar.xz
-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  mac/en-US/Firefox 141.0.dmg
+short  linux-x86_64/zh-CN/invalid.tar.xz
+0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  mac/zh-CN/Firefox 141.0.dmg
 `
 
-	sums := parseSHA256Sums(content)
+	sums := parseSums(content, 64)
 
 	// 应返回 3 个有效条目（跳过注释、空行和短哈希行）
 	if len(sums) != 3 {
-		t.Fatalf("parseSHA256Sums returned %d entries, want 3", len(sums))
+		t.Fatalf("parseSums returned %d entries, want 3", len(sums))
 	}
 
 	// 验证路径到哈希的映射
 	wantHash := "abc123def4567890abc123def4567890abc123def4567890abc123def4567890"
-	if h, ok := sums["linux-x86_64/en-US/firefox-141.0.tar.xz"]; !ok {
-		t.Error("missing linux-x86_64/en-US/firefox-141.0.tar.xz")
+	if h, ok := sums["linux-x86_64/zh-CN/firefox-141.0.tar.xz"]; !ok {
+		t.Error("missing linux-x86_64/zh-CN/firefox-141.0.tar.xz")
 	} else if h != wantHash {
 		t.Errorf("hash for firefox-141.0.tar.xz = %q, want %q", h, wantHash)
 	}
 
 	wantHash2 := "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
-	if h, ok := sums["win64/en-US/Firefox Setup 141.0.exe"]; !ok {
-		t.Error("missing win64/en-US/Firefox Setup 141.0.exe")
+	if h, ok := sums["win64/zh-CN/Firefox Setup 141.0.exe"]; !ok {
+		t.Error("missing win64/zh-CN/Firefox Setup 141.0.exe")
 	} else if h != wantHash2 {
 		t.Errorf("hash for Firefox Setup 141.0.exe = %q, want %q", h, wantHash2)
 	}
 
 	// 验证短哈希行被跳过
-	if _, ok := sums["linux-x86_64/en-US/invalid.tar.xz"]; ok {
+	if _, ok := sums["linux-x86_64/zh-CN/invalid.tar.xz"]; ok {
 		t.Error("短哈希行不应被解析")
 	}
 }
@@ -516,7 +516,7 @@ func TestFindMatchingFile(t *testing.T) {
 		platform Platform
 		want     string
 	}{
-		{"Linux xz preferred", "141.0", PlatformLinux, "firefox-141.0.tar.xz"},
+		{"Linux bz2 preferred", "141.0", PlatformLinux, "firefox-141.0.tar.bz2"},
 		{"Windows exe preferred", "141.0", PlatformWindows, "Firefox Setup 141.0.exe"},
 		{"macOS dmg", "141.0", PlatformMacOS, "Firefox 141.0.dmg"},
 	}
@@ -531,15 +531,15 @@ func TestFindMatchingFile(t *testing.T) {
 	}
 }
 
-// TestFindMatchingFile_Bz2Fallback 验证当 .tar.xz 不存在时回退到 .tar.bz2。
-func TestFindMatchingFile_Bz2Fallback(t *testing.T) {
+// TestFindMatchingFile_XzFallback 验证当 .tar.bz2 不存在时回退到 .tar.xz。
+func TestFindMatchingFile_XzFallback(t *testing.T) {
 	files := []string{
-		"firefox-68.9.0esr.tar.bz2",
-		"firefox-68.9.0esr.deb",
+		"firefox-141.0.tar.xz",
+		"firefox-141.0.deb",
 	}
-	got := findMatchingFile(files, "68.9.0esr", PlatformLinux)
-	if got != "firefox-68.9.0esr.tar.bz2" {
-		t.Errorf("findMatchingFile() = %q, want %q", got, "firefox-68.9.0esr.tar.bz2")
+	got := findMatchingFile(files, "141.0", PlatformLinux)
+	if got != "firefox-141.0.tar.xz" {
+		t.Errorf("findMatchingFile() = %q, want %q", got, "firefox-141.0.tar.xz")
 	}
 }
 
@@ -564,8 +564,8 @@ func TestResolveDownloadURL(t *testing.T) {
 </table>
 </body></html>`
 
-	sha256Content := `abc123def4567890abc123def4567890abc123def4567890abc123def4567890  linux-x86_64/en-US/firefox-141.0.tar.xz
-fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210  win64/en-US/Firefox Setup 141.0.exe
+	sha256Content := `abc123def4567890abc123def4567890abc123def4567890abc123def4567890  linux-x86_64/zh-CN/firefox-141.0.tar.xz
+fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210  win64/zh-CN/Firefox Setup 141.0.exe
 `
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -589,21 +589,25 @@ fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210  win64/en-US/Fi
 	}
 
 	ctx := context.Background()
-	dlURL, sha256, err := src.ResolveDownloadURL(ctx, "141.0", PlatformLinux, ArchAMD64)
+	dlURL, err := src.ResolveDownloadURL(ctx, "141.0", PlatformLinux, ArchAMD64)
 	if err != nil {
 		t.Fatalf("ResolveDownloadURL 失败: %v", err)
 	}
 
 	// 验证 URL 使用了真实文件名（.tar.xz）
-	expectedURL := server.URL + "/pub/firefox/releases/141.0/linux-x86_64/en-US/firefox-141.0.tar.xz"
+	expectedURL := server.URL + "/pub/firefox/releases/141.0/linux-x86_64/zh-CN/firefox-141.0.tar.xz"
 	if dlURL != expectedURL {
 		t.Errorf("dlURL = %q, want %q", dlURL, expectedURL)
 	}
 
-	// 验证 SHA256
-	expectedSHA := "abc123def4567890abc123def4567890abc123def4567890abc123def4567890"
-	if sha256 != expectedSHA {
-		t.Errorf("sha256 = %q, want %q", sha256, expectedSHA)
+	// 验证 GetChecksum 返回正确的带算法前缀的校验和
+	checksum, err := src.GetChecksum(ctx, "141.0", PlatformLinux, ArchAMD64)
+	if err != nil {
+		t.Fatalf("GetChecksum 失败: %v", err)
+	}
+	expectedSHA := "sha256:abc123def4567890abc123def4567890abc123def4567890abc123def4567890"
+	if checksum != expectedSHA {
+		t.Errorf("checksum = %q, want %q", checksum, expectedSHA)
 	}
 }
 
@@ -622,7 +626,7 @@ func TestResolveDownloadURL_Cache(t *testing.T) {
 		if strings.HasSuffix(r.URL.Path, "/SHA256SUMS") {
 			w.Header().Set("Content-Type", "text/plain")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  linux-x86_64/en-US/firefox-141.0.tar.xz\n"))
+			w.Write([]byte("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  linux-x86_64/zh-CN/firefox-141.0.tar.xz\n"))
 			return
 		}
 		w.Header().Set("Content-Type", "text/html")
@@ -639,14 +643,14 @@ func TestResolveDownloadURL_Cache(t *testing.T) {
 	ctx := context.Background()
 
 	// 第一次调用：发起网络请求
-	_, _, err := src.ResolveDownloadURL(ctx, "141.0", PlatformLinux, ArchAMD64)
+	_, err := src.ResolveDownloadURL(ctx, "141.0", PlatformLinux, ArchAMD64)
 	if err != nil {
 		t.Fatalf("第一次 ResolveDownloadURL 失败: %v", err)
 	}
 	firstCount := requestCount
 
 	// 第二次调用：应命中缓存，不再发起网络请求
-	_, _, err = src.ResolveDownloadURL(ctx, "141.0", PlatformLinux, ArchAMD64)
+	_, err = src.ResolveDownloadURL(ctx, "141.0", PlatformLinux, ArchAMD64)
 	if err != nil {
 		t.Fatalf("第二次 ResolveDownloadURL 失败: %v", err)
 	}
@@ -681,17 +685,13 @@ func TestResolveDownloadURL_SHA256NotFound(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	dlURL, sha256, err := src.ResolveDownloadURL(ctx, "141.0", PlatformLinux, ArchAMD64)
+	dlURL, err := src.ResolveDownloadURL(ctx, "141.0", PlatformLinux, ArchAMD64)
 	if err != nil {
 		t.Fatalf("ResolveDownloadURL 失败: %v", err)
 	}
 	// URL 仍应正确
 	if !strings.HasSuffix(dlURL, "firefox-141.0.tar.xz") {
 		t.Errorf("dlURL = %q, should end with firefox-141.0.tar.xz", dlURL)
-	}
-	// SHA256 应为空
-	if sha256 != "" {
-		t.Errorf("sha256 = %q, want empty string when SHA256SUMS not found", sha256)
 	}
 }
 
@@ -709,13 +709,13 @@ func TestResolveDownloadURL_FallbackToPattern(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	dlURL, _, err := src.ResolveDownloadURL(ctx, "141.0", PlatformLinux, ArchAMD64)
+	dlURL, err := src.ResolveDownloadURL(ctx, "141.0", PlatformLinux, ArchAMD64)
 	if err != nil {
 		t.Fatalf("ResolveDownloadURL 失败: %v", err)
 	}
-	// 应回退到模式构造的 .tar.xz 文件名
-	if !strings.HasSuffix(dlURL, "firefox-141.0.tar.xz") {
-		t.Errorf("dlURL = %q, should end with firefox-141.0.tar.xz (pattern fallback)", dlURL)
+	// 应回退到模式构造的 .tar.bz2 文件名
+	if !strings.HasSuffix(dlURL, "firefox-141.0.tar.bz2") {
+		t.Errorf("dlURL = %q, should end with firefox-141.0.tar.bz2 (pattern fallback)", dlURL)
 	}
 }
 
@@ -746,12 +746,111 @@ func TestResolveDownloadURL_Bz2File(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	dlURL, _, err := src.ResolveDownloadURL(ctx, "68.9.0esr", PlatformLinux, ArchAMD64)
+	dlURL, err := src.ResolveDownloadURL(ctx, "68.9.0esr", PlatformLinux, ArchAMD64)
 	if err != nil {
 		t.Fatalf("ResolveDownloadURL 失败: %v", err)
 	}
 	// 应使用 .tar.bz2 而非 .tar.xz
 	if !strings.HasSuffix(dlURL, "firefox-68.9.0esr.tar.bz2") {
 		t.Errorf("dlURL = %q, should end with firefox-68.9.0esr.tar.bz2", dlURL)
+	}
+}
+
+// TestGetChecksum_Cache 验证 sumsCache 缓存机制：
+// 同一版本的第二次调用应命中缓存，不发起额外 HTTP 请求。
+func TestGetChecksum_Cache(t *testing.T) {
+	requestCount := 0
+	fileListingHTML := `<!DOCTYPE html>
+<html><body>
+<table>
+<tr><td>File</td><td><a href="firefox-141.0.tar.xz">firefox-141.0.tar.xz</a></td></tr>
+</table>
+</body></html>`
+
+	sha256Content := `abc123def4567890abc123def4567890abc123def4567890abc123def4567890  linux-x86_64/zh-CN/firefox-141.0.tar.xz
+fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210  win64/zh-CN/Firefox Setup 141.0.exe
+`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestCount++
+		if strings.HasSuffix(r.URL.Path, "/SHA256SUMS") {
+			w.Header().Set("Content-Type", "text/plain")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(sha256Content))
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(fileListingHTML))
+	}))
+	defer server.Close()
+
+	src := &FirefoxSource{
+		baseURL:    server.URL + "/pub/firefox/releases/",
+		httpClient: server.Client(),
+	}
+
+	ctx := context.Background()
+
+	// 第一次调用：从网络获取 SHA256SUMS
+	chk1, err := src.GetChecksum(ctx, "141.0", PlatformLinux, ArchAMD64)
+	if err != nil {
+		t.Fatalf("第一次 GetChecksum 失败: %v", err)
+	}
+	if chk1 != "sha256:abc123def4567890abc123def4567890abc123def4567890abc123def4567890" {
+		t.Errorf("chk1 = %q, want sha256:abc123...", chk1)
+	}
+	firstCount := requestCount
+
+	// 第二次调用：同一版本不同平台，应命中 sumsCache，不发起 SHA256SUMS 请求
+	chk2, err := src.GetChecksum(ctx, "141.0", PlatformWindows, ArchAMD64)
+	if err != nil {
+		t.Fatalf("第二次 GetChecksum 失败: %v", err)
+	}
+	if chk2 != "sha256:fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210" {
+		t.Errorf("chk2 = %q, want sha256:fedcba...", chk2)
+	}
+	// 最多只多出一次 ResolveDownloadURL 的文件列表请求（URL缓存可能已命中）
+	if requestCount > firstCount+1 {
+		t.Errorf("第二次调用应命中 sumsCache，请求数: first=%d, second=%d", firstCount, requestCount)
+	}
+}
+
+// TestGetChecksum_EmptyWhenNotFound 验证 SHA256SUMS 不存在时返回空字符串。
+func TestGetChecksum_EmptyWhenNotFound(t *testing.T) {
+	fileListingHTML := `<!DOCTYPE html>
+<html><body>
+<table>
+<tr><td>File</td><td><a href="firefox-141.0.tar.xz">firefox-141.0.tar.xz</a></td></tr>
+</table>
+</body></html>`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/SHA256SUMS") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/SHA1SUMS") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(fileListingHTML))
+	}))
+	defer server.Close()
+
+	src := &FirefoxSource{
+		baseURL:    server.URL + "/pub/firefox/releases/",
+		httpClient: server.Client(),
+	}
+
+	ctx := context.Background()
+	chk, err := src.GetChecksum(ctx, "141.0", PlatformLinux, ArchAMD64)
+	if err != nil {
+		t.Fatalf("GetChecksum 失败: %v", err)
+	}
+	if chk != "" {
+		t.Errorf("checksum = %q, want empty string when checksum files not found", chk)
 	}
 }

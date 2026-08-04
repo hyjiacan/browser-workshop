@@ -102,6 +102,7 @@ type RepoProvider interface {
 // PathsProvider provides path management.
 type PathsProvider interface {
 	VersionDir(browser string, version string) string
+	DownloadCacheDir() string
 	EnsureAll() error
 }
 

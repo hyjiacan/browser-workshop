@@ -161,7 +161,7 @@ Serve 服务特性：
 - **扩展名过滤**：仅处理支持的安装包格式，跳过无关文件
 - **在线回退**：本地缺失时自动从在线源下载（需启用 `online-fallback`）
 - **详细日志**：启动时显示加载配置、扫描包等详细进度
-- **双日志输出**：控制台 + 文件（`logs/serve.log`），支持日志轮转
+- **双日志输出**：控制台 + 文件（`logs/bws.log`），支持日志轮转
 
 详见 [Serve 服务文档](https://hyjiacan.github.io/browser-workshop/guide/serve)。
 

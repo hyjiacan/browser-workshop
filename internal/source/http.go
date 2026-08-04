@@ -49,15 +49,16 @@ type manifestV1Response struct {
 }
 
 type manifestV1File struct {
-	Filename     string `json:"filename"`
-	Version      string `json:"version"`
-	Browser      string `json:"browser"`
-	Channel      string `json:"channel"`
-	MajorVersion string `json:"major_version"`
-	Platform     string `json:"platform"`
-	Architecture string `json:"architecture"`
-	Size         int64  `json:"size"`
-	Checksum     string `json:"checksum"`
+	Filename         string `json:"filename"`
+	Version          string `json:"version"`
+	Browser          string `json:"browser"`
+	Channel          string `json:"channel"`
+	MajorVersion     string `json:"major_version"`
+	Platform         string `json:"platform"`
+	Architecture     string `json:"architecture"`
+	Size             int64  `json:"size"`
+	Checksum         string `json:"checksum"`                    // locally computed XXH3 checksum
+	UpstreamChecksum string `json:"upstream_checksum,omitempty"` // upstream checksum with algo prefix (e.g. "sha256:hash")
 }
 
 type manifestV1Server struct {
@@ -229,7 +230,7 @@ func (s *HTTPSource) manifestToVersions(m *manifestV1Response) []VersionInfo {
 			Arch:        arch,
 			DownloadURL: downloadURL,
 			Size:        f.Size,
-			SHA256:      f.Checksum,
+			Checksum:    f.UpstreamChecksum,
 		})
 	}
 	return results

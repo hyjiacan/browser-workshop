@@ -311,7 +311,7 @@ graph TB
         CON["stderr<br/>控制台"]
         ROT["RotatingFile<br/>日志轮转"]
         FILE1["bws.log"]
-        FILE2["serve.log"]
+        FILE2["bws.log"]
     end
 
     CMD -->|日志事件| Logger
@@ -492,9 +492,8 @@ scan-workers = 0
 - **Firefox FTP 缓存**：独立缓存文件 `firefox-ftp-cache.json`，24h 有效期
 - **Serve 在线缓存**：`onlineCacheTTL`（24 小时），按浏览器分文件存储（`online-cache-<browser>.json`），`onlineListTimeout`（30 秒）
 
-### 6. 日志独立
+### 6. 日志共用
 
-客户端和 Serve 的日志完全独立：
-- 客户端：`logs/bws.log`
-- Serve：`logs/serve.log`
+客户端和 Serve 共用同一日志文件：
+- 客户端和 Serve 均写入：`logs/bws.log`
 - 日志级别、轮转参数可分别配置

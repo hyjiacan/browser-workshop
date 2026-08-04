@@ -288,7 +288,7 @@ func SaveServeConfig(baseDir string, cfg ServeConfig) error {
 	sb.WriteString("# 文件日志级别\n")
 	sb.WriteString("# 可选值: trace, debug, info, warn, error, fatal\n")
 	sb.WriteString("# 默认: debug\n")
-	sb.WriteString("# 文件日志记录到 logs/serve.log\n")
+	sb.WriteString("# 文件日志记录到 logs/bws.log（与客户端共用同一日志文件）\n")
 	sb.WriteString(fmt.Sprintf("file-log-level = %s\n", cfg.FileLogLevel))
 	sb.WriteString("\n")
 	sb.WriteString("# 单个日志文件最大大小（MB）\n")

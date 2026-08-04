@@ -139,6 +139,19 @@ Characteristics of native mode:
 
 > **Note**: In native mode, different versions sharing a Profile may cause configuration conflicts or data corruption; use with caution.
 
+### Standard Isolation Parameters
+
+In non-native mode, bws automatically adds the following standard parameters for all browsers (not added in native mode):
+
+| Parameter | Chrome/Chromium | Firefox |
+|-----------|----------------|---------|
+| Multi-instance isolation | Via separate Profile directory | `-no-remote` |
+| Disable update check | `--disable-update` | `user.js`: `app.update.enabled=false` |
+| Disable default browser check | `--no-default-browser-check` | `user.js`: `browser.shell.checkDefaultBrowser=false` |
+| Skip first-run wizard | `--no-first-run` | - |
+
+Firefox preferences are written to the Profile directory via `user.js` file, with dedup markers to prevent duplicate writes.
+
 ## Background Run
 
 Use the `-d` or `--detached` parameter to let the browser run in the background, the bws command returns immediately without waiting for the browser process to end.

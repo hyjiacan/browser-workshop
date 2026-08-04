@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/bws/bws/internal/browser"
@@ -130,11 +129,12 @@ func main() {
 	}
 
 	// 2. Firefox FTP 在线源
+	var firefoxSource *source.FirefoxSource
 	if cfg.IsFirefoxFTPEnabled() {
-		s := source.NewFirefoxSourceWithProxy(proxyURL)
-		onlineSources = append(onlineSources, s) // serve 始终需要在线源
+		firefoxSource = source.NewFirefoxSourceWithProxy(proxyURL)
+		onlineSources = append(onlineSources, firefoxSource) // serve 始终需要在线源
 		if !serveEnabled {
-			clientSources = append(clientSources, s) // 无 serve 时客户端直接访问
+			clientSources = append(clientSources, firefoxSource) // 无 serve 时客户端直接访问
 		}
 	}
 
@@ -184,7 +184,7 @@ func main() {
 	ctx.Download = &downloadAdapter{mgr: downloadMgr, paths: p}
 	ctx.Source = &sourceAdapter{src: sourceMgr, cfg: cfg}
 	ctx.Shortcut = &shortcutAdapter{}
-	ctx.Serve = &serveAdapter{version: version, source: onlineSourceMgr, verbose: verbose}
+	ctx.Serve = &serveAdapter{version: version, source: onlineSourceMgr, firefoxSrc: firefoxSource, verbose: verbose}
 	ctx.Plugin = &pluginAdapter{mgr: pluginMgr}
 	ctx.Logger = logger
 	if repoImporter != nil {
@@ -321,6 +321,10 @@ type pathsAdapter struct {
 
 func (a *pathsAdapter) VersionDir(browser string, version string) string {
 	return a.p.VersionDir(browser, version)
+}
+
+func (a *pathsAdapter) DownloadCacheDir() string {
+	return a.p.DownloadCacheDir
 }
 
 func (a *pathsAdapter) EnsureAll() error {
@@ -903,9 +907,10 @@ func (a *repoAdapter) Import(force bool, onProgress func(int, int, string)) (*re
 
 // serveAdapter adapts serve.Server to cli.ServeProvider.
 type serveAdapter struct {
-	version string
-	source  source.Source // the multi-source for syncing
-	verbose bool
+	version    string
+	source     source.Source        // the multi-source for syncing
+	firefoxSrc *source.FirefoxSource // direct reference for GetChecksum (nil if Firefox source not enabled)
+	verbose    bool
 }
 
 func (a *serveAdapter) StartFromConfig(baseDir string) error {
@@ -948,8 +953,8 @@ func (a *serveAdapter) StartFromConfig(baseDir string) error {
 	binDir := resolveServeDir(cfg.BinDir, packagesBaseDir, "bin")
 
 	// Create serve logger: dual output (file + console)
-	// File log: at {dataDir}/logs/serve.log (alongside client logs/bws.log)
-	logFile := filepath.Join(dataDir, "logs", "serve.log")
+	// File log: at {dataDir}/logs/bws.log (与客户端模式共用同一日志文件)
+	logFile := filepath.Join(dataDir, "logs", "bws.log")
 	consoleLevel := bmlog.ParseLevel(cfg.LogLevel)
 	fileLevel := bmlog.ParseLevel(cfg.FileLogLevel)
 	if a.verbose {
@@ -973,7 +978,7 @@ func (a *serveAdapter) StartFromConfig(baseDir string) error {
 	// and on-demand online fallback. serveSyncSource implements SyncSource.
 	var onlineSource bmserve.SyncSource
 	if a.source != nil {
-		onlineSource = &serveSyncSource{src: a.source}
+		onlineSource = &serveSyncSource{src: a.source, firefoxSrc: a.firefoxSrc}
 	}
 
 	// Sync uses the user-configured browsers/channels.
@@ -1053,10 +1058,11 @@ func resolveServeDir(path string, baseDir string, defaultName string) string {
 
 // serveSyncSource adapts source.Source to serve.SyncSource.
 type serveSyncSource struct {
-	src source.Source
+	src        source.Source
+	firefoxSrc *source.FirefoxSource // direct reference for GetChecksum (nil if Firefox source not enabled)
 }
 
-func (s *serveSyncSource) ListVersions(browser string, channel string, platform string, arch string) ([]bmserve.SyncVersionInfo, error) {
+func (s *serveSyncSource) ListVersions(ctx context.Context, browser string, channel string, platform string, arch string) ([]bmserve.SyncVersionInfo, error) {
 	filter := &source.Filter{
 		Browser: browser,
 	}
@@ -1070,7 +1076,7 @@ func (s *serveSyncSource) ListVersions(browser string, channel string, platform 
 		filter.Arch = source.Arch(arch)
 	}
 
-	versions, err := s.src.List(context.TODO(), filter)
+	versions, err := s.src.List(ctx, filter)
 	if err != nil {
 		return nil, err
 	}
@@ -1085,46 +1091,28 @@ func (s *serveSyncSource) ListVersions(browser string, channel string, platform 
 			Arch:        string(v.Arch),
 			DownloadURL: v.DownloadURL,
 			Size:        v.Size,
-			SHA256:      v.SHA256,
+			Checksum:    v.Checksum,
 		})
 	}
 
-	// For Firefox, resolve actual download URLs and SHA256 hashes
-	// by fetching the FTP directory listing and SHA256SUMS file.
-	// This is done concurrently to avoid blocking for too long.
-	if browser == "firefox" && len(result) > 0 {
-		sem := make(chan struct{}, 10) // limit concurrency
-		var wg sync.WaitGroup
-		for i := range result {
-			wg.Add(1)
-			go func(idx int) {
-				defer wg.Done()
-				sem <- struct{}{}
-				defer func() { <-sem }()
-
-				// Use a per-resolve timeout so one slow version doesn't block everything.
-				ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-				defer cancel()
-
-				resolved, err := s.src.Resolve(ctx, browser, result[idx].Version,
-					source.Platform(platform), source.Arch(arch))
-				if err == nil {
-					result[idx].DownloadURL = resolved.DownloadURL
-					result[idx].SHA256 = resolved.SHA256
-					if resolved.Size > 0 {
-						result[idx].Size = resolved.Size
-					}
-				}
-			}(i)
-		}
-		wg.Wait()
-	}
+	// Firefox 的 DownloadURL 已由 List() 中的 buildDownloadURL 模式构造完成，
+	// 足以用于清单展示和在线回退下载。
+	// 校验和在实际下载时由 doOnlineDownload 按需解析，
+	// 避免对 2000+ 个版本逐个发起 HTTP 请求导致超时。
 
 	return result, nil
 }
 
 func (s *serveSyncSource) Download(url string, destDir string, onProgress func(downloaded, total int64)) (string, error) {
 	return bmserve.DefaultDownload(url, destDir, onProgress)
+}
+
+func (s *serveSyncSource) GetChecksum(ctx context.Context, browser, version, platform, arch string) (string, error) {
+	if s.firefoxSrc != nil {
+		return s.firefoxSrc.GetChecksum(ctx, version, source.Platform(platform), source.Arch(arch))
+	}
+	// 非 Firefox 源不提供校验和（chrome/chromium 的下载源已内嵌校验）
+	return "", nil
 }
 
 // shortcutAdapter adapts shortcut.Manager to cli.ShortcutProvider.

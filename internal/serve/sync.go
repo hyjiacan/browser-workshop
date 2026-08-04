@@ -2,13 +2,16 @@ package serve
 
 import (
 	"context"
+	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"hash"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,16 +31,23 @@ type SyncVersionInfo struct {
 	DownloadURL string
 	Size        int64
 	Filename    string // optional: preferred filename
-	SHA256      string // expected SHA-256 hash (empty if unknown)
+	Checksum    string // expected checksum hash (empty if unknown); prefixed with algo e.g. "sha256:hash" or "sha1:hash"
 }
 
 // SyncSource provides version listing and download capability for sync.
 type SyncSource interface {
 	// ListVersions returns all available versions for the given browser/channel/platform/arch.
-	ListVersions(browser string, channel string, platform string, arch string) ([]SyncVersionInfo, error)
+	// The ctx is used to cancel long-running queries (e.g. HTTP requests to online sources).
+	ListVersions(ctx context.Context, browser string, channel string, platform string, arch string) ([]SyncVersionInfo, error)
 
 	// Download downloads a file from url to destDir. Returns the final file path.
 	Download(url string, destDir string, onProgress func(downloaded, total int64)) (string, error)
+
+	// GetChecksum returns the checksum hash for a specific version/platform/arch.
+	// Returns a prefixed string like "sha256:hash" or "sha1:hash".
+	// Returns empty string if the hash is unknown (e.g. old versions without checksum files).
+	// Implementations should cache per-version checksum data to avoid repeated fetches.
+	GetChecksum(ctx context.Context, browser, version, platform, arch string) (string, error)
 }
 
 // SyncConfig configures the auto-sync behavior.
@@ -259,7 +269,10 @@ func (sm *syncManager) doSync() {
 					sm.setProgress("正在获取 " + key + " 的版本列表...")
 					sm.server.logger.Debug("[sync] 正在获取 %s 的版本列表", key)
 
-					versions, err := sm.source.ListVersions(browser, ch, platform, arch)
+					// 为每次查询设置超时，避免在线源无响应时同步任务卡住
+					listCtx, listCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+					versions, err := sm.source.ListVersions(listCtx, browser, ch, platform, arch)
+					listCancel()
 					if err != nil {
 						sm.setError(fmt.Errorf("listing %s: %w", key, err))
 						sm.server.logger.Warn("[sync] 获取 %s 版本列表失败: %v", key, err)
@@ -330,36 +343,66 @@ func (sm *syncManager) doSync() {
 							}
 						}
 
-						// Verify SHA256 checksum if available
-						if v.SHA256 != "" {
-							f, err := os.Open(dlPath)
-							if err != nil {
-								failedDownloads++
-								sm.setError(fmt.Errorf("opening downloaded %s@%s for sha256: %w", browser, v.Version, err))
-								sm.server.logger.Warn("[sync] 打开已下载文件失败: %s@%s: %v", browser, v.Version, err)
-								_ = os.Remove(dlPath)
-								continue
-							}
-							h := sha256.New()
-							if _, err := io.Copy(h, f); err != nil {
-								f.Close()
-								failedDownloads++
-								sm.setError(fmt.Errorf("computing sha256 for %s@%s: %w", browser, v.Version, err))
-								sm.server.logger.Warn("[sync] 计算 SHA256 失败: %s@%s: %v", browser, v.Version, err)
-								_ = os.Remove(dlPath)
-								continue
-							}
-							f.Close()
-							actualHash := hex.EncodeToString(h.Sum(nil))
-							if actualHash != v.SHA256 {
-								failedDownloads++
-								sm.setError(fmt.Errorf("SHA256 mismatch for %s@%s: expected %s, got %s", browser, v.Version, v.SHA256, actualHash))
-								sm.server.logger.Warn("[sync] SHA256 校验失败: %s@%s: 预期=%s 实际=%s", browser, v.Version, v.SHA256, actualHash)
-								_ = os.Remove(dlPath)
-								continue
-							}
-							sm.server.logger.Debug("[sync] SHA256 校验通过: %s@%s", browser, v.Version)
+						// 校验和验证（支持 SHA256 和 SHA1 两种算法）。
+					// 校验和来源优先级：
+					// 1. SyncVersionInfo.Checksum（来自版本列表，Chrome/Chromium 源提供）
+					// 2. 按需 GetChecksum（Firefox 源在下载后按需获取，避免列表阶段逐版本请求）
+					// 校验和格式为带算法前缀的字符串，如 "sha256:hash" 或 "sha1:hash"。
+					expectedChecksum := v.Checksum
+					if expectedChecksum == "" && sm.source != nil {
+						chkCtx, chkCancel := context.WithTimeout(context.Background(), 60*time.Second)
+						chk, chkErr := sm.source.GetChecksum(chkCtx, browser, v.Version, platform, arch)
+						chkCancel()
+						if chkErr != nil {
+							sm.server.logger.Debug("[sync] 获取校验和失败: %s@%s: %v", browser, v.Version, chkErr)
 						}
+						expectedChecksum = chk
+					}
+
+					if expectedChecksum != "" {
+						algo, expectedHash, ok := strings.Cut(expectedChecksum, ":")
+						if !ok || expectedHash == "" {
+							sm.server.logger.Debug("[sync] 校验和格式无效，跳过校验: %s@%s: %s", browser, v.Version, expectedChecksum)
+						} else {
+							var h hash.Hash
+							switch algo {
+							case "sha256":
+								h = sha256.New()
+							case "sha1":
+								h = sha1.New()
+							default:
+								sm.server.logger.Warn("[sync] 不支持的校验算法: %s@%s: %s", browser, v.Version, algo)
+							}
+							if h != nil {
+								f, err := os.Open(dlPath)
+								if err != nil {
+									failedDownloads++
+									sm.setError(fmt.Errorf("opening downloaded %s@%s for %s: %w", browser, v.Version, algo, err))
+									sm.server.logger.Warn("[sync] 打开已下载文件失败: %s@%s: %v", browser, v.Version, err)
+									_ = os.Remove(dlPath)
+									continue
+								}
+								if _, err := io.Copy(h, f); err != nil {
+									f.Close()
+									failedDownloads++
+									sm.setError(fmt.Errorf("computing %s for %s@%s: %w", algo, browser, v.Version, err))
+									sm.server.logger.Warn("[sync] 计算 %s 失败: %s@%s: %v", algo, browser, v.Version, err)
+									_ = os.Remove(dlPath)
+									continue
+								}
+								f.Close()
+								actualHash := hex.EncodeToString(h.Sum(nil))
+								if actualHash != expectedHash {
+									failedDownloads++
+									sm.setError(fmt.Errorf("%s mismatch for %s@%s: expected %s, got %s", algo, browser, v.Version, expectedHash, actualHash))
+									sm.server.logger.Warn("[sync] %s 校验失败: %s@%s: 预期=%s 实际=%s", algo, browser, v.Version, expectedHash, actualHash)
+									_ = os.Remove(dlPath)
+									continue
+								}
+								sm.server.logger.Debug("[sync] %s 校验通过: %s@%s", algo, browser, v.Version)
+							}
+						}
+					}
 
 						sm.server.logger.Debug("[sync] 下载完成: %s@%s (%s/%s) (耗时 %v)",
 							browser, v.Version, platform, arch, time.Since(dlStart).Round(time.Millisecond))

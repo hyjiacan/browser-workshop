@@ -68,6 +68,13 @@ if (-not $OutputDir) {
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 $OutputDir = Resolve-Path $OutputDir
 
+# Clear output directory before building to avoid stale artifacts
+$staleItems = Get-ChildItem -Path $OutputDir -Force -ErrorAction SilentlyContinue
+if ($staleItems) {
+    Write-Host "  清空输出目录: $OutputDir"
+    Remove-Item -Path "$OutputDir\*" -Recurse -Force -ErrorAction SilentlyContinue
+}
+
 Write-Host "========================================"
 Write-Host "  Browser Workshop Release Builder"
 Write-Host "========================================"
@@ -86,6 +93,7 @@ if (-not $Version) {
         $Version = "dev"
     }
 }
+
 Write-Host "  Version:      $Version"
 Write-Host ""
 

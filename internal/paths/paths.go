@@ -33,6 +33,9 @@ type Paths struct {
 	// ManifestCacheDir stores cached version manifests from remote sources
 	ManifestCacheDir string
 
+	// ServeCacheDir stores serve module cache files (scan cache, online cache)
+	ServeCacheDir string
+
 	// DownloadCacheDir stores downloaded installation packages
 	DownloadCacheDir string
 
@@ -68,6 +71,7 @@ func New(root string) *Paths {
 		VersionsDir:      filepath.Join(root, "versions"),
 		CacheDir:         filepath.Join(root, "cache"),
 		ManifestCacheDir: filepath.Join(root, "cache", "manifests"),
+		ServeCacheDir:    filepath.Join(root, "cache", "serve"),
 		DownloadCacheDir: filepath.Join(root, "cache", "downloads"),
 		RuntimeDir:       filepath.Join(root, "runtime"),
 		PluginsDir:       filepath.Join(root, "plugins"),
@@ -88,6 +92,7 @@ func (p *Paths) EnsureAll() error {
 		p.VersionsDir,
 		p.CacheDir,
 		p.ManifestCacheDir,
+		p.ServeCacheDir,
 		p.DownloadCacheDir,
 		p.RuntimeDir,
 		p.PluginsDir,

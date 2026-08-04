@@ -16,8 +16,7 @@ bws/
 └── bws-data/                  # 数据根目录
     ├── .serve-cache.json      # serve 校验和缓存
     ├── logs/                  # 日志目录
-    │   ├── bws.log            # 客户端主日志文件
-    │   └── serve.log          # serve 服务日志文件
+    │   └── bws.log            # bws 日志文件（客户端与 serve 共用）
     ├── cache/                 # 下载缓存
     │   ├── manifests/         # 版本清单缓存
     │   │   └── firefox-ftp-cache.json  # Firefox FTP 源缓存
@@ -100,8 +99,7 @@ scan-workers = 0
 
 日志目录，存储 bws 的运行日志。
 
-- `bws.log`：客户端主日志文件，记录所有操作
-- `serve.log`：serve 服务日志文件，记录 HTTP 请求和启动信息
+- `bws.log`：bws 日志文件（与客户端共用），记录所有操作和 HTTP 请求等信息
 - 文件日志默认 DEBUG 级别，详细记录所有操作
 - 日志会自动轮转，防止单个文件过大
 
@@ -109,7 +107,7 @@ scan-workers = 0
 
 ### cache/
 
-缓存目录，存储下载的临时文件和清单缓存。
+缓存目录，存储下载的安装包和清单缓存。
 
 #### cache/manifests/
 
@@ -123,12 +121,13 @@ scan-workers = 0
 
 #### cache/downloads/
 
-下载文件缓存，存储通过 `download` 命令下载的安装包，以及 `install` 命令下载的临时文件。
+下载文件缓存，永久存储通过 `install` 命令从 serve 远程下载的安装包。
 
-- 下载的文件会保留在这里，便于后续重复使用
-- 占用空间可能较大，可定期清理
-- 可以通过 `bws cc clear` 清理
-- 可以通过 `bws cc size` 查看占用空间
+- 安装完成后文件保留在缓存中，下次安装相同版本时直接复用
+- 当 serve 端文件更新（大小变化）时自动重新下载
+- 使用 `--refresh-cache` 参数可强制从 serve 重新下载（忽略本地缓存）
+- 占用空间可能较大，可定期通过 `bws cc clear` 清理
+- 通过 `bws cc info` 查看缓存文件列表和占用空间
 
 ### versions/
 

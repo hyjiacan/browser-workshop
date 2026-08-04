@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -34,10 +35,10 @@ type browserCacheEntry struct {
 // Each browser type gets its own cache file (e.g. online-cache-firefox.json),
 // so they can be loaded/saved/refreshed independently.
 type OnlineCacheManager struct {
-	baseDir  string     // directory for cache files
-	src      SyncSource // online source for refreshing
-	logger   LoggerLike // logger for debug output
-	browsers []string   // which browsers to cache
+	cacheDir  string     // directory for cache files (e.g. bws-data/cache/serve)
+	src       SyncSource // online source for refreshing
+	logger    LoggerLike // logger for debug output
+	browsers  []string   // which browsers to cache
 
 	mu        sync.RWMutex
 	caches    map[string]*browserCacheEntry // key: browser name
@@ -55,24 +56,24 @@ type LoggerLike interface {
 
 // NewOnlineCacheManager creates a new per-browser online cache manager.
 // browsers lists which browser types to cache; if empty, defaults to [firefox].
-func NewOnlineCacheManager(baseDir string, src SyncSource, logger LoggerLike, browsers []string) *OnlineCacheManager {
+func NewOnlineCacheManager(cacheDir string, src SyncSource, logger LoggerLike, browsers []string) *OnlineCacheManager {
 	if len(browsers) == 0 {
 		browsers = []string{"firefox"}
 	}
 	return &OnlineCacheManager{
-		baseDir:  baseDir,
-		src:      src,
-		logger:   logger,
-		browsers: browsers,
-		caches:   make(map[string]*browserCacheEntry),
+		cacheDir:  cacheDir,
+		src:       src,
+		logger:    logger,
+		browsers:  browsers,
+		caches:    make(map[string]*browserCacheEntry),
 		filesMap: make(map[string]onlinePackage),
 	}
 }
 
 // cacheFilePath returns the cache file path for a browser.
-// e.g. bws-data/online-cache-firefox.json
+// e.g. bws-data/cache/serve/online-cache-firefox.json
 func (m *OnlineCacheManager) cacheFilePath(browser string) string {
-	return filepath.Join(m.baseDir, fmt.Sprintf("online-cache-%s.json", browser))
+	return filepath.Join(m.cacheDir, fmt.Sprintf("online-cache-%s.json", browser))
 }
 
 // Get returns the cached package list for a browser, refreshing from the
@@ -213,7 +214,7 @@ func (m *OnlineCacheManager) refresh(browser string) {
 				platform: combo.platform,
 				arch:     combo.arch,
 				size:     v.Size,
-				sha256:   v.SHA256,
+				checksum: v.Checksum,
 			})
 		}
 	}
@@ -269,7 +270,7 @@ func (m *OnlineCacheManager) LoadFromDisk() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	entries, err := os.ReadDir(m.baseDir)
+	entries, err := os.ReadDir(m.cacheDir)
 	if err != nil {
 		return
 	}
@@ -322,7 +323,7 @@ func (m *OnlineCacheManager) loadOneFromDisk(browser string) {
 				platform: f.Platform,
 				arch:     f.Architecture,
 				size:     f.Size,
-				sha256:   f.SHA256,
+				checksum: f.UpstreamChecksum,
 			}
 			if cf.URLs != nil {
 				pkg.url = cf.URLs[f.Filename]
@@ -346,6 +347,9 @@ func (m *OnlineCacheManager) saveToDisk(browser string, files []PackageFile, url
 	}
 	path := m.cacheFilePath(browser)
 
+	// Ensure cache directory exists (may be missing in test scenarios).
+	_ = os.MkdirAll(filepath.Dir(path), 0o755)
+
 	// Atomic write: write to a temp file first, then rename.
 	// This prevents cache corruption if the process crashes mid-write.
 	tmpPath := path + ".tmp"
@@ -360,22 +364,12 @@ func (m *OnlineCacheManager) saveToDisk(browser string, files []PackageFile, url
 }
 
 // listVersionsWithTimeout calls src.ListVersions with a timeout.
+// The context is passed through to the underlying HTTP requests so that
+// cancelled queries don't leak goroutines or hold locks.
 func (m *OnlineCacheManager) listVersionsWithTimeout(browser, channel, platform, arch string) ([]SyncVersionInfo, error) {
-	type result struct {
-		versions []SyncVersionInfo
-		err      error
-	}
-	ch := make(chan result, 1)
-	go func() {
-		versions, err := m.src.ListVersions(browser, channel, platform, arch)
-		ch <- result{versions, err}
-	}()
-	select {
-	case r := <-ch:
-		return r.versions, r.err
-	case <-time.After(onlineListTimeout):
-		return nil, fmt.Errorf("查询超时（超过 %s）", onlineListTimeout)
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), onlineListTimeout)
+	defer cancel()
+	return m.src.ListVersions(ctx, browser, channel, platform, arch)
 }
 
 // --- helpers ---
@@ -387,14 +381,14 @@ func (m *OnlineCacheManager) listVersionsWithTimeout(browser, channel, platform,
 // FilterVersions expectations.
 func buildOnlinePackageFile(filename string, v SyncVersionInfo, platform, arch string) PackageFile {
 	pkg := PackageFile{
-		Filename:     filename,
-		Version:      v.Version,
-		Browser:      v.Browser,
-		Channel:      v.Channel,
-		Size:         v.Size,
-		Platform:     platform,
-		Architecture: arch,
-		SHA256:       v.SHA256,
+		Filename:         filename,
+		Version:          v.Version,
+		Browser:          v.Browser,
+		Channel:          v.Channel,
+		Size:             v.Size,
+		Platform:         platform,
+		Architecture:     arch,
+		UpstreamChecksum: v.Checksum,
 	}
 	if v.Version != "" {
 		pkg.MajorVersion = strconv.Itoa(version.Major(v.Version))

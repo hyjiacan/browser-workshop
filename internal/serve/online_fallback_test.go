@@ -1,6 +1,7 @@
 package serve
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -18,7 +19,7 @@ type mockSyncSource struct {
 	downloads int32 // atomic counter of Download calls
 }
 
-func (m *mockSyncSource) ListVersions(browser, channel, platform, arch string) ([]SyncVersionInfo, error) {
+func (m *mockSyncSource) ListVersions(_ context.Context, browser, channel, platform, arch string) ([]SyncVersionInfo, error) {
 	return m.versions, nil
 }
 
@@ -31,6 +32,15 @@ func (m *mockSyncSource) Download(u string, destDir string, onProgress func(int6
 		return "", err
 	}
 	return dest, nil
+}
+
+func (m *mockSyncSource) GetChecksum(_ context.Context, browser, version, platform, arch string) (string, error) {
+	for _, v := range m.versions {
+		if v.Version == version && v.Platform == platform && v.Arch == arch {
+			return v.Checksum, nil
+		}
+	}
+	return "", nil
 }
 
 func newFallbackTestServer(t *testing.T, onlineFallback bool, src SyncSource) *Server {

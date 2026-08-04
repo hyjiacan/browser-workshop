@@ -320,6 +320,121 @@ func TestBuildArgs(t *testing.T) {
 	})
 }
 
+func TestWriteStandardPrefs(t *testing.T) {
+	desc := &browser.BrowserDescriptor{
+		Name: "firefox",
+		StandardPrefs: []string{
+			`user_pref("app.update.enabled", false);`,
+			`user_pref("browser.shell.checkDefaultBrowser", false);`,
+		},
+	}
+
+	t.Run("writes prefs to user.js", func(t *testing.T) {
+		dir := t.TempDir()
+		err := writeStandardPrefs(desc, dir)
+		if err != nil {
+			t.Fatalf("writeStandardPrefs() error = %v", err)
+		}
+
+		data, err := os.ReadFile(filepath.Join(dir, "user.js"))
+		if err != nil {
+			t.Fatalf("reading user.js: %v", err)
+		}
+		content := string(data)
+		if !strings.Contains(content, "Standard prefs written by bws") {
+			t.Error("missing marker comment")
+		}
+		if !strings.Contains(content, `user_pref("app.update.enabled", false)`) {
+			t.Error("missing app.update.enabled pref")
+		}
+		if !strings.Contains(content, `user_pref("browser.shell.checkDefaultBrowser", false)`) {
+			t.Error("missing browser.shell.checkDefaultBrowser pref")
+		}
+	})
+
+	t.Run("idempotent - does not duplicate", func(t *testing.T) {
+		dir := t.TempDir()
+
+		// First write
+		if err := writeStandardPrefs(desc, dir); err != nil {
+			t.Fatal(err)
+		}
+		data1, _ := os.ReadFile(filepath.Join(dir, "user.js"))
+
+		// Second write should be a no-op
+		if err := writeStandardPrefs(desc, dir); err != nil {
+			t.Fatal(err)
+		}
+		data2, _ := os.ReadFile(filepath.Join(dir, "user.js"))
+
+		if string(data1) != string(data2) {
+			t.Error("second writeStandardPrefs should not modify the file")
+		}
+	})
+
+	t.Run("preserves existing content", func(t *testing.T) {
+		dir := t.TempDir()
+		prefsPath := filepath.Join(dir, "user.js")
+		existing := `user_pref("some.existing.pref", true);`
+		os.WriteFile(prefsPath, []byte(existing), 0o644)
+
+		if err := writeStandardPrefs(desc, dir); err != nil {
+			t.Fatal(err)
+		}
+
+		data, _ := os.ReadFile(prefsPath)
+		content := string(data)
+		if !strings.Contains(content, "some.existing.pref") {
+			t.Error("existing prefs should be preserved")
+		}
+		if !strings.Contains(content, "Standard prefs written by bws") {
+			t.Error("standard prefs should be prepended")
+		}
+	})
+
+	t.Run("no prefs - no-op", func(t *testing.T) {
+		dir := t.TempDir()
+		emptyDesc := &browser.BrowserDescriptor{Name: "test"}
+		err := writeStandardPrefs(emptyDesc, dir)
+		if err != nil {
+			t.Errorf("writeStandardPrefs with no prefs should not error: %v", err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "user.js")); !os.IsNotExist(err) {
+			t.Error("user.js should not be created when StandardPrefs is empty")
+		}
+	})
+}
+
+func TestFirefoxStandardPrefs(t *testing.T) {
+	// Verify that Firefox descriptor has standard prefs for disabling
+	// updates and default browser check.
+	if len(browser.Firefox.StandardPrefs) == 0 {
+		t.Fatal("Firefox should have StandardPrefs")
+	}
+
+	prefsStr := strings.Join(browser.Firefox.StandardPrefs, "\n")
+	if !strings.Contains(prefsStr, "app.update.enabled") {
+		t.Error("Firefox StandardPrefs should disable app.update.enabled")
+	}
+	if !strings.Contains(prefsStr, "browser.shell.checkDefaultBrowser") {
+		t.Error("Firefox StandardPrefs should disable browser.shell.checkDefaultBrowser")
+	}
+}
+
+func TestChromiumDisableUpdate(t *testing.T) {
+	// Verify that Chromium has --disable-update in DisableUpdateArgs.
+	found := false
+	for _, arg := range browser.Chromium.DisableUpdateArgs {
+		if arg == "--disable-update" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("Chromium should have --disable-update in DisableUpdateArgs")
+	}
+}
+
 func TestLaunch_NotInstalled(t *testing.T) {
 	m, _ := setupTestLauncher(t)
 

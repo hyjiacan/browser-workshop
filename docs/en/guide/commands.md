@@ -308,6 +308,7 @@ bws i --from-file <file> [browser@version]
 | `--from-file <path>` | - | Install from a local archive |
 | `--channel <channel>` | `-c` | Specify the release channel |
 | `--force` | `-f` | Force reinstall |
+| `--refresh-cache` | - | Force re-download from serve (ignore local cache) |
 
 ### Examples
 
@@ -337,6 +338,9 @@ bws i --from-file /path/to/chrome-setup.exe chrome@120
 
 # Force reinstall
 bws i chrome@120 --force
+
+# Force re-download from serve (ignore local cache)
+bws i chrome@120 --refresh-cache
 ```
 
 ---
@@ -801,7 +805,7 @@ bws repo import -f
 
 ## bws cache (alias: cc)
 
-Manage the download cache. Downloaded files are stored in the temporary directory and are automatically cleaned up after installation.
+Manage the download cache. Installer packages downloaded during remote installation are permanently cached locally (in the `cache/downloads/` directory). Subsequent installations of the same version reuse the cached file without re-downloading. When the file on the serve side is updated (file size changes), it is automatically re-downloaded.
 
 ### Usage
 
@@ -813,8 +817,8 @@ bws cc <subcommand>
 
 | Subcommand | Description |
 |------------|-------------|
-| `clear` | Clear cached download files (note: files are stored in the temporary directory and are automatically cleaned up) |
-| `info` | Display cache information (type: temporary, auto-cleanup) |
+| `clear` | Clear all cached download files (requires confirmation) |
+| `info` | Display cache information (directory, file count, total size, file list) |
 
 ### Examples
 

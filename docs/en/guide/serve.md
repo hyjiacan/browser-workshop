@@ -147,7 +147,7 @@ Program directory/
 ├── bws-data/                # serve internal files (shares data directory with client)
 │   ├── .serve-cache.json    # Checksum cache (auto-generated)
 │   └── logs/
-│       └── serve.log        # serve log file
+│       └── bws.log          # bws log file (shared with client)
 ├── packages/                # Installer package storage directory (required, can be configured to other location)
 │   ├── Chrome_120.0.6099.109_Windows_x64.exe
 │   ├── Chrome_121.0.6167.85_Windows_x64.zip
@@ -171,7 +171,7 @@ The `bin/` directory is optional and used to store bws client binary files. Clie
 The `bws-data/` directory stores serve's internal files:
 
 - `.serve-cache.json`: Checksum cache, speeds up manifest generation
-- `logs/serve.log`: serve log file
+- `logs/bws.log`: bws log file (shared with client)
 
 > The `bws-serve.ini` configuration file is located in the same directory as the bws executable.
 

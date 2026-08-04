@@ -14,7 +14,7 @@ bws sv 是一个轻量级的 HTTP 服务，主要功能包括：
 - **在线回退**：本地缺失时自动从在线源实时下载并提供给客户端
 - **Web 管理界面**：内置 HTML 页面，方便查看和操作
 - **REST API**：提供完整的 API 接口，便于集成
-- **双日志输出**：控制台 + 文件（`logs/serve.log`），支持日志轮转
+- **双日志输出**：控制台 + 文件（`logs/bws.log`，与客户端共用），支持日志轮转
 
 ### 适用场景
 
@@ -129,7 +129,7 @@ sync-channels = stable,beta
 ├── bws-data/                # serve 内部文件（与客户端共享数据目录）
 │   ├── .serve-cache.json    # 校验和缓存（自动生成）
 │   └── logs/
-│       └── serve.log        # serve 日志文件
+│       └── bws.log          # bws 日志文件（与客户端共用）
 ├── packages/                # 安装包存放目录（必需，可通过配置指定其他位置）
 │   ├── Chrome_120.0.6099.109_Windows_x64.exe
 │   ├── Chrome_121.0.6167.85_Windows_x64.zip
@@ -157,7 +157,7 @@ sync-channels = stable,beta
 `bws-data/` 目录用于存放 serve 的内部文件：
 
 - `.serve-cache.json`：校验和缓存，加速清单生成
-- `logs/serve.log`：serve 的日志文件
+- `logs/bws.log`：bws 日志文件（与客户端共用）
 
 > `bws-serve.ini` 配置文件位于与 bws 可执行文件同目录下。
 
