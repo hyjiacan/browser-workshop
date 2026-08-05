@@ -121,7 +121,7 @@ func (h *loggingHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case status >= 400:
 		h.logger.Warn(msg+" \"%s\"", append(args, r.UserAgent())...)
 	default:
-		h.logger.Info(msg, args...)
+		h.logger.Info(msg+" \"%s\"", append(args, r.UserAgent())...)
 	}
 }
 

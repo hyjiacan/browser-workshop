@@ -165,12 +165,14 @@ func (sm *syncManager) Start() {
 		return
 	}
 
+	sm.server.logger.Info("[sync] 同步调度器已启动 (间隔: %v, 渠道: %v)", sm.config.Interval, sm.config.Channels)
 	go sm.run()
 }
 
 // Stop stops the sync scheduler.
 func (sm *syncManager) Stop() {
 	sm.stopOnce.Do(func() {
+		sm.server.logger.Info("[sync] 同步调度器正在停止...")
 		close(sm.stopCh)
 	})
 }

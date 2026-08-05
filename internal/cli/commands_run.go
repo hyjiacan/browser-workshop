@@ -19,6 +19,7 @@ func runRun(ctx *Context, args []string) error {
 		{Name: "no-proxy", Short: "", Usage: "禁用代理（覆盖全局配置）", HasValue: false, Default: "false"},
 		{Name: "fingerprint", Short: "fp", Usage: "指纹隔离预设（standard/random/none），或 JSON 配置/@文件路径", HasValue: true, Default: ""},
 		{Name: "plugin", Short: "", Usage: "激活的插件（逗号分隔多个）", HasValue: true, Default: ""},
+		{Name: "refresh", Short: "", Usage: "强制刷新远程源缓存（自动安装时生效）", HasValue: false, Default: "false"},
 	}
 
 	// Split args at -- to separate bm args from browser args
@@ -51,14 +52,20 @@ func runRun(ctx *Context, args []string) error {
 		ctx.Logger.Debug("[run] 解析规格: %s@%s (别名=%v)", spec.Browser, spec.Version, spec.IsAlias)
 	}
 
-	// Resolve alias / partial versions (e.g. "system", "latest", "126") uniformly.
-	if resolvedVersion, err := ctx.Install.ResolveInstalledVersion(spec.Browser, spec.Version); err == nil {
-		spec.Version = resolvedVersion
+	// --- Version Resolution (Chain of Responsibility + Selection Strategy) ---
+	// Detects TTY automatically: arrow-key selection in terminal, auto-pick in pipe.
+	resolvedVersion, err := RunResolutionChain(
+		ctx, spec.Browser, spec.Version,
+		flagVals["refresh"] == "true",
+		DetectSelector(),
+	)
+	if err != nil {
+		return err
 	}
+	spec.Version = resolvedVersion
 
 	// URLs from remaining positional args (before --)
 	urls := positional[1:]
-	// Also add browser args as extra args
 	extraArgs := browserArgs
 
 	// Resolve proxy: --no-proxy takes precedence, then --proxy, then config
@@ -121,7 +128,6 @@ func runRun(ctx *Context, args []string) error {
 		} else if err == nil {
 			ctx.Logger.Debug("[run] 进程已退出：退出码=0 运行时长=%s", formatDuration(time.Since(startTime)))
 		} else {
-			// 非零退出码或启动失败
 			ctx.Logger.Debug("[run] 进程异常：%v 运行时长=%s", err, formatDuration(time.Since(startTime)))
 		}
 	}

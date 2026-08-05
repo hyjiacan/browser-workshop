@@ -371,7 +371,7 @@ func NewServerWithOptions(opts ServerOptions) *Server {
 
 // Start starts the HTTP server. It blocks until the server stops.
 func (s *Server) Start() error {
-	s.logger.Info("[serve] 正在启动...")
+	s.logger.Info("[serve] 正在启动 (地址: %s)...", s.addr)
 
 	// Ensure directories exist
 	if err := os.MkdirAll(s.packagesDir, 0o755); err != nil {
@@ -445,7 +445,7 @@ func (s *Server) Start() error {
 			cache = make(map[string]cacheEntry)
 			skipped = make(map[string]bool)
 		} else if len(cache) > 0 {
-			s.logger.Debug("[serve] 已加载缓存: %d 个条目", len(cache))
+			s.logger.Debug("[serve] 已加载缓存: %d 个条目 (路径: %s)", len(cache), s.cachePath)
 		} else {
 			cache = make(map[string]cacheEntry)
 		}
@@ -1126,7 +1126,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 					<-waitCh
 					if info, statErr := os.Stat(fullPath); statErr == nil && !info.IsDir() {
 						s.logger.Debug("[online] 并发下载已完成，复用文件: %s", filename)
-						servePackageFile(w, r, fullPath)
+						servePackageFile(w, r, fullPath, s.logger)
 						return
 					}
 					s.logger.Warn("[online] 并发下载失败: %s", filename)
@@ -1167,13 +1167,14 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 
 	s.logger.Debug("[download] 本地命中: %s (%s)", filename, util.FormatSize(info.Size()))
 	// Serve the file with Range support
-	servePackageFile(w, r, fullPath)
+	servePackageFile(w, r, fullPath, s.logger)
 }
 
 // servePackageFile serves a package file for download with Range support.
-func servePackageFile(w http.ResponseWriter, r *http.Request, fullPath string) {
+func servePackageFile(w http.ResponseWriter, r *http.Request, fullPath string, logger *bmlog.Logger) {
 	info, err := os.Stat(fullPath)
 	if err != nil {
+		logger.Warn("[serve] 本地文件不可访问: %s: %v", fullPath, err)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -1867,7 +1868,7 @@ func (s *Server) streamOnlineDownload(filename string, w http.ResponseWriter, r 
 		return chkErr
 	}
 
-	servePackageFile(w, r, destPath)
+	servePackageFile(w, r, destPath, s.logger)
 	return nil
 }
 
@@ -1952,6 +1953,7 @@ func (s *Server) doStreamDownload(filename string, info onlinePackage, streamer 
 		filename, util.FormatSize(written), time.Since(downloadStart).Round(time.Millisecond))
 
 	// Verify checksum asynchronously (client already received the data by now).
+	s.logger.Debug("[online] 开始异步校验: %s", filename)
 	go s.verifyDownloadChecksum(filename, info)
 
 	return nil

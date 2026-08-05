@@ -272,6 +272,9 @@ func (m *OnlineCacheManager) LoadFromDisk() {
 
 	entries, err := os.ReadDir(m.cacheDir)
 	if err != nil {
+		if !os.IsNotExist(err) {
+			m.logger.Warn("[online-cache] 读取缓存目录失败: %s: %v", m.cacheDir, err)
+		}
 		return
 	}
 	for _, entry := range entries {

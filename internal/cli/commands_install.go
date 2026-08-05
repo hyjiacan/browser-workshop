@@ -124,17 +124,36 @@ func runInstall(ctx *Context, args []string) error {
 	}
 
 	// 远程下载安装
+	return fetchAndInstall(ctx, spec.Browser, spec.Version, channel, refreshCache, force, false)
+}
+
+// fetchAndInstall resolves a browser version from remote sources, downloads,
+// and installs it. If silent is true, progress messages are suppressed (for
+// use by auto-install in runRun).
+func fetchAndInstall(ctx *Context, browser, versionSpec, channel string, refresh, force, silent bool) error {
 	if ctx.Source == nil || ctx.Download == nil {
 		return fmt.Errorf("当前构建不支持远程下载。请使用 --from-dir 或 --from-file 进行本地安装。")
 	}
 
+	// 强制刷新远程源缓存（与 ls --refresh 机制一致）
+	if refresh {
+		if r, ok := ctx.Source.(interface{ ForceRefresh() }); ok {
+			r.ForceRefresh()
+			if !silent {
+				ctx.Printf("正在刷新远程源缓存...\n")
+			}
+		}
+	}
+
 	// 解析版本（支持部分版本号）
-	ctx.Printf("正在解析 %s@%s...\n", spec.Browser, spec.Version)
-	versionInfo, err := ctx.Source.ResolveVersion(spec.Browser, spec.Version)
+	if !silent {
+		ctx.Printf("正在解析 %s@%s...\n", browser, versionSpec)
+	}
+	versionInfo, err := ctx.Source.ResolveVersion(browser, versionSpec)
 	if err != nil {
 		// 如果版本是渠道名，如 latest、beta 等，尝试从指定渠道获取
-		if spec.IsAlias {
-			versions, listErr := ctx.Source.ListVersions(spec.Browser, channel, "")
+		if ctx.Cfg != nil {
+			versions, listErr := ctx.Source.ListVersions(browser, channel, "")
 			if listErr == nil && len(versions) > 0 {
 				versionInfo = versions[0]
 			} else {
@@ -146,25 +165,27 @@ func runInstall(ctx *Context, args []string) error {
 	}
 
 	if versionInfo.DownloadURL == "" {
-		return fmt.Errorf("%s@%s 没有可用的下载链接", spec.Browser, versionInfo.Version)
+		return fmt.Errorf("%s@%s 没有可用的下载链接", browser, versionInfo.Version)
 	}
 
 	if ctx.Logger != nil {
 		ctx.Logger.Debug("[install] 版本已解析: %s@%s channel=%s platform=%s arch=%s url=%s",
-			spec.Browser, versionInfo.Version, versionInfo.Channel, versionInfo.Platform, versionInfo.Arch, versionInfo.DownloadURL)
+			browser, versionInfo.Version, versionInfo.Channel, versionInfo.Platform, versionInfo.Arch, versionInfo.DownloadURL)
 	}
 
 	// 检查是否已安装（使用解析后的完整版本号）
-	if !force && ctx.Install.IsInstalled(spec.Browser, versionInfo.Version) {
-		ctx.Printf("%s@%s 已安装\n", spec.Browser, versionInfo.Version)
+	if !force && ctx.Install.IsInstalled(browser, versionInfo.Version) {
+		if !silent {
+			ctx.Printf("%s@%s 已安装\n", browser, versionInfo.Version)
+		}
 		return nil
 	}
 
-	ctx.Printf("正在下载 %s@%s...\n", spec.Browser, versionInfo.Version)
+	if !silent {
+		ctx.Printf("正在下载 %s@%s...\n", browser, versionInfo.Version)
+	}
 
 	// Use permanent download cache directory instead of a temp directory.
-	// Cached files are kept across installs and only re-downloaded when
-	// the file is missing, corrupt, or --refresh is specified.
 	cacheDir := ctx.Paths.DownloadCacheDir()
 	if cacheDir == "" {
 		return fmt.Errorf("下载缓存目录未配置")
@@ -178,16 +199,12 @@ func runInstall(ctx *Context, args []string) error {
 	}
 
 	// Determine filename from URL
-	fileName := getDownloadFilename(spec.Browser, versionInfo.Version, versionInfo.DownloadURL, string(versionInfo.Platform))
+	fileName := getDownloadFilename(browser, versionInfo.Version, versionInfo.DownloadURL, string(versionInfo.Platform))
 	downloadDest := filepath.Join(cacheDir, fileName)
 
 	// Check if the file is already cached and valid.
-	// A cached file is valid when:
-	//   1. --refresh is not set
-	//   2. The file exists and is non-empty
-	//   3. If the manifest provides a size, it matches the local file size
 	cacheValid := false
-	if !refreshCache {
+	if !refresh {
 		if info, err := os.Stat(downloadDest); err == nil && info.Size() > 0 {
 			if versionInfo.Size > 0 && info.Size() != versionInfo.Size {
 				if ctx.Logger != nil {
@@ -198,7 +215,9 @@ func runInstall(ctx *Context, args []string) error {
 				if ctx.Logger != nil {
 					ctx.Logger.Debug("[install] 命中本地缓存: %s (大小: %s)", downloadDest, FormatSize(info.Size()))
 				}
-				ctx.Printf("✓ 命中本地缓存，跳过下载: %s\n", fileName)
+				if !silent {
+					ctx.Printf("✓ 命中本地缓存，跳过下载: %s\n", fileName)
+				}
 			}
 		}
 	}
@@ -212,36 +231,44 @@ func runInstall(ctx *Context, args []string) error {
 		}
 
 		downloadedPath, err = ctx.Download.Download(versionInfo.DownloadURL, downloadDest, func(downloaded, total int64, percent float64) {
-			if total > 0 {
-				ctx.Printf("\r  下载进度: %.1f%%", percent)
-			} else {
-				ctx.Printf("\r  下载中...")
+			if !silent {
+				if total > 0 {
+					ctx.Printf("\r  下载进度: %.1f%%", percent)
+				} else {
+					ctx.Printf("\r  下载中...")
+				}
 			}
 		})
-		ctx.Println() // newline after progress
+		if !silent {
+			ctx.Println() // newline after progress
+		}
 
 		if err != nil {
 			return fmt.Errorf("下载失败: %w", err)
 		}
 	}
 
-	// 强制模式：下载成功后再卸载旧版本，确保下载失败时不会丢失已安装的版本
-	if force && ctx.Install.IsInstalled(spec.Browser, versionInfo.Version) {
-		if err := ctx.Install.Uninstall(spec.Browser, versionInfo.Version); err != nil {
+	// 强制模式：下载成功后再卸载旧版本
+	if force && ctx.Install.IsInstalled(browser, versionInfo.Version) {
+		if err := ctx.Install.Uninstall(browser, versionInfo.Version); err != nil {
 			return fmt.Errorf("卸载现有版本失败: %w", err)
 		}
-		ctx.Printf("已移除现有版本 %s@%s\n", spec.Browser, versionInfo.Version)
+		if !silent {
+			ctx.Printf("已移除现有版本 %s@%s\n", browser, versionInfo.Version)
+		}
 	}
 
-	ctx.Printf("正在安装 %s@%s...\n", spec.Browser, versionInfo.Version)
+	if !silent {
+		ctx.Printf("正在安装 %s@%s...\n", browser, versionInfo.Version)
+	}
 
 	if ctx.Logger != nil {
-		ctx.Logger.Debug("[install] 开始解压并安装 %s@%s", spec.Browser, versionInfo.Version)
+		ctx.Logger.Debug("[install] 开始解压并安装 %s@%s", browser, versionInfo.Version)
 	}
 	installStart := time.Now()
 
 	// Install from the downloaded file
-	record, err := ctx.Install.InstallFromFile(spec.Browser, versionInfo.Version, downloadedPath)
+	record, err := ctx.Install.InstallFromFile(browser, versionInfo.Version, downloadedPath)
 	if err != nil {
 		return fmt.Errorf("安装失败: %w", err)
 	}
@@ -252,15 +279,12 @@ func runInstall(ctx *Context, args []string) error {
 			record.InstallDir, record.Version, formatDuration(time.Since(installStart)))
 	}
 
-	ctx.Printf("✓ %s@%s 安装成功\n", record.Browser, record.Version)
+	if !silent {
+		ctx.Printf("✓ %s@%s 安装成功\n", record.Browser, record.Version)
 
-	// On Linux Firefox ships a wrapper script in the install directory.
-	// Remind the user to use `bws launch` rather than double-clicking
-	// the wrapper (or firefox-bin) directly, since double-clicking
-	// bypasses the -no-remote and -profile flags and the env vars
-	// (MOZ_ENABLE_WAYLAND, MOZ_DISABLE_SANDBOX) that bws injects.
-	if runtime.GOOS == "linux" && strings.EqualFold(record.Browser, "firefox") {
-		ctx.Printf("  提示：请通过 `bws launch firefox` 启动，而不是双击安装目录下的可执行文件。\n")
+		if runtime.GOOS == "linux" && strings.EqualFold(record.Browser, "firefox") {
+			ctx.Printf("  提示：请通过 `bws launch firefox` 启动，而不是双击安装目录下的可执行文件。\n")
+		}
 	}
 	return nil
 }
