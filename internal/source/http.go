@@ -7,11 +7,14 @@ import (
 	"io"
 	"net/http"
 	neturl "net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	bmlog "github.com/bws/bws/internal/log"
+	"github.com/bws/bws/internal/paths"
 )
 
 // HTTPSource provides browser versions from a bm serve HTTP endpoint.
@@ -32,6 +35,11 @@ type HTTPSource struct {
 	// initiating their own HTTP request.
 	manifestFetchCh chan struct{}
 	manifestCacheMu sync.Mutex
+
+	// forceRefresh, when true, causes the next fetchManifest to skip all
+	// caches (memory + disk) and request serve to refresh its online cache
+	// before merging. The flag is reset to false automatically after use.
+	forceRefresh bool
 }
 
 // manifestCacheTTL is how long a cached manifest is considered fresh.
@@ -170,6 +178,17 @@ func (s *HTTPSource) Name() string {
 	return s.name
 }
 
+// SetForceRefresh enables or disables force-refresh mode for the next manifest fetch.
+// When enabled, the next fetchManifest call will skip all local caches (memory + disk)
+// and instruct the serve instance to refresh its online cache via ?refresh=true.
+// The flag is automatically reset to false after the fetch completes.
+// This implements the refreshableSource interface used by MultiSource.ForceRefresh().
+func (s *HTTPSource) SetForceRefresh(force bool) {
+	s.manifestCacheMu.Lock()
+	s.forceRefresh = force
+	s.manifestCacheMu.Unlock()
+}
+
 // SupportsBrowser reports whether this source supports the given browser.
 // HTTPSource is a generic serve endpoint that can host any browser type.
 func (s *HTTPSource) SupportsBrowser(browser string) bool {
@@ -177,12 +196,12 @@ func (s *HTTPSource) SupportsBrowser(browser string) bool {
 }
 
 // List returns all available versions matching the filter.
-// It queries the manifest endpoint which returns local + online-cached files
-// as a single merged list. Filtering is done client-side via FilterVersions.
+// It fetches the full manifest (all browsers/platforms/archs) from the server
+// and filters client-side via FilterVersions.
 func (s *HTTPSource) List(ctx context.Context, filter *Filter) ([]VersionInfo, error) {
 	filter = applyDefaults(filter)
 
-	v1Manifest, err := s.fetchManifest(ctx, filter)
+	v1Manifest, err := s.fetchManifest(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -319,40 +338,50 @@ func (s *HTTPSource) Resolve(ctx context.Context, browser string, version string
 // performs the HTTP request; concurrent calls wait and reuse the result.
 // The cache is valid for manifestCacheTTL (30s) so rapid re-queries also
 // benefit.
-func (s *HTTPSource) fetchManifest(ctx context.Context, filter *Filter) (*manifestV1Response, error) {
-	// Fast path: check cache.
+func (s *HTTPSource) fetchManifest(ctx context.Context) (*manifestV1Response, error) {
 	s.manifestCacheMu.Lock()
-	if s.manifestCache != nil && time.Since(s.manifestCacheAge) < manifestCacheTTL {
-		cached := s.manifestCache
-		s.manifestCacheMu.Unlock()
-		bmlog.Debug("[http-source] manifest 缓存命中 (条目数=%d, 缓存年龄=%v)",
-			len(cached.Data), time.Since(s.manifestCacheAge).Round(time.Millisecond))
-		return cached, nil
-	}
 
-	// Single-flight: if a fetch is already in progress, wait for it.
-	if s.manifestFetchCh != nil {
-		ch := s.manifestFetchCh
-		s.manifestCacheMu.Unlock()
-		bmlog.Debug("[http-source] 等待并发 manifest 请求完成...")
-		<-ch
-		// Re-check cache after the in-flight fetch completes.
-		s.manifestCacheMu.Lock()
-		cached := s.manifestCache
-		s.manifestCacheMu.Unlock()
-		if cached != nil {
-			bmlog.Debug("[http-source] 复用并发请求结果 (条目数=%d)", len(cached.Data))
+	// Fast path: in-memory cache hit (skip when force-refreshing).
+	if !s.forceRefresh {
+		if s.manifestCache != nil && time.Since(s.manifestCacheAge) < manifestCacheTTL {
+			cached := s.manifestCache
+			s.manifestCacheMu.Unlock()
+			bmlog.Debug("[http-source] manifest 内存缓存命中 (条目数=%d, 缓存年龄=%v)",
+				len(cached.Data), time.Since(s.manifestCacheAge).Round(time.Millisecond))
 			return cached, nil
 		}
-		// In-flight fetch failed — retry directly instead of returning an error.
-		bmlog.Debug("[http-source] 并发请求失败，重试...")
-		return s.fetchManifest(ctx, filter)
+
+		// Single-flight: if a fetch is already in progress, wait for it.
+		if s.manifestFetchCh != nil {
+			ch := s.manifestFetchCh
+			s.manifestCacheMu.Unlock()
+			bmlog.Debug("[http-source] 等待并发 manifest 请求完成...")
+			<-ch
+			// Re-check cache after the in-flight fetch completes.
+			s.manifestCacheMu.Lock()
+			cached := s.manifestCache
+			s.manifestCacheMu.Unlock()
+			if cached != nil {
+				bmlog.Debug("[http-source] 复用并发请求结果 (条目数=%d)", len(cached.Data))
+				return cached, nil
+			}
+			// In-flight fetch failed — retry.
+			bmlog.Debug("[http-source] 并发请求失败，重试...")
+			return s.fetchManifest(ctx)
+		}
 	}
 
-	// No cache, no in-flight fetch — this call does the actual work.
+	// Acquire ownership of the fetch.
+	// Read and reset forceRefresh under the lock for atomicity.
 	fetchCh := make(chan struct{})
 	s.manifestFetchCh = fetchCh
+	force := s.forceRefresh
+	s.forceRefresh = false
 	s.manifestCacheMu.Unlock()
+
+	if force {
+		bmlog.Debug("[http-source] 强制刷新模式: 跳过磁盘缓存，通知 serve 刷新在线源")
+	}
 
 	// Ensure we signal completion and clean up regardless of outcome.
 	defer func() {
@@ -362,11 +391,25 @@ func (s *HTTPSource) fetchManifest(ctx context.Context, filter *Filter) (*manife
 		close(fetchCh)
 	}()
 
-	v1URL := s.baseURL + "/api/v1/manifest"
-	if params := buildManifestQuery(filter); len(params) > 0 {
-		v1URL += "?" + params.Encode()
+	// Try disk cache before hitting the network (skip in force-refresh mode).
+	if !force {
+		if diskResp, err := s.loadManifestFromDisk(); err == nil {
+			s.manifestCacheMu.Lock()
+			s.manifestCache = diskResp
+			s.manifestCacheAge = time.Now()
+			s.manifestCacheMu.Unlock()
+			bmlog.Debug("[http-source] manifest 磁盘缓存命中 (条目数=%d)", len(diskResp.Data))
+			return diskResp, nil
+		}
 	}
 
+	// Fetch the full manifest from the server — no filter parameters.
+	// All filtering is done client-side via FilterVersions.
+	// In force-refresh mode, instruct serve to refresh its online cache.
+	v1URL := s.baseURL + "/api/v1/manifest"
+	if force {
+		v1URL += "?refresh=true"
+	}
 	bmlog.Debug("[http-source] 请求 manifest: %s", v1URL)
 
 	v1Resp, v1Body, err := s.fetchJSON(ctx, v1URL)
@@ -385,41 +428,90 @@ func (s *HTTPSource) fetchManifest(ctx context.Context, filter *Filter) (*manife
 		return nil, fmt.Errorf("decoding manifest: %w", err)
 	}
 
-	if v1.Status == "ok" && v1.Data != nil {
-		bmlog.Debug("[http-source] manifest 解析成功: %d 个文件", len(v1.Data))
-
-		// Cache for reuse by subsequent List() calls.
-		s.manifestCacheMu.Lock()
-		s.manifestCache = &v1
-		s.manifestCacheAge = time.Now()
-		s.manifestCacheMu.Unlock()
-
-		return &v1, nil
+	if v1.Status != "ok" || v1.Data == nil {
+		return nil, fmt.Errorf("unrecognized manifest format")
 	}
 
-	return nil, fmt.Errorf("unrecognized manifest format")
+	bmlog.Debug("[http-source] manifest 解析成功: %d 个文件", len(v1.Data))
+
+	// Persist to disk cache for reuse across sessions.
+	if err := s.saveManifestToDisk(&v1); err != nil {
+		bmlog.Debug("[http-source] 保存 manifest 到磁盘缓存失败: %v", err)
+	}
+
+	// Store in memory for reuse within the current session.
+	s.manifestCacheMu.Lock()
+	s.manifestCache = &v1
+	s.manifestCacheAge = time.Now()
+	s.manifestCacheMu.Unlock()
+
+	return &v1, nil
 }
 
-// buildManifestQuery builds the query parameters for the manifest API request
-// based on the filter. Returns an empty Values if no filter criteria apply.
-func buildManifestQuery(filter *Filter) neturl.Values {
-	params := neturl.Values{}
-	if filter == nil {
-		return params
+// manifestDiskCacheTTL is how long the on-disk manifest cache is considered
+// fresh. It's longer than the in-memory cache (30s) because the client stores
+// the full manifest locally so that it can determine available versions without
+// always hitting the server.
+const manifestDiskCacheTTL = 5 * time.Minute
+
+// manifestDiskCacheFile returns the disk cache file path scoped to the
+// HTTPSource's base URL so that different servers don't share caches.
+func (s *HTTPSource) manifestDiskCacheFile() string {
+	cacheDir := paths.Default().ManifestCacheDir
+	// Sanitize baseURL into a safe filename component.
+	safe := strings.NewReplacer(
+		"://", "_",
+		":", "_",
+		"/", "_",
+		".", "_",
+	).Replace(s.baseURL)
+	return filepath.Join(cacheDir, "serve_"+safe+".json")
+}
+
+// loadManifestFromDisk attempts to load the cached manifest from disk.
+// Returns an error if the cache is missing or expired.
+func (s *HTTPSource) loadManifestFromDisk() (*manifestV1Response, error) {
+	cachePath := s.manifestDiskCacheFile()
+
+	fi, err := os.Stat(cachePath)
+	if err != nil {
+		return nil, err
 	}
-	if filter.Browser != "" {
-		params.Set("browser", filter.Browser)
+	if time.Since(fi.ModTime()) > manifestDiskCacheTTL {
+		return nil, fmt.Errorf("disk manifest cache expired")
 	}
-	if filter.Platform != "" && filter.Platform != PlatformUnknown {
-		params.Set("platform", string(filter.Platform))
+
+	data, err := os.ReadFile(cachePath)
+	if err != nil {
+		return nil, err
 	}
-	if filter.Arch != "" && filter.Arch != ArchUnknown {
-		params.Set("arch", string(filter.Arch))
+
+	var resp manifestV1Response
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return nil, fmt.Errorf("decoding cached manifest: %w", err)
 	}
-	if filter.Channel != "" && filter.Channel != ChannelUnknown {
-		params.Set("channel", string(filter.Channel))
+
+	if resp.Status != "ok" || resp.Data == nil {
+		return nil, fmt.Errorf("cached manifest has invalid format")
 	}
-	return params
+
+	return &resp, nil
+}
+
+// saveManifestToDisk persists the manifest to disk for cross-session reuse.
+// On failure it returns an error (the caller should log but not block).
+func (s *HTTPSource) saveManifestToDisk(manifest *manifestV1Response) error {
+	cacheDir := paths.Default().ManifestCacheDir
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return err
+	}
+
+	cachePath := s.manifestDiskCacheFile()
+	data, err := json.Marshal(manifest)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(cachePath, data, 0o644)
 }
 
 // maxResponseBodySize is the maximum HTTP response body size (100MB).

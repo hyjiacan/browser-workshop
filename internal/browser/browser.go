@@ -48,6 +48,14 @@ type BrowserDescriptor struct {
 	// Used for settings that cannot be passed as command-line arguments.
 	StandardPrefs []string
 
+	// EnvVars contains environment variables that should be set when
+	// launching this browser. Used for settings that cannot be passed
+	// as command-line arguments (e.g. MOZ_ENABLE_WAYLAND, MOZ_DISABLE_SANDBOX).
+	// On Linux the launcher may additionally append runtime-detected
+	// variables (such as MOZ_DISABLE_SANDBOX when the host kernel does
+	// not permit unprivileged user namespaces).
+	EnvVars map[string]string
+
 	// Supported package formats, in priority order
 	PackageFormats []string // e.g. ["zip", "exe", "msi"]
 

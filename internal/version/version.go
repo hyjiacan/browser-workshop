@@ -10,6 +10,10 @@ import (
 	"time"
 )
 
+// ClientVersion is the version of the bws client binary.
+// It is set from main.go (or via ldflags at build time).
+var ClientVersion = "0.0.0-dev"
+
 // Version represents a browser version with all its metadata.
 type Version struct {
 	Browser      string            `json:"browser"`
@@ -94,14 +98,106 @@ func Major(version string) int {
 
 // --- Comparison ---
 
+// stripGitHash removes a trailing git describe hash suffix ("-g<hex>").
+// e.g. "1.0.0-beta-45-gec99964" → "1.0.0-beta-45"
+func stripGitHash(s string) string {
+	idx := strings.LastIndex(s, "-g")
+	if idx < 0 {
+		return s
+	}
+	hexPart := s[idx+2:]
+	if len(hexPart) < 6 {
+		return s
+	}
+	for _, c := range hexPart {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return s
+		}
+	}
+	return s[:idx]
+}
+
+// splitCorePre splits a version like "1.0.0-beta-45" into core "1.0.0" and prerelease "beta-45".
+func splitCorePre(v string) (core, pre string) {
+	v = strings.TrimPrefix(v, "v")
+	v = strings.TrimPrefix(v, "V")
+	v = stripGitHash(v)
+	if idx := strings.Index(v, "-"); idx >= 0 {
+		return v[:idx], v[idx+1:]
+	}
+	return v, ""
+}
+
+// comparePreRelease compares two prerelease strings using semver-like rules.
+// - A version with prerelease is lower than one without.
+// - Prerelease identifiers are split by "-" or ".".
+// - Numeric identifiers are compared numerically, strings lexicographically.
+// - Shorter prerelease (fewer identifiers) is considered earlier.
+func comparePreRelease(a, b string) int {
+	if a == "" && b == "" {
+		return 0
+	}
+	if a == "" {
+		return 1 // no prerelease > with prerelease
+	}
+	if b == "" {
+		return -1
+	}
+
+	partsA := strings.FieldsFunc(a, func(r rune) bool { return r == '-' || r == '.' })
+	partsB := strings.FieldsFunc(b, func(r rune) bool { return r == '-' || r == '.' })
+
+	n := len(partsA)
+	if len(partsB) < n {
+		n = len(partsB)
+	}
+
+	for i := 0; i < n; i++ {
+		numA, errA := strconv.Atoi(partsA[i])
+		numB, errB := strconv.Atoi(partsB[i])
+		if errA == nil && errB == nil {
+			if numA != numB {
+				if numA < numB {
+					return -1
+				}
+				return 1
+			}
+		} else {
+			if partsA[i] != partsB[i] {
+				if partsA[i] < partsB[i] {
+					return -1
+				}
+				return 1
+			}
+		}
+	}
+
+	if len(partsA) < len(partsB) {
+		return -1
+	}
+	if len(partsA) > len(partsB) {
+		return 1
+	}
+	return 0
+}
+
 // Compare compares two version strings.
 // Returns -1 if a < b, 0 if a == b, 1 if a > b.
+//
+// Supports semver-like pre-release versions:
+//
+//	1.0.0 < 1.0.0-beta       (release > pre-release)
+//	1.0.0-beta < 1.0.0-beta-45  (higher number = newer)
+//	1.0.0-beta-45-rec99964  → git hash stripped automatically
 func Compare(a, b string) int {
-	segA, errA := Parse(a)
-	segB, errB := Parse(b)
+	coreA, preA := splitCorePre(a)
+	coreB, preB := splitCorePre(b)
+
+	segA, errA := Parse(coreA)
+	segB, errB := Parse(coreB)
 
 	if errA != nil && errB != nil {
-		// Both are non-numeric versions; treat them as equal
+		// Both cores are non-numeric; treat as equal
 		return 0
 	}
 	if errA != nil {
@@ -111,11 +207,11 @@ func Compare(a, b string) int {
 		return 1
 	}
 
+	// Compare numeric core segments
 	maxLen := len(segA)
 	if len(segB) > maxLen {
 		maxLen = len(segB)
 	}
-
 	for i := 0; i < maxLen; i++ {
 		var aVal, bVal int
 		if i < len(segA) {
@@ -132,7 +228,8 @@ func Compare(a, b string) int {
 		}
 	}
 
-	return 0
+	// Same core; compare prerelease
+	return comparePreRelease(preA, preB)
 }
 
 // Greater returns true if a > b.

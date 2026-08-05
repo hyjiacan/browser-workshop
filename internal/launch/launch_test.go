@@ -419,6 +419,66 @@ func TestFirefoxStandardPrefs(t *testing.T) {
 	if !strings.Contains(prefsStr, "browser.shell.checkDefaultBrowser") {
 		t.Error("Firefox StandardPrefs should disable browser.shell.checkDefaultBrowser")
 	}
+	// Regression: app.update.background.enabled must be disabled too.
+	// On Linux the bundled `updater` binary can run in a child process and
+	// stage updates even when app.update.enabled is false, which would cause
+	// the "we need to restart the browser" page on every launch.
+	if !strings.Contains(prefsStr, "app.update.background.enabled") {
+		t.Error("Firefox StandardPrefs should disable app.update.background.enabled (Linux background updater)")
+	}
+}
+
+// TestCleanupFirefoxStagedUpdates verifies that the cleanup function removes
+// the updates/ directory and active-update.xml. This prevents Firefox from
+// showing the "we need to restart" page in a loop when a previous launch
+// staged a MAR update in the install directory.
+func TestCleanupFirefoxStagedUpdates(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a fake Firefox structure: ffDir/firefox (bin), ffDir/updates/0/update.mar
+	ffDir := filepath.Join(tmpDir, "firefox")
+	if err := os.MkdirAll(ffDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fakeExe := filepath.Join(ffDir, "firefox")
+	if err := os.WriteFile(fakeExe, nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Staged update files
+	updatesDir := filepath.Join(ffDir, "updates", "0")
+	if err := os.MkdirAll(updatesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(updatesDir, "update.mar"), []byte("fake-mar"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(updatesDir, "update.status"), []byte("pending"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// active-update.xml in profile dir
+	profileDir := filepath.Join(tmpDir, "profile")
+	if err := os.MkdirAll(profileDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	activeUpdate := filepath.Join(profileDir, "active-update.xml")
+	if err := os.WriteFile(activeUpdate, []byte("<xml/>"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run cleanup
+	cleanupFirefoxStagedUpdates(fakeExe, profileDir)
+
+	// Verify updates/ is removed
+	if _, err := os.Stat(updatesDir); !os.IsNotExist(err) {
+		t.Error("updates/ directory should have been removed")
+	}
+
+	// Verify active-update.xml is removed
+	if _, err := os.Stat(activeUpdate); !os.IsNotExist(err) {
+		t.Error("active-update.xml should have been removed")
+	}
 }
 
 func TestChromiumDisableUpdate(t *testing.T) {
@@ -433,6 +493,70 @@ func TestChromiumDisableUpdate(t *testing.T) {
 	if !found {
 		t.Error("Chromium should have --disable-update in DisableUpdateArgs")
 	}
+}
+
+// TestFirefoxEnvVars verifies that the Firefox descriptor declares the
+// MOZ_ENABLE_WAYLAND=0 environment variable on Linux. This prevents the
+// "tab crashed" page that some users hit when Firefox negotiates Wayland
+// on GNOME 46+ and KDE Plasma.
+func TestFirefoxEnvVars(t *testing.T) {
+	if v, ok := browser.Firefox.EnvVars["MOZ_ENABLE_WAYLAND"]; !ok || v != "0" {
+		t.Errorf("Firefox EnvVars should include MOZ_ENABLE_WAYLAND=0, got %q (present=%v)", v, ok)
+	}
+}
+
+// TestAppendEnv verifies that appendEnv correctly handles both add and
+// replace scenarios, preserving order on add and updating in place on
+// replace.
+func TestAppendEnv(t *testing.T) {
+	cmd := &exec.Cmd{Env: []string{"FOO=1", "BAR=2"}}
+
+	appendEnv(cmd, "BAZ", "3")
+	if !contains(cmd.Env, "BAZ=3") {
+		t.Errorf("appendEnv should add new key, got %v", cmd.Env)
+	}
+	if contains(cmd.Env, "FOO=1") == false {
+		t.Error("existing entries should be preserved")
+	}
+
+	appendEnv(cmd, "FOO", "replaced")
+	if !contains(cmd.Env, "FOO=replaced") {
+		t.Errorf("appendEnv should replace existing key, got %v", cmd.Env)
+	}
+	if contains(cmd.Env, "FOO=1") {
+		t.Error("old value FOO=1 should be removed after replace")
+	}
+	// BAR=2 should still be there
+	if !contains(cmd.Env, "BAR=2") {
+		t.Error("unrelated entries should be preserved")
+	}
+}
+
+// TestHumanBytes verifies byte count formatting.
+func TestHumanBytes(t *testing.T) {
+	tests := []struct {
+		in   int64
+		want string
+	}{
+		{500, "500 B"},
+		{2048, "2.0 KB"},
+		{5 * 1024 * 1024, "5.0 MB"},
+		{2 * 1024 * 1024 * 1024, "2.0 GB"},
+	}
+	for _, tt := range tests {
+		if got := humanBytes(tt.in); got != tt.want {
+			t.Errorf("humanBytes(%d) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func contains(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
 }
 
 func TestLaunch_NotInstalled(t *testing.T) {

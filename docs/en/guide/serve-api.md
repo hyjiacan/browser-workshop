@@ -12,6 +12,7 @@
 | `/api/v1/status` | GET | Service status |
 | `/api/v1/sync/status` | GET | Sync status |
 | `/api/v1/sync/trigger` | POST | Manually trigger sync |
+| `/api/v1/bin` | GET | Client binary file listing (JSON) |
 | `/api/v1/bin/{filename}` | GET | Client binary download |
 
 > **Manifest merge mechanism**: When `online-fallback` is enabled, `manifest` returns a merged result of local packages directory files and online source cached versions (deduplicated). Local files carry real XXH3 checksums; online cached versions have empty checksums (computed after download). Filtering is done client-side.
@@ -86,10 +87,17 @@ Returns an HTML page containing:
 
 Get the file manifest, containing local packages directory files and online source cached versions (when `online-fallback` is enabled). Returns entries for all platforms, architectures, versions, and channels; filtering is done client-side.
 
+### Query Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `refresh` | string | Set to `true` to force the serve instance to refresh its online cache before returning results |
+
 ### Request
 
 ```
 GET /api/v1/manifest
+GET /api/v1/manifest?refresh=true
 ```
 
 ### Response Example
@@ -349,6 +357,54 @@ sync not enabled
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/sync/trigger
+```
+
+---
+
+## GET /api/v1/bin
+
+Get the client binary file directory listing, used for auto-update scenarios.
+
+### Request
+
+```
+GET /api/v1/bin
+```
+
+### Response
+
+```json
+{
+  "status": "ok",
+  "data": [
+    {
+      "filename": "bws_windows_amd64.zip",
+      "platform": "windows",
+      "arch": "amd64",
+      "version": "1.0.0",
+      "size": 5242880
+    }
+  ]
+}
+```
+
+### Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| status | string | Always `ok` |
+| data | array | Binary file list |
+| data[].filename | string | File name |
+| data[].platform | string | Target platform (windows/darwin/linux) |
+| data[].arch | string | Target architecture (amd64/arm64) |
+| data[].version | string | bws version |
+| data[].size | int64 | File size in bytes |
+
+### Usage Example
+
+```bash
+# List all available binary files
+curl http://localhost:8080/api/v1/bin
 ```
 
 ---

@@ -9,6 +9,8 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,6 +38,7 @@ import (
 const version = "1.0.0-beta"
 
 func main() {
+	bwversion.ClientVersion = version
 	// Parse global flags before command processing
 	verbose := parseGlobalVerbose()
 
@@ -291,6 +294,27 @@ func firstTimeSetup(configPath string, cfg *config.Config) *config.Config {
 	input = strings.TrimSpace(input)
 	if input != "" {
 		cfg.DefaultBrowser = input
+	}
+
+	// Ask about serve source (offline distribution)
+	fmt.Println()
+	fmt.Printf("是否配置离线源 (serve) 地址? (配置后无需联网即可获取浏览器版本) [y/N]: ")
+	input, err = reader.ReadString('\n')
+	if err != nil {
+		input = ""
+	}
+	input = strings.TrimSpace(input)
+	if strings.ToLower(input) == "y" || strings.ToLower(input) == "yes" || input == "是" {
+		fmt.Printf("请输入 serve 源地址 (例如 http://192.168.1.100:8080): ")
+		input, err = reader.ReadString('\n')
+		if err == nil {
+			url := strings.TrimSpace(input)
+			if url != "" {
+				cfg.RemoteSource = url
+				cfg.EnableServeSource = true
+				fmt.Printf("✅ serve 源已配置: %s\n", url)
+			}
+		}
 	}
 
 	// Create config directory
@@ -1090,6 +1114,7 @@ func (s *serveSyncSource) ListVersions(ctx context.Context, browser string, chan
 			Platform:    string(v.Platform),
 			Arch:        string(v.Arch),
 			DownloadURL: v.DownloadURL,
+			Filename:    buildServeDownloadFilename(v.Version, string(v.Platform), string(v.Arch), v.DownloadURL),
 			Size:        v.Size,
 			Checksum:    v.Checksum,
 		})
@@ -1105,6 +1130,88 @@ func (s *serveSyncSource) ListVersions(ctx context.Context, browser string, chan
 
 func (s *serveSyncSource) Download(url string, destDir string, onProgress func(downloaded, total int64)) (string, error) {
 	return bmserve.DefaultDownload(url, destDir, onProgress)
+}
+
+func (s *serveSyncSource) StreamDownload(ctx context.Context, url string) (io.ReadCloser, int64, error) {
+	return bmserve.StreamDownload(ctx, url)
+}
+
+// buildServeDownloadFilename generates a filename that includes platform and
+// architecture information, so that the serve scanner can correctly extract
+// platform/arch metadata when scanning downloaded files.
+//
+// If the original URL filename already contains platform/arch keywords
+// recognized by the scanner, it is returned unchanged.
+// Otherwise, a suffix like "_win64", "_linux64", "_mac64" etc. is inserted
+// before the file extension.
+//
+// Examples:
+//   - "firefox-68.9.0esr.tar.bz2" + linux/amd64  → "firefox-68.9.0esr_linux64.tar.bz2"
+//   - "chrome_120.0.6099.109_win64.zip"           → unchanged (already has win64)
+func buildServeDownloadFilename(version, platform, arch, downloadURL string) string {
+	// Extract the URL-decoded base filename from the download URL.
+	base := filepath.Base(downloadURL)
+	if decoded, err := urlDecode(base); err == nil && decoded != "" {
+		base = decoded
+	}
+
+	// If the filename already contains platform keywords recognized by the
+	// scanner, return it unchanged.
+	if scannerPlatformKeywordInFilename(base) {
+		return base
+	}
+
+	// Insert platform_arch before the extension.
+	suffix := platformArchAbbreviation(platform, arch)
+	ext := filepath.Ext(base)
+	nameWithoutExt := strings.TrimSuffix(base, ext)
+	return fmt.Sprintf("%s_%s%s", nameWithoutExt, suffix, ext)
+}
+
+// scannerPlatformKeywordInFilename checks whether the filename contains any
+// platform keyword that the scanner's detectPlatform function can recognize.
+// These are the keywords defined in internal/repo/scanner.go platformKeywords.
+func scannerPlatformKeywordInFilename(name string) bool {
+	lower := strings.ToLower(name)
+	return strings.Contains(lower, "windows") ||
+		strings.Contains(lower, "win64") ||
+		strings.Contains(lower, "win32") ||
+		strings.Contains(lower, "linux64") ||
+		strings.Contains(lower, "linux") ||
+		strings.Contains(lower, "macos") ||
+		strings.Contains(lower, "mac64") ||
+		strings.Contains(lower, "macarm64")
+}
+
+// platformArchAbbreviation returns a scanner-compatible abbreviation for the
+// given platform and architecture.
+func platformArchAbbreviation(platform, arch string) string {
+	switch {
+	case platform == "windows" && (arch == "amd64" || arch == "64"):
+		return "win64"
+	case platform == "windows" && (arch == "386" || arch == "32"):
+		return "win32"
+	case platform == "windows" && arch == "arm64":
+		return "winarm64"
+	case platform == "darwin" && (arch == "amd64" || arch == "64"):
+		return "mac64"
+	case platform == "darwin" && arch == "arm64":
+		return "macarm64"
+	case platform == "linux" && (arch == "amd64" || arch == "64"):
+		return "linux64"
+	case platform == "linux" && (arch == "386" || arch == "32"):
+		return "linux32"
+	case platform == "linux" && arch == "arm64":
+		return "linuxarm64"
+	default:
+		return fmt.Sprintf("%s_%s", platform, arch)
+	}
+}
+
+// urlDecode URL-decodes a string, wrapping url.PathUnescape.
+func urlDecode(s string) (string, error) {
+	// Use url.QueryUnescape for broader decoding (handles both + and %20).
+	return url.QueryUnescape(s)
 }
 
 func (s *serveSyncSource) GetChecksum(ctx context.Context, browser, version, platform, arch string) (string, error) {

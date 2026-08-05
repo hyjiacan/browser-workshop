@@ -18,6 +18,7 @@
 | `bws download` / `bws dl` | 仅下载不安装 |
 | `bws profile` / `bws pf` | 管理浏览器 Profile |
 | `bws alias` | 管理版本别名 |
+| `bws update` / `bws upgrade` / `bws up` | 从离线源更新 bws 到最新版本 |
 | `bws serve` / `bws sv` / `bws server` | 启动 HTTP 分发服务 |
 | `bws config` / `bws cfg` | 管理配置 |
 | `bws repo` | 管理本地二进制仓库 |
@@ -308,7 +309,7 @@ bws i --from-file <文件> [浏览器@版本]
 | `--from-file <path>` | - | 从本地压缩包安装 |
 | `--channel <渠道>` | `-c` | 指定发布渠道 |
 | `--force` | `-f` | 强制重新安装 |
-| `--refresh-cache` | - | 强制从 serve 重新下载（忽略本地缓存） |
+| `--refresh` | - | 强制从 serve 重新下载（忽略本地缓存） |
 
 ### 示例
 
@@ -340,7 +341,7 @@ bws i --from-file /path/to/chrome-setup.exe chrome@120
 bws i chrome@120 --force
 
 # 强制从 serve 重新下载（忽略本地缓存）
-bws i chrome@120 --refresh-cache
+bws i chrome@120 --refresh
 ```
 
 ---
@@ -640,6 +641,38 @@ bws alias remove mychrome
 
 ---
 
+## bws update (别名: upgrade, up)
+
+从配置的离线源（serve）下载并更新 bws 到最新版本。
+
+### 用法
+
+```bash
+bws update
+```
+
+### 说明
+
+- 需要先通过 `bws cfg set source <url>` 配置离线源地址
+- 自动从 `/api/v1/bin` 获取当前平台/架构的最新版本
+- 版本相同时不进行任何操作
+- 升级过程：下载新版本 → 备份旧版本 → 替换 → 清理备份
+
+### 示例
+
+> `bws update`（别名 `bws upgrade`、`bws up`）
+
+```bash
+# 配置离线源
+bws cfg set source http://192.168.1.1:8080
+
+# 检查并更新到最新版本
+bws update
+bws up
+```
+
+---
+
 ## bws serve (别名: sv, server)
 
 启动 HTTP 分发服务。配置通过 `bws-serve.ini` 文件管理，首次运行时会自动创建默认配置文件。
@@ -647,10 +680,14 @@ bws alias remove mychrome
 ### 用法
 
 ```bash
-bws sv
+bws sv [-d <目录>]
 ```
 
-`bws sv` 不接受额外的命令行参数，所有配置通过 `bws-serve.ini` 文件管理。
+### 选项
+
+| 选项 | 说明 |
+|------|------|
+| `-d, --dir` | 基础目录（包含 packages/ 和 bin/），默认为程序所在目录 |
 
 ### 配置文件 (bws-serve.ini)
 
@@ -719,10 +756,7 @@ bws cfg <子命令> [参数]
 | `default-browser` | 默认浏览器 | `chrome` |
 | `default-channel` | 默认渠道 | `stable` |
 | `language` | 界面语言（zh/en） | 自动检测 |
-| `log.console-level` | 控制台日志级别 | `info` |
-| `log.file-level` | 文件日志级别 | `debug` |
-| `log.max-size-mb` | 单个日志文件最大大小（MB） | `10` |
-| `log.max-backups` | 保留的备份日志文件数量 | `5` |
+| `log-level` | 日志级别（debug/info/warn/error） | `info` |
 | `repo-path` | 本地仓库路径 | 空 |
 | `source` | 离线源地址 | 空 |
 | `source-serve` | Serve 源开关 | `true` |
@@ -743,7 +777,7 @@ bws cfg get default-browser
 
 # 设置配置项
 bws cfg set default-browser firefox
-bws cfg set log.console-level debug
+bws cfg set log-level debug
 bws cfg set source http://server:8080
 
 # 设置代理

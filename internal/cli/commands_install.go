@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"time"
 )
 
@@ -13,7 +15,7 @@ func runInstall(ctx *Context, args []string) error {
 		{Name: "from-file", Short: "", Usage: "从本地压缩包安装（未指定版本时自动检测）", HasValue: true, Default: ""},
 		{Name: "force", Short: "f", Usage: "强制重新安装", HasValue: false, Default: "false"},
 		{Name: "channel", Short: "c", Usage: "发布渠道", HasValue: true, Default: "stable"},
-		{Name: "refresh-cache", Short: "", Usage: "强制从 serve 重新下载（忽略本地缓存）", HasValue: false, Default: "false"},
+		{Name: "refresh", Short: "", Usage: "强制从 serve 重新下载（忽略本地缓存）", HasValue: false, Default: "false"},
 	}
 
 	flagVals, positional, err := ParseFlags(args, flags)
@@ -25,7 +27,7 @@ func runInstall(ctx *Context, args []string) error {
 	fromFile := flagVals["from-file"]
 	force := flagVals["force"] == "true"
 	channel := flagVals["channel"]
-	refreshCache := flagVals["refresh-cache"] == "true"
+	refreshCache := flagVals["refresh"] == "true"
 
 	if len(positional) == 0 && fromDir == "" && fromFile == "" {
 		return fmt.Errorf("请指定要安装的版本，例如 'bws i chrome@120'")
@@ -51,7 +53,7 @@ func runInstall(ctx *Context, args []string) error {
 		} else if fromFile != "" {
 			ctx.Logger.Debug("[install] 从本地文件安装: file=%s spec=%s@%s force=%v", fromFile, spec.Browser, spec.Version, force)
 		} else {
-		ctx.Logger.Debug("[install] 远程安装: spec=%s@%s channel=%s force=%v refresh-cache=%v", spec.Browser, spec.Version, channel, force, refreshCache)
+		ctx.Logger.Debug("[install] 远程安装: spec=%s@%s channel=%s force=%v refresh=%v", spec.Browser, spec.Version, channel, force, refreshCache)
 	}
 	}
 
@@ -162,7 +164,7 @@ func runInstall(ctx *Context, args []string) error {
 
 	// Use permanent download cache directory instead of a temp directory.
 	// Cached files are kept across installs and only re-downloaded when
-	// the file is missing, corrupt, or --refresh-cache is specified.
+	// the file is missing, corrupt, or --refresh is specified.
 	cacheDir := ctx.Paths.DownloadCacheDir()
 	if cacheDir == "" {
 		return fmt.Errorf("下载缓存目录未配置")
@@ -181,7 +183,7 @@ func runInstall(ctx *Context, args []string) error {
 
 	// Check if the file is already cached and valid.
 	// A cached file is valid when:
-	//   1. --refresh-cache is not set
+	//   1. --refresh is not set
 	//   2. The file exists and is non-empty
 	//   3. If the manifest provides a size, it matches the local file size
 	cacheValid := false
@@ -251,6 +253,15 @@ func runInstall(ctx *Context, args []string) error {
 	}
 
 	ctx.Printf("✓ %s@%s 安装成功\n", record.Browser, record.Version)
+
+	// On Linux Firefox ships a wrapper script in the install directory.
+	// Remind the user to use `bws launch` rather than double-clicking
+	// the wrapper (or firefox-bin) directly, since double-clicking
+	// bypasses the -no-remote and -profile flags and the env vars
+	// (MOZ_ENABLE_WAYLAND, MOZ_DISABLE_SANDBOX) that bws injects.
+	if runtime.GOOS == "linux" && strings.EqualFold(record.Browser, "firefox") {
+		ctx.Printf("  提示：请通过 `bws launch firefox` 启动，而不是双击安装目录下的可执行文件。\n")
+	}
 	return nil
 }
 

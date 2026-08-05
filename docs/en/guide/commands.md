@@ -18,6 +18,7 @@ This document lists all commands of `bws` with detailed descriptions, including 
 | `bws download` / `bws dl` | Download only, do not install |
 | `bws profile` / `bws pf` | Manage browser profiles |
 | `bws alias` | Manage version aliases |
+| `bws update` / `bws upgrade` / `bws up` | Update bws to the latest version from the configured source |
 | `bws serve` / `bws sv` / `bws server` | Start the HTTP distribution service |
 | `bws config` / `bws cfg` | Manage configuration |
 | `bws repo` | Manage the local binary repository |
@@ -308,7 +309,7 @@ bws i --from-file <file> [browser@version]
 | `--from-file <path>` | - | Install from a local archive |
 | `--channel <channel>` | `-c` | Specify the release channel |
 | `--force` | `-f` | Force reinstall |
-| `--refresh-cache` | - | Force re-download from serve (ignore local cache) |
+| `--refresh` | - | Force re-download from serve (ignore local cache) |
 
 ### Examples
 
@@ -340,7 +341,7 @@ bws i --from-file /path/to/chrome-setup.exe chrome@120
 bws i chrome@120 --force
 
 # Force re-download from serve (ignore local cache)
-bws i chrome@120 --refresh-cache
+bws i chrome@120 --refresh
 ```
 
 ---
@@ -640,6 +641,38 @@ bws alias remove mychrome
 
 ---
 
+## bws update (alias: upgrade, up)
+
+Download and update bws to the latest version from the configured serve source.
+
+### Usage
+
+```bash
+bws update
+```
+
+### Notes
+
+- Requires configuring a serve source via `bws cfg set source <url>` first
+- Automatically fetches the latest binary matching the current platform/arch from `/api/v1/bin`
+- No action is taken if the current version is already the latest
+- Upgrade process: download new version → backup old version → replace → cleanup
+
+### Examples
+
+> `bws update` (aliases `bws upgrade`, `bws up`)
+
+```bash
+# Configure serve source
+bws cfg set source http://192.168.1.1:8080
+
+# Check for and install the latest version
+bws update
+bws up
+```
+
+---
+
 ## bws serve (alias: sv, server)
 
 Start the HTTP distribution service. Configuration is managed through the `bws-serve.ini` file, which is automatically created with default settings on the first run.
@@ -670,6 +703,8 @@ The first time you run `bws sv`, a configuration file is automatically created i
 | `sync-interval` | `24h` | Sync interval (supports 30d, 24h, 30m format) |
 | `sync-browsers` | All | List of browsers to sync, comma-separated |
 | `sync-channels` | `stable` | List of channels to sync, comma-separated |
+| `online-fallback` | `true` | Online fallback: automatically fetch packages from online sources when not cached locally |
+| `scan-workers` | `0` | Parallel scan threads, 0 means auto (use CPU core count), range [1, 32] |
 
 ### Examples
 

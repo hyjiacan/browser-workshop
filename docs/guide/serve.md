@@ -54,7 +54,7 @@ sync = false
 sync-interval = 24h
 sync-browsers =
 sync-channels = stable
-online-fallback = false
+online-fallback = true
 scan-workers = 0
 ```
 
@@ -75,7 +75,7 @@ bws sv
 | `sync-interval` | `24h` | 同步间隔（支持 30d、24h、30m 格式） |
 | `sync-browsers` | 全部 | 同步的浏览器列表，逗号分隔 |
 | `sync-channels` | `stable` | 同步的渠道列表，逗号分隔 |
-| `online-fallback` | `false` | 在线回退：本地未命中的包自动从在线源实时下载 |
+| `online-fallback` | `true` | 在线回退：本地未命中的包自动从在线源实时下载 |
 | `scan-workers` | `0` | 并行扫描线程数，`0` 表示自动（使用 CPU 核心数），范围 `[1, 32]` |
 
 ### 启用自动同步

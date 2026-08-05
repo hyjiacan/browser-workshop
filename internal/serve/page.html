@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/logo.png">
 <title>{{.ServerName}} v{{.Version}}</title>
 <style>
   :root {
@@ -64,7 +66,7 @@
     border-radius: 12px;
     display: flex; align-items: center; justify-content: center;
   }
-  .header-logo svg { width: 28px; height: 28px; }
+  .header-logo img { width: 32px; height: 32px; border-radius: 6px; }
   .header-text { flex: 1; }
   .header-text h1 { font-size: 28px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
   .header-text .subtitle { color: var(--text-secondary); font-size: 14px; margin-top: 2px; }
@@ -259,7 +261,7 @@
     .container { padding: 24px 16px 48px; }
     .header { gap: 12px; }
     .header-logo { width: 40px; height: 40px; }
-    .header-logo svg { width: 22px; height: 22px; }
+    .header-logo img { width: 26px; height: 26px; }
     .header-text h1 { font-size: 22px; }
     .stat-card { min-width: calc(50% - 6px); }
     .stat-card .value { font-size: 18px; }
@@ -277,14 +279,7 @@
   <!-- Header -->
   <div class="header">
     <div class="header-logo">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="12" cy="12" r="10"/>
-        <circle cx="12" cy="12" r="4"/>
-        <line x1="12" y1="2" x2="12" y2="6"/>
-        <line x1="12" y1="18" x2="12" y2="22"/>
-        <line x1="2" y1="12" x2="6" y2="12"/>
-        <line x1="18" y1="12" x2="22" y2="12"/>
-      </svg>
+      <img src="/logo.png" alt="logo" width="32" height="32">
     </div>
     <div class="header-text">
       <h1>{{.ServerName}}</h1>

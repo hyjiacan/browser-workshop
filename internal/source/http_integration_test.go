@@ -14,14 +14,20 @@ import (
 	"time"
 
 	bmlog "github.com/bws/bws/internal/log"
+	"github.com/bws/bws/internal/paths"
 	"github.com/bws/bws/internal/serve"
 )
 
 // startServeServerForClient starts a real serve server with the given test
 // packages and returns its base URL. The server is automatically cleaned up
-// when the test finishes.
+// when the test finishes. It also cleans up leftover manifest disk cache
+// entries so that stale caches from previous tests don't pollute results.
 func startServeServerForClient(t *testing.T, packages map[string][]byte) string {
 	t.Helper()
+
+	// Clean manifest disk cache from previous test runs to avoid
+	// port-reuse collisions where a stale cache matches a recycled port.
+	cleanManifestDiskCache(t)
 
 	tmpDir := t.TempDir()
 	packagesDir := filepath.Join(tmpDir, "packages")
@@ -459,5 +465,29 @@ func TestHTTPSourceIntegration_ServerInfo(t *testing.T) {
 	}
 	if m.Server.Version != "test" {
 		t.Errorf("server.version = %q, 期望 \"test\"", m.Server.Version)
+	}
+}
+
+// cleanManifestDiskCache removes all serve manifest cache files so that
+// stale caches from previous test runs (possibly with recycled ports) don't
+// pollute results.
+func cleanManifestDiskCache(t *testing.T) {
+	t.Helper()
+	cacheDir := paths.Default().ManifestCacheDir
+	entries, err := os.ReadDir(cacheDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return
+		}
+		t.Logf("读取 manifest 缓存目录失败: %v", err)
+		return
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if strings.HasPrefix(entry.Name(), "serve_") && strings.HasSuffix(entry.Name(), ".json") {
+			os.Remove(filepath.Join(cacheDir, entry.Name()))
+		}
 	}
 }

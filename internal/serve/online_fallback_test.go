@@ -58,8 +58,8 @@ func newFallbackTestServer(t *testing.T, onlineFallback bool, src SyncSource) *S
 		OnlineSource:   src,
 		OnlineFallback: onlineFallback,
 	})
-	cache, _ := s.loadCache()
-	if err := s.scanPackages(cache); err != nil {
+	cache, _, _ := s.loadCache()
+	if err := s.scanPackages(cache, nil); err != nil {
 		t.Fatalf("scanPackages: %v", err)
 	}
 	return s
@@ -118,8 +118,8 @@ func TestOnlineFallback_ManifestMerge(t *testing.T) {
 	resp := doManifest(t, s)
 
 	wantNames := map[string]bool{
-		"Firefox Setup 141.0.exe":            false,
-		"120.0.6099.109_win64_installer.exe": false,
+		"firefox/Firefox Setup 141.0_win64.exe":      false,
+		"chrome/120.0.6099.109_win64_installer.exe": false,
 	}
 	for _, f := range resp.Data {
 		if _, ok := wantNames[f.Filename]; ok {
@@ -145,7 +145,7 @@ func TestOnlineFallback_ManifestDisabled(t *testing.T) {
 
 	resp := doManifest(t, s)
 	for _, f := range resp.Data {
-		if f.Filename == "Firefox Setup 141.0.exe" {
+		if f.Filename == "firefox/Firefox Setup 141.0.exe" {
 			t.Errorf("online file appeared in manifest despite fallback being disabled")
 		}
 	}
@@ -169,7 +169,7 @@ func TestOnlineFallback_DownloadFetchAndCache(t *testing.T) {
 		},
 	}
 	s := newFallbackTestServer(t, true, src)
-	wantFile := "Firefox Setup 141.0.exe"
+	wantFile := "firefox/Firefox Setup 141.0_win64.exe"
 
 	// First request: not present locally -> fetched from online source.
 	req := downloadReq(wantFile)
@@ -257,8 +257,13 @@ func TestOnlineFallback_ManifestLocalPriority(t *testing.T) {
 	if err := os.MkdirAll(packagesDir, 0o755); err != nil {
 		t.Fatalf("mkdir packages: %v", err)
 	}
-	// Seed a local package with the same filename as the online version.
-	localFile := filepath.Join(packagesDir, "120.0.6099.109_win64_installer.exe")
+	// Seed a local package with the same filename as the online version,
+	// placed in the browser subdirectory.
+	localPath := filepath.Join(packagesDir, "chrome")
+	if err := os.MkdirAll(localPath, 0o755); err != nil {
+		t.Fatalf("mkdir chrome subdir: %v", err)
+	}
+	localFile := filepath.Join(localPath, "120.0.6099.109_win64_installer.exe")
 	if err := os.WriteFile(localFile, []byte("local installer bytes"), 0o644); err != nil {
 		t.Fatalf("write local file: %v", err)
 	}
@@ -270,8 +275,8 @@ func TestOnlineFallback_ManifestLocalPriority(t *testing.T) {
 		OnlineSource:   src,
 		OnlineFallback: true,
 	})
-	cache, _ := s.loadCache()
-	if err := s.scanPackages(cache); err != nil {
+	cache, _, _ := s.loadCache()
+	if err := s.scanPackages(cache, nil); err != nil {
 		t.Fatalf("scanPackages: %v", err)
 	}
 
@@ -280,7 +285,7 @@ func TestOnlineFallback_ManifestLocalPriority(t *testing.T) {
 	count := 0
 	var entry PackageFile
 	for _, f := range resp.Data {
-		if f.Filename == "120.0.6099.109_win64_installer.exe" {
+		if f.Filename == "chrome/120.0.6099.109_win64_installer.exe" {
 			count++
 			entry = f
 		}
@@ -308,7 +313,7 @@ func TestOnlineFallback_ConcurrentDownloadDedup(t *testing.T) {
 		},
 	}
 	s := newFallbackTestServer(t, true, src)
-	wantFile := "Firefox Setup 141.0.exe"
+	wantFile := "firefox/Firefox Setup 141.0.exe"
 
 	doReq := func(code *int) {
 		req := downloadReq(wantFile)

@@ -34,6 +34,35 @@ type SyncVersionInfo struct {
 	Checksum    string // expected checksum hash (empty if unknown); prefixed with algo e.g. "sha256:hash" or "sha1:hash"
 }
 
+// StreamDownloader is an optional interface that SyncSource may implement.
+// When implemented, it enables true streaming downloads where data flows to the
+// client simultaneously with caching to disk (no download-then-serve delay).
+// SyncSource implementations that don't implement this will fall back to the
+// traditional download-then-serve behavior.
+type StreamDownloader interface {
+	StreamDownload(ctx context.Context, url string) (io.ReadCloser, int64, error)
+}
+
+// StreamDownload opens an HTTP connection to url and returns a reader for
+// streaming the response body. This is the standard implementation for
+// HTTP-based SyncSources.
+func StreamDownload(ctx context.Context, url string) (io.ReadCloser, int64, error) {
+	client := &http.Client{Timeout: 30 * time.Minute}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, 0, fmt.Errorf("HTTP %d", resp.StatusCode)
+	}
+	return resp.Body, resp.ContentLength, nil
+}
+
 // SyncSource provides version listing and download capability for sync.
 type SyncSource interface {
 	// ListVersions returns all available versions for the given browser/channel/platform/arch.
@@ -288,8 +317,9 @@ func (sm *syncManager) doSync() {
 						// Check if already exists
 						filename := v.Filename
 						if filename == "" {
-							// Generate filename from URL
-							filename = filepath.Base(v.DownloadURL)
+							// Generate filename from URL, ensuring platform/arch
+							// keywords are present for correct re-scanning.
+							filename = onlineFilename(v)
 						}
 						destPath := filepath.Join(sm.server.packagesDir, filename)
 
@@ -407,6 +437,36 @@ func (sm *syncManager) doSync() {
 						sm.server.logger.Debug("[sync] 下载完成: %s@%s (%s/%s) (耗时 %v)",
 							browser, v.Version, platform, arch, time.Since(dlStart).Round(time.Millisecond))
 
+						// Rename the downloaded file to the canonical filename
+						// (which includes platform/arch info) so that subsequent
+						// scans can correctly detect metadata from the filename.
+						if dlPath != destPath {
+							sm.server.logger.Debug("[sync] 重命名文件: %s -> %s",
+								filepath.Base(dlPath), filename)
+							// Ensure parent directory exists (e.g. packagesDir/firefox/).
+							if mkdirErr := os.MkdirAll(filepath.Dir(destPath), 0o755); mkdirErr != nil {
+								sm.server.logger.Warn("[sync] 创建子目录失败: %s@%s: %v",
+									browser, v.Version, mkdirErr)
+								_ = os.Remove(dlPath)
+								failedDownloads++
+								continue
+							}
+							_ = os.Remove(destPath)
+							if err := os.Rename(dlPath, destPath); err != nil {
+								// Rename can fail across volumes; fall back to copy.
+								sm.server.logger.Debug("[sync] 重命名失败，尝试复制: %s -> %s",
+									dlPath, destPath)
+								if _, cpErr := util.CopyFile(dlPath, destPath); cpErr != nil {
+									sm.server.logger.Warn("[sync] 重命名/复制失败: %s@%s: %v",
+										browser, v.Version, cpErr)
+									_ = os.Remove(dlPath)
+									failedDownloads++
+									continue
+								}
+								_ = os.Remove(dlPath)
+							}
+						}
+
 						syncedFiles++
 						sm.setProgressCount(totalFiles, syncedFiles)
 					}
@@ -418,13 +478,13 @@ func (sm *syncManager) doSync() {
 	// Rescan packages after sync
 	sm.setProgress("正在刷新文件清单...")
 	sm.server.logger.Debug("[sync] 正在刷新文件清单...")
-	cache, _ := sm.server.loadCache()
-	if err := sm.server.scanPackages(cache); err != nil {
+	cache, skipped, _ := sm.server.loadCache()
+	if err := sm.server.scanPackages(cache, skipped); err != nil {
 		sm.setError(fmt.Errorf("rescanning packages: %w", err))
 		sm.server.logger.Warn("[sync] 同步后刷新文件清单失败: %v", err)
 		return
 	}
-	sm.server.saveCache(cache)
+	sm.server.saveCache(cache, skipped)
 
 	sm.setProgress("同步完成")
 	sm.mu.Lock()

@@ -302,8 +302,8 @@ func TestE2E_Manifest_WithPackages(t *testing.T) {
 	createTestFile(t, ts.packagesDir, "firefox_120.0esr_linux64.tar.bz2", []byte("firefox content"))
 
 	// Re-scan to pick up the new files.
-	cache, _ := ts.server.loadCache()
-	if err := ts.server.scanPackages(cache); err != nil {
+	cache, _, _ := ts.server.loadCache()
+	if err := ts.server.scanPackages(cache, nil); err != nil {
 		t.Fatalf("重新扫描失败: %v", err)
 	}
 
@@ -365,8 +365,8 @@ func TestE2E_Download_LocalFile(t *testing.T) {
 	createTestFile(t, ts.packagesDir, "chrome_120.0.6099.109_win64.zip", content)
 
 	// Re-scan to pick up the new file.
-	cache, _ := ts.server.loadCache()
-	_ = ts.server.scanPackages(cache)
+	cache, _, _ := ts.server.loadCache()
+	_ = ts.server.scanPackages(cache, nil)
 
 	resp, body := ts.get("/api/v1/download/chrome_120.0.6099.109_win64.zip")
 	if resp.StatusCode != 200 {
@@ -423,8 +423,8 @@ func TestE2E_Download_Range(t *testing.T) {
 	content := []byte("0123456789ABCDEF")
 	createTestFile(t, ts.packagesDir, "chrome_120.0.6099.109_win64.zip", content)
 
-	cache, _ := ts.server.loadCache()
-	_ = ts.server.scanPackages(cache)
+	cache, _, _ := ts.server.loadCache()
+	_ = ts.server.scanPackages(cache, nil)
 
 	req, err := http.NewRequest("GET", ts.baseURL+"/api/v1/download/chrome_120.0.6099.109_win64.zip", nil)
 	if err != nil {
@@ -453,8 +453,8 @@ func TestE2E_Status(t *testing.T) {
 	ts := startTestServer(t, ServerOptions{})
 
 	createTestFile(t, ts.packagesDir, "chrome_120.0.6099.109_win64.zip", []byte("x"))
-	cache, _ := ts.server.loadCache()
-	_ = ts.server.scanPackages(cache)
+	cache, _, _ := ts.server.loadCache()
+	_ = ts.server.scanPackages(cache, nil)
 
 	resp, body := ts.get("/api/v1/status")
 	if resp.StatusCode != 200 {
@@ -623,9 +623,31 @@ func TestE2E_Bin_PathTraversal(t *testing.T) {
 func TestE2E_Bin_EmptyFilename(t *testing.T) {
 	ts := startTestServer(t, ServerOptions{})
 
-	resp, _ := ts.get("/api/v1/bin/")
-	if resp.StatusCode != 404 {
-		t.Errorf("状态码 = %d, 期望 404", resp.StatusCode)
+	// PUT a test file into the bin directory so the listing is non-empty
+	binFile := filepath.Join(ts.binDir, "bws_2.0.0_windows_amd64.zip")
+	if err := os.WriteFile(binFile, []byte("fake-bin"), 0o644); err != nil {
+		t.Fatalf("创建 bin 测试文件失败: %v", err)
+	}
+
+	resp, body := ts.get("/api/v1/bin/")
+	if resp.StatusCode != 200 {
+		t.Errorf("状态码 = %d, 期望 200", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "application/json") {
+		t.Errorf("Content-Type = %q, 期望包含 application/json", ct)
+	}
+	// Verify the listing contains our file
+	if !strings.Contains(string(body), "bws_2.0.0_windows_amd64.zip") {
+		t.Errorf("响应中未包含测试文件")
+	}
+
+	// Also test without trailing slash
+	resp2, body2 := ts.get("/api/v1/bin")
+	if resp2.StatusCode != 200 {
+		t.Errorf("无尾斜杠 状态码 = %d, 期望 200", resp2.StatusCode)
+	}
+	if !strings.Contains(string(body2), "bws_2.0.0_windows_amd64.zip") {
+		t.Errorf("无尾斜杠响应中未包含测试文件")
 	}
 }
 
@@ -635,8 +657,8 @@ func TestE2E_Root_HTML(t *testing.T) {
 	ts := startTestServer(t, ServerOptions{})
 
 	createTestFile(t, ts.packagesDir, "chrome_120.0.6099.109_win64.zip", []byte("x"))
-	cache, _ := ts.server.loadCache()
-	_ = ts.server.scanPackages(cache)
+	cache, _, _ := ts.server.loadCache()
+	_ = ts.server.scanPackages(cache, nil)
 
 	resp, body := ts.get("/")
 	if resp.StatusCode != 200 {
@@ -730,7 +752,7 @@ func TestE2E_OnlineFallback_DownloadMissing(t *testing.T) {
 		OnlineFallback: true,
 	})
 
-	resp, body := ts.get("/api/v1/download/firefox_120.0esr_win64.zip")
+	resp, body := ts.get("/api/v1/download/firefox/firefox_120.0esr_win64.zip")
 	if resp.StatusCode != 200 {
 		t.Fatalf("状态码 = %d, 期望 200 (在线回退应成功)", resp.StatusCode)
 	}
@@ -758,7 +780,7 @@ func TestE2E_OnlineFallback_ManifestMerged(t *testing.T) {
 		var m ManifestResponse
 		if json.Unmarshal(body, &m) == nil {
 			for _, f := range m.Data {
-				if f.Filename == "firefox_120.0esr_win64.zip" {
+				if f.Filename == "firefox/firefox_120.0esr_win64.zip" {
 					found = true
 					break
 				}
@@ -770,7 +792,7 @@ func TestE2E_OnlineFallback_ManifestMerged(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 	if !found {
-		t.Fatal("manifest 中未找到在线缓存条目 firefox_120.0esr_win64.zip")
+		t.Fatal("manifest 中未找到在线缓存条目 firefox/firefox_120.0esr_win64.zip")
 	}
 }
 
@@ -821,7 +843,7 @@ func TestE2E_OnlineFallback_AfterDownloadInManifest(t *testing.T) {
 	})
 
 	// Step 1: Download the file via online fallback.
-	resp, body := ts.get("/api/v1/download/firefox_121.0esr_win64.zip")
+	resp, body := ts.get("/api/v1/download/firefox/firefox_121.0esr_win64.zip")
 	if resp.StatusCode != 200 {
 		t.Fatalf("首次下载失败: 状态码 = %d", resp.StatusCode)
 	}
@@ -839,7 +861,7 @@ func TestE2E_OnlineFallback_AfterDownloadInManifest(t *testing.T) {
 
 	var found bool
 	for _, f := range m.Data {
-		if f.Filename == "firefox_121.0esr_win64.zip" {
+		if f.Filename == "firefox/firefox_121.0esr_win64.zip" {
 			found = true
 			break
 		}
@@ -858,8 +880,8 @@ func TestE2E_Scan_SupportedExtensions(t *testing.T) {
 	createTestFile(t, ts.packagesDir, "firefox_120.0esr_win64.exe", []byte("exe"))
 	createTestFile(t, ts.packagesDir, "chromium_119.0_linux64.tar.bz2", []byte("bz2"))
 
-	cache, _ := ts.server.loadCache()
-	if err := ts.server.scanPackages(cache); err != nil {
+	cache, _, _ := ts.server.loadCache()
+	if err := ts.server.scanPackages(cache, nil); err != nil {
 		t.Fatalf("扫描失败: %v", err)
 	}
 
@@ -891,8 +913,8 @@ func TestE2E_Scan_UnsupportedSkipped(t *testing.T) {
 	createTestFile(t, ts.packagesDir, "config.json", []byte("{}"))
 	createTestFile(t, ts.packagesDir, "notes.md", []byte("# Notes"))
 
-	cache, _ := ts.server.loadCache()
-	if err := ts.server.scanPackages(cache); err != nil {
+	cache, _, _ := ts.server.loadCache()
+	if err := ts.server.scanPackages(cache, nil); err != nil {
 		t.Fatalf("扫描失败: %v", err)
 	}
 
@@ -910,8 +932,8 @@ func TestE2E_Scan_ChecksumFormat(t *testing.T) {
 	ts := startTestServer(t, ServerOptions{})
 
 	createTestFile(t, ts.packagesDir, "chrome_120.0.6099.109_win64.zip", []byte("checksum test"))
-	cache, _ := ts.server.loadCache()
-	_ = ts.server.scanPackages(cache)
+	cache, _, _ := ts.server.loadCache()
+	_ = ts.server.scanPackages(cache, nil)
 
 	_, body := ts.get("/api/v1/manifest")
 	var m ManifestResponse
@@ -924,4 +946,88 @@ func TestE2E_Scan_ChecksumFormat(t *testing.T) {
 	if !strings.HasPrefix(m.Data[0].Checksum, "xxh3:") {
 		t.Errorf("checksum = %q, 期望以 \"xxh3:\" 开头", m.Data[0].Checksum)
 	}
+}
+
+// TestLoadCache_BackslashNormalization verifies that loadCache normalizes
+// backslash-separated paths from old cache files into forward-slash keys.
+// Without this, every file scanned under the current (forward-slash) format
+// would miss in the cache and be re-scanned as "new", while the old
+// backslash entries would be logged as "已从磁盘删除".
+func TestLoadCache_BackslashNormalization(t *testing.T) {
+	baseDir := t.TempDir()
+	serveCacheDir := filepath.Join(baseDir, "cache", "serve")
+	if err := os.MkdirAll(serveCacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cachePath := filepath.Join(serveCacheDir, "scan-cache.json")
+
+	// Simulate an old Windows cache file with backslash paths.
+	oldCache := `{
+  "version": 1,
+  "files": {
+    "Chrome\\x64\\40.0.2214.91_chrome64_stable_windows_installer.exe": {
+      "size": 12345,
+      "mod": "2025-01-01T00:00:00Z",
+      "sum": "abcd1234"
+    },
+    "Firefox\\linux64\\firefox_120.0esr.tar.bz2": {
+      "size": 67890,
+      "mod": "2025-01-02T00:00:00Z",
+      "sum": "ef567890"
+    }
+  },
+  "skipped": {
+    "Chrome\\x64\\readme.txt": true
+  }
+}`
+	if err := os.WriteFile(cachePath, []byte(oldCache), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := &Server{cachePath: cachePath}
+	files, skipped, err := srv.loadCache()
+	if err != nil {
+		t.Fatalf("loadCache: %v", err)
+	}
+
+	// All keys should use forward slashes.
+	for k := range files {
+		if filepath.Separator == '\\' && strings.Contains(k, "\\") {
+			t.Errorf("cache key should use forward slashes, got: %q", k)
+		}
+	}
+	for k := range skipped {
+		if filepath.Separator == '\\' && strings.Contains(k, "\\") {
+			t.Errorf("skipped key should use forward slashes, got: %q", k)
+		}
+	}
+
+	// Verify the entry is present under the normalized name.
+	normKey := "Chrome/x64/40.0.2214.91_chrome64_stable_windows_installer.exe"
+	if entry, ok := files[normKey]; !ok {
+		t.Errorf("normalized key %q missing from cache (keys: %v)", normKey, keysOf(files))
+	} else if entry.Size != 12345 {
+		t.Errorf("size = %d, want 12345", entry.Size)
+	}
+
+	expectedSkippedKey := "Chrome/x64/readme.txt"
+	if !skipped[expectedSkippedKey] {
+		t.Errorf("normalized skipped key %q missing (keys: %v)", expectedSkippedKey, keysOfBool(skipped))
+	}
+}
+
+func keysOf(m map[string]cacheEntry) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+func keysOfBool(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }

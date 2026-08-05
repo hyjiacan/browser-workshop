@@ -6,6 +6,7 @@
 //   - GET /api/v1/manifest     - 文件清单（本地 + 在线缓存，含 XXH3 校验和）
 //   - GET /api/v1/download/{filename} - 文件下载（支持 Range 断点续传）
 //   - GET /api/v1/status       - 服务状态
+//   - GET /api/v1/bin          - 客户端二进制文件列表 (JSON)
 //   - GET /api/v1/bin/{filename} - 客户端二进制下载
 //   - GET /                    - HTML 帮助页
 package serve
@@ -43,6 +44,9 @@ import (
 
 //go:embed page.html
 var pageHTML embed.FS
+
+//go:embed logo.png logo.ico
+var logoFiles embed.FS
 
 const (
 	serverName   = "bws-serve"
@@ -171,6 +175,7 @@ type PackageFile struct {
 type cacheFile struct {
 	Version int                   `json:"version"`
 	Files   map[string]cacheEntry `json:"files"`
+	Skipped map[string]bool       `json:"skipped,omitempty"` // files skipped as unsupported (relPath -> true)
 }
 
 // cacheEntry stores cached checksum info for a single file.
@@ -382,25 +387,6 @@ func (s *Server) Start() error {
 		return fmt.Errorf("creating serve cache directory: %w", err)
 	}
 
-	// Load checksum cache
-	cache, err := s.loadCache()
-	if err != nil {
-		s.logger.Debug("[serve] 加载缓存失败（将使用空缓存）: %v", err)
-	} else if len(cache) > 0 {
-		s.logger.Debug("[serve] 已加载缓存: %d 个条目", len(cache))
-	}
-
-	// Scan packages and compute checksums
-	if err := s.scanPackages(cache); err != nil {
-		s.logger.Error("[serve] 扫描软件包失败: %v", err)
-		return fmt.Errorf("scanning packages: %w", err)
-	}
-
-	// Save updated cache
-	if err := s.saveCache(cache); err != nil {
-		s.logger.Warn("[serve] 保存缓存失败: %v", err)
-	}
-
 	s.startTime = time.Now()
 
 	// Start sync manager
@@ -428,6 +414,9 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/v1/sync/status", s.handleSyncStatus)
 	mux.HandleFunc("/api/v1/sync/trigger", s.handleSyncTrigger)
 	mux.HandleFunc("/api/v1/bin/", s.handleBin)
+	mux.HandleFunc("/api/v1/bin", s.handleBin) // directory listing (no filename)
+	mux.HandleFunc("/favicon.ico", s.handleFavicon)
+	mux.HandleFunc("/logo.png", s.handleLogo)
 	mux.HandleFunc("/", s.handleRoot)
 
 	// Wrap mux with optional auth middleware
@@ -445,6 +434,33 @@ func (s *Server) Start() error {
 	}
 
 	s.printStartupInfo()
+
+	// Start package scanning in background – files are incrementally discovered
+	// and checksums are persisted to disk as each file is computed, so the web
+	// UI is immediately available.
+	go func() {
+		cache, skipped, err := s.loadCache()
+		if err != nil {
+			s.logger.Debug("[serve] 加载缓存失败（将使用空缓存）: %v", err)
+			cache = make(map[string]cacheEntry)
+			skipped = make(map[string]bool)
+		} else if len(cache) > 0 {
+			s.logger.Debug("[serve] 已加载缓存: %d 个条目", len(cache))
+		} else {
+			cache = make(map[string]cacheEntry)
+		}
+		if skipped == nil {
+			skipped = make(map[string]bool)
+		}
+
+		s.logger.Info("[serve] 后台扫描已启动")
+		scanStart := time.Now()
+		if err := s.scanPackages(cache, skipped); err != nil {
+			s.logger.Error("[serve] 后台扫描失败: %v", err)
+		} else {
+			s.logger.Info("[serve] 后台扫描完成 (耗时 %v)", time.Since(scanStart).Round(time.Millisecond))
+		}
+	}()
 
 	// Start online cache preload AFTER printing startup info so logs don't interleave.
 	if s.onlineFallback && s.onlineSrc != nil {
@@ -585,7 +601,7 @@ func isSupportedExtension(base string) bool {
 // scanPackages scans the packages directory recursively and builds the file list.
 // Uses a worker pool for parallel checksum computation. The number of workers is
 // determined by s.scanWorkers (0 = runtime.NumCPU(), clamped to [1, 32]).
-func (s *Server) scanPackages(cache map[string]cacheEntry) error {
+func (s *Server) scanPackages(cache map[string]cacheEntry, skipped map[string]bool) error {
 	// Serialize concurrent scan calls.
 	s.scanMu.Lock()
 	defer s.scanMu.Unlock()
@@ -593,6 +609,9 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 	scanStart := time.Now()
 	if cache == nil {
 		cache = make(map[string]cacheEntry)
+	}
+	if skipped == nil {
+		skipped = make(map[string]bool)
 	}
 	s.logger.Info("[scan] 正在扫描目录: %s", s.packagesDir)
 
@@ -623,6 +642,7 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 	var allFiles []fileEntry
 	seenFiles := make(map[string]bool)
 	skippedUnsupported := 0
+	skippedDirty := false
 
 	err = filepath.WalkDir(s.packagesDir, func(absPath string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -634,14 +654,30 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 		// Filter by supported installer/archive extension. This skips
 		// non-package files like .txt, .json, .html, .md, .png, .jpg, etc.
 		if !isSupportedExtension(d.Name()) {
+			relPath, err := filepath.Rel(s.packagesDir, absPath)
+			if err != nil {
+				return nil
+			}
+			// Normalize to forward slashes for cross-platform consistency
+			// (filepath.Rel returns backslashes on Windows, but manifest
+			// filenames and online cache keys always use forward slashes).
+			relPath = filepath.ToSlash(relPath)
+			// Only log newly encountered skipped files; previously-skipped files
+			// (tracked in the cache) are silently suppressed.
+			if !skipped[relPath] {
+				s.logger.Debug("[scan] 跳过不支持的文件类型: %s", relPath)
+				skipped[relPath] = true
+				skippedDirty = true
+			}
 			skippedUnsupported++
-			s.logger.Debug("[scan] 跳过不支持的文件类型: %s", d.Name())
 			return nil
 		}
 		relPath, err := filepath.Rel(s.packagesDir, absPath)
 		if err != nil {
 			return nil
 		}
+		// Normalize to forward slashes for cross-platform consistency.
+		relPath = filepath.ToSlash(relPath)
 		info, err := d.Info()
 		if err != nil {
 			return nil
@@ -674,34 +710,46 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 	s.logger.Debug("[scan] 目录遍历完成: %d 个有效文件, 跳过 %d 个非安装包文件 (耗时 %v)",
 		len(allFiles), skippedUnsupported, time.Since(scanStart).Round(time.Millisecond))
 
-	// Phase 2: separate cache hits and misses
+	// Phase 2: separate cache hits and misses, add cache hits immediately
 	type missEntry struct {
 		idx     int
 		relPath string
 		absPath string
 		info    os.FileInfo
+		reason  string // "新增" or "变更"
 	}
-	var files []PackageFile
-	var totalSize int64
 	cacheHits := 0
 	misses := make([]missEntry, 0)
-	files = make([]PackageFile, len(allFiles))
+
+	// Initialize files for incremental updates (reset previous state)
+	s.mu.Lock()
+	s.files = nil
+	s.totalSize = 0
+	s.mu.Unlock()
 
 	for i, fe := range allFiles {
 		cached, ok := cache[fe.relPath]
 		if ok && cached.Mtime.Equal(fe.info.ModTime()) && cached.Size == fe.info.Size() {
-			// Cache hit
+			// Cache hit (unchanged) – add to public list immediately
 			pkg := s.parsePackageFile(scanner, fe.relPath, fe.info.Size(), cached.Checksum)
-			files[i] = pkg
-			totalSize += fe.info.Size()
+			s.mu.Lock()
+			s.files = append(s.files, pkg)
+			s.totalSize += fe.info.Size()
+			s.mu.Unlock()
 			cacheHits++
+			s.logger.Trace("[scan] 未变更: %s (缓存命中)", fe.relPath)
 		} else {
 			// Cache miss - needs checksum computation
+			reason := "新增"
+			if ok {
+				reason = "变更"
+			}
 			misses = append(misses, missEntry{
 				idx:     i,
 				relPath: fe.relPath,
 				absPath: fe.absPath,
 				info:    fe.info,
+				reason:  reason,
 			})
 		}
 	}
@@ -770,7 +818,7 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 			missMap[m.idx] = m
 		}
 
-		// Collect results
+		// Collect results – persist each checksum to disk immediately after computation
 		for r := range results {
 			if r.err != nil {
 				s.logger.Warn("[scan] 计算校验和失败: %s: %v", r.relPath, r.err)
@@ -781,71 +829,57 @@ func (s *Server) scanPackages(cache map[string]cacheEntry) error {
 				continue
 			}
 			pkg := s.parsePackageFile(scanner, r.relPath, m.info.Size(), r.checksum)
-			files[r.idx] = pkg
-			totalSize += m.info.Size()
-			// Update cache
+
+			// Add to public file list immediately so the UI can show it
+			s.mu.Lock()
+			s.files = append(s.files, pkg)
+			s.totalSize += m.info.Size()
+			s.mu.Unlock()
+
+			// Update cache and persist to disk incrementally
 			cache[r.relPath] = cacheEntry{
 				Mtime:    m.info.ModTime(),
 				Checksum: r.checksum,
 				Size:     m.info.Size(),
 			}
-		}
-
-		// 及时保存缓存，避免程序意外中断导致全部 checksum 重算
-		if err := s.saveCache(cache); err != nil {
-			s.logger.Warn("[scan] 增量保存缓存失败: %v", err)
-		} else {
-			s.logger.Debug("[scan] 校验和计算完成，缓存已及时保存")
+			if err := s.saveCache(cache, skipped); err != nil {
+				s.logger.Warn("[scan] 增量保存缓存失败: %s: %v", r.relPath, err)
+			}
+			s.logger.Debug("[scan] %s: %s (%s, 校验和 %s)", m.reason, r.relPath, util.FormatSize(m.info.Size()), r.checksum)
 		}
 	}
 
-	// Phase 4: remove nil entries (failed checksums) and cleanup
-	validFiles := files[:0]
-	for _, f := range files {
-		if f.Filename != "" {
-			validFiles = append(validFiles, f)
-		}
-	}
-	files = validFiles
-
+	// Phase 4: cleanup, sort, logging
 	// Clean up cache entries for deleted files
+	deletedCount := 0
 	for name := range cache {
 		if !seenFiles[name] {
+			s.logger.Debug("[scan] 消失: %s (已从磁盘删除)", name)
 			delete(cache, name)
+			deletedCount++
 		}
+	}
+	if deletedCount > 0 {
+		_ = s.saveCache(cache, skipped)
+	} else if skippedDirty {
+		// Persist newly encountered skipped-file entries so they are
+		// suppressed on the next scan even when no package files changed.
+		_ = s.saveCache(cache, skipped)
 	}
 
 	// Sort files by filename for consistent output
-	sort.Slice(files, func(i, j int) bool {
-		return files[i].Filename < files[j].Filename
-	})
-
-	// Print discovery log for each valid file.
-	// 新计算 checksum 的文件使用 Info 级别，缓存命中的文件使用 Debug 级别。
-	// 构建 seenMisses 集合用于区分变更项与未变更项
-	missedFiles := make(map[string]bool, len(misses))
-	for _, m := range misses {
-		missedFiles[m.relPath] = true
-	}
-	for _, f := range files {
-		if missedFiles[f.Filename] {
-			s.logger.Info("[scan] 发现: %s（%s/%s, 版本 %s, %s, %s）",
-				f.Filename, f.Platform, f.Architecture, f.Version, f.Browser, util.FormatSize(f.Size))
-		} else {
-			s.logger.Debug("[scan] 发现: %s（%s/%s, 版本 %s, %s, %s）",
-				f.Filename, f.Platform, f.Architecture, f.Version, f.Browser, util.FormatSize(f.Size))
-		}
-	}
-
 	s.mu.Lock()
-	s.files = files
-	s.totalSize = totalSize
+	sort.Slice(s.files, func(i, j int) bool {
+		return s.files[i].Filename < s.files[j].Filename
+	})
+	fileCount := len(s.files)
+	totalSize := s.totalSize
 	s.mu.Unlock()
 
-	computedSuccessfully := len(files) - cacheHits
+	computedSuccessfully := fileCount - cacheHits
 
-	s.logger.Info("[scan] 扫描完成: %d 个文件 (缓存命中 %d, 新计算 %d, 跳过 %d), 总大小 %s (耗时 %v)",
-		len(files), cacheHits, computedSuccessfully, skippedUnsupported, util.FormatSize(totalSize), time.Since(scanStart).Round(time.Millisecond))
+	s.logger.Info("[scan] 扫描完成: %d 个文件 (缓存命中 %d, 新增/变更 %d, 消失 %d, 跳过 %d), 总大小 %s (耗时 %v)",
+		fileCount, cacheHits, computedSuccessfully, deletedCount, skippedUnsupported, util.FormatSize(totalSize), time.Since(scanStart).Round(time.Millisecond))
 
 	return nil
 }
@@ -906,39 +940,62 @@ func computeXXH3(path string) (string, error) {
 	return fmt.Sprintf("%016x", h.Sum64()), nil
 }
 
-// loadCache loads the checksum cache from disk.
-func (s *Server) loadCache() (map[string]cacheEntry, error) {
+// loadCache loads the checksum cache and skipped-files set from disk.
+func (s *Server) loadCache() (map[string]cacheEntry, map[string]bool, error) {
 	data, err := os.ReadFile(s.cachePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return make(map[string]cacheEntry), nil
+			return make(map[string]cacheEntry), make(map[string]bool), nil
 		}
-		return nil, err
+		return nil, nil, err
 	}
 
 	var cf cacheFile
 	if err := json.Unmarshal(data, &cf); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if cf.Version != cacheVersion {
-		return make(map[string]cacheEntry), nil
+		return make(map[string]cacheEntry), make(map[string]bool), nil
 	}
 
 	if cf.Files == nil {
-		return make(map[string]cacheEntry), nil
+		cf.Files = make(map[string]cacheEntry)
+	}
+	if cf.Skipped == nil {
+		cf.Skipped = make(map[string]bool)
 	}
 
-	return cf.Files, nil
+	// Normalize all file paths to forward slashes.
+	// Old cache files on Windows may contain backslash separators (e.g.
+	// "Chrome\x64\setup.exe") while the current scan always uses forward
+	// slashes (filepath.ToSlash). Without normalization the old keys
+	// won't match, causing every file to be re-scanned as "new" and the
+	// old entries to be logged as "已从磁盘删除" (but the files are
+	// still there – only the path format changed).
+	normalizedFiles := make(map[string]cacheEntry, len(cf.Files))
+	for k, v := range cf.Files {
+		normalizedFiles[filepath.ToSlash(k)] = v
+	}
+	cf.Files = normalizedFiles
+
+	normalizedSkipped := make(map[string]bool, len(cf.Skipped))
+	for k, v := range cf.Skipped {
+		normalizedSkipped[filepath.ToSlash(k)] = v
+	}
+	cf.Skipped = normalizedSkipped
+
+	return cf.Files, cf.Skipped, nil
 }
 
-// saveCache saves the checksum cache to disk.
+// saveCache saves the checksum cache and skipped-files set to disk.
 // 采用原子写入：先写入临时文件，成功后重命名为正式文件名，
 // 避免写入过程中程序意外中断导致缓存文件损坏。
-func (s *Server) saveCache(cache map[string]cacheEntry) error {
+func (s *Server) saveCache(cache map[string]cacheEntry, skipped map[string]bool) error {
 	cf := cacheFile{
 		Version: cacheVersion,
 		Files:   cache,
+		Skipped: skipped,
 	}
 
 	data, err := json.MarshalIndent(cf, "", "  ")
@@ -978,6 +1035,16 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Force-refresh online cache when requested by the client.
+	// This allows the client to instruct the server to pull fresh data
+	// from the upstream source before merging with local files.
+	if r.URL.Query().Get("refresh") == "true" {
+		if s.onlineFallback && s.onlineCacheMgr != nil {
+			s.logger.Debug("[manifest] 客户端请求强制刷新在线缓存")
+			s.onlineCacheMgr.RefreshAll()
+		}
+	}
+
 	s.mu.RLock()
 	localFiles := make([]PackageFile, len(s.files))
 	copy(localFiles, s.files)
@@ -986,6 +1053,8 @@ func (s *Server) handleManifest(w http.ResponseWriter, r *http.Request) {
 	totalLocal := len(localFiles)
 
 	// Merge online cache entries when online fallback is enabled.
+	// No filtering is done server-side; the full merged list is returned
+	// and the client is responsible for all filtering logic.
 	var merged []PackageFile
 	if s.onlineFallback && s.onlineCacheMgr != nil {
 		onlineFiles := s.onlineCacheMgr.GetAll()
@@ -1020,6 +1089,13 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Override server-level WriteTimeout (30s) for downloads — slow clients
+	// or large files would otherwise hit the deadline and drop the connection.
+	if rc := http.NewResponseController(w); rc != nil {
+		// Zero time clears the deadline; download stream has its own 30-min timeout.
+		_ = rc.SetWriteDeadline(time.Time{})
+	}
+
 	// Path is /api/v1/download/{filename}
 	filename := strings.TrimPrefix(r.URL.Path, "/api/v1/download/")
 	if filename == "" {
@@ -1035,26 +1111,45 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check file exists and is not a directory
+		// Check file exists and is not a directory
 	info, err := os.Stat(fullPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// Online fallback: fetch the package on demand when not cached locally.
+			// Online fallback: stream the package from upstream to client
+			// and cache locally simultaneously (single-flight for concurrency).
 			if s.onlineFallback && s.onlineSrc != nil {
-				s.logger.Info("[download] 本地未找到，触发在线回退: %s", filename)
-				if localPath, ferr := s.fetchOnlinePackage(filename); ferr == nil {
-					if dlInfo, statErr := os.Stat(localPath); statErr == nil {
-						s.logger.Info("[online] 在线回退成功: %s (%s)", filename, util.FormatSize(dlInfo.Size()))
-					} else {
-						s.logger.Info("[online] 在线回退成功: %s", filename)
+				s.dlMu.Lock()
+				if waitCh, ok := s.dlInflight[filename]; ok {
+					// Another request is already streaming this file; wait and serve cached.
+					s.dlMu.Unlock()
+					s.logger.Debug("[online] 等待并发下载完成: %s", filename)
+					<-waitCh
+					if info, statErr := os.Stat(fullPath); statErr == nil && !info.IsDir() {
+						s.logger.Debug("[online] 并发下载已完成，复用文件: %s", filename)
+						servePackageFile(w, r, fullPath)
+						return
 					}
-					servePackageFile(w, r, localPath)
-					return
-				} else {
-					s.logger.Warn("[online] 在线回退失败: %s: %v", filename, ferr)
+					s.logger.Warn("[online] 并发下载失败: %s", filename)
 					http.Error(w, "file not found", http.StatusNotFound)
 					return
 				}
+				waitCh := make(chan struct{})
+				s.dlInflight[filename] = waitCh
+				s.dlMu.Unlock()
+
+				s.logger.Info("[download] 本地未找到，触发在线流式回退: %s", filename)
+				ferr := s.streamOnlineDownload(filename, w, r)
+
+				// Signal waiters and clean up inflight slot.
+				s.dlMu.Lock()
+				delete(s.dlInflight, filename)
+				s.dlMu.Unlock()
+				close(waitCh)
+
+				if ferr != nil {
+					s.logger.Warn("[online] 在线回退失败: %s: %v", filename, ferr)
+				}
+				return
 			}
 			s.logger.Debug("[download] 文件不存在: %s", filename)
 			http.Error(w, "file not found", http.StatusNotFound)
@@ -1135,10 +1230,10 @@ func (s *Server) handleBin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Path is /api/v1/bin/{filename}
+	// Listing mode: GET /api/v1/bin or /api/v1/bin/
 	filename := strings.TrimPrefix(r.URL.Path, "/api/v1/bin/")
-	if filename == "" {
-		http.NotFound(w, r)
+	if filename == "" || r.URL.Path == "/api/v1/bin" {
+		s.handleBinList(w, r)
 		return
 	}
 
@@ -1174,6 +1269,93 @@ func (s *Server) handleBin(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", info.Name()))
 	w.Header().Set("Content-Type", "application/octet-stream")
 	http.ServeFile(w, r, fullPath)
+}
+
+// binEntry is a single entry in the bin directory listing.
+type binEntry struct {
+	Filename string `json:"filename"`
+	Platform string `json:"platform"`
+	Arch     string `json:"arch"`
+	Version  string `json:"version"`
+	Size     int64  `json:"size"`
+}
+
+// handleBinList returns a JSON listing of all files in the bin directory.
+func (s *Server) handleBinList(w http.ResponseWriter, _ *http.Request) {
+	entries, err := os.ReadDir(s.binDir)
+	if err != nil {
+		s.logger.Error("[bin] 读取目录失败: %v", err)
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	var list []binEntry
+	for _, entry := range entries {
+		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		plat, arch := detectPlatformArch(entry.Name())
+		ver := extractBinVersion(entry.Name())
+		list = append(list, binEntry{
+			Filename: entry.Name(),
+			Platform: plat,
+			Arch:     arch,
+			Version:  ver,
+			Size:     info.Size(),
+		})
+	}
+
+	type binListResponse struct {
+		Status string     `json:"status"`
+		Data   []binEntry `json:"data"`
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	json.NewEncoder(w).Encode(binListResponse{Status: "ok", Data: list})
+}
+
+// extractBinVersion extracts the version from a bws binary filename.
+// e.g. "bws_1.0.0-beta-45-gec99964_windows_amd64.zip" → "1.0.0-beta-45-gec99964"
+// e.g. "bws_1.0.0_windows_amd64.zip" → "1.0.0"
+func extractBinVersion(name string) string {
+	name = strings.TrimSuffix(name, ".zip")
+	name = strings.TrimPrefix(name, "bws_")
+	// The version segment ends before the last occurrence of _<platform>
+	for _, plat := range []string{"windows", "linux", "darwin", "macos"} {
+		suffix := "_" + plat
+		if idx := strings.LastIndex(name, suffix); idx >= 0 {
+			return name[:idx]
+		}
+	}
+	return name
+}
+
+// handleFavicon serves the favicon.ico file.
+func (s *Server) handleFavicon(w http.ResponseWriter, r *http.Request) {
+	data, err := logoFiles.ReadFile("logo.ico")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "image/x-icon")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Write(data)
+}
+
+// handleLogo serves the logo.png file.
+func (s *Server) handleLogo(w http.ResponseWriter, r *http.Request) {
+	data, err := logoFiles.ReadFile("logo.png")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Write(data)
 }
 
 // handleRoot returns the HTML help page.
@@ -1423,15 +1605,75 @@ func mergeManifest(local, online []PackageFile) []PackageFile {
 // the explicit Filename field and falls back to the URL-decoded base name of
 // the download URL (so URL-encoded names like "Firefox%20Setup%20..." become
 // the real "Firefox Setup ...").
+// When the resulting filename lacks platform/arch keywords that the scanner
+// can detect, a suffix like "_linux64" or "_win64" is inserted so that
+// downloaded files can be correctly re-scanned later.
+// Online packages are stored in a browser subdirectory (e.g. "firefox/"
+// "chrome/") so that different browsers' packages don't collide.
 func onlineFilename(v SyncVersionInfo) string {
+	var base string
 	if v.Filename != "" {
-		return v.Filename
+		base = v.Filename
+	} else {
+		base = filepath.Base(v.DownloadURL)
+		if decoded, err := url.PathUnescape(base); err == nil && decoded != "" {
+			base = decoded
+		}
 	}
-	base := filepath.Base(v.DownloadURL)
-	if decoded, err := url.PathUnescape(base); err == nil && decoded != "" {
-		return decoded
+	// Insert platform_arch suffix before the extension, but only when
+	// both platform and arch are known, and the filename doesn't already
+	// contain scanner-recognizable platform keywords.
+	if !scannerPlatformKeywordInFilename(base) && v.Platform != "" && v.Arch != "" {
+		suffix := platformArchAbbreviation(v.Platform, v.Arch)
+		ext := filepath.Ext(base)
+		nameWithoutExt := strings.TrimSuffix(base, ext)
+		base = fmt.Sprintf("%s_%s%s", nameWithoutExt, suffix, ext)
+	}
+	// Prefix with browser subdirectory so online packages are organized
+	// by browser type (e.g. "firefox/firefox-68.9.0esr_linux64.tar.bz2").
+	if v.Browser != "" {
+		return v.Browser + "/" + base
 	}
 	return base
+}
+
+// scannerPlatformKeywordInFilename checks whether the filename contains any
+// platform keyword that the scanner's detectPlatform can recognize.
+func scannerPlatformKeywordInFilename(name string) bool {
+	lower := strings.ToLower(name)
+	return strings.Contains(lower, "windows") ||
+		strings.Contains(lower, "win64") ||
+		strings.Contains(lower, "win32") ||
+		strings.Contains(lower, "linux64") ||
+		strings.Contains(lower, "linux") ||
+		strings.Contains(lower, "macos") ||
+		strings.Contains(lower, "mac64") ||
+		strings.Contains(lower, "macarm64")
+}
+
+// platformArchAbbreviation returns a scanner-compatible abbreviation for the
+// given platform and architecture.
+func platformArchAbbreviation(platform, arch string) string {
+	switch {
+	case platform == "windows" && (arch == "amd64" || arch == "64"):
+		return "win64"
+	case platform == "windows" && (arch == "386" || arch == "32"):
+		return "win32"
+	case platform == "windows" && arch == "arm64":
+		return "winarm64"
+	case platform == "darwin" && (arch == "amd64" || arch == "64"):
+		return "mac64"
+	case platform == "darwin" && arch == "arm64":
+		return "macarm64"
+	case platform == "linux" && (arch == "amd64" || arch == "64"):
+		return "linux64"
+	case platform == "linux" && (arch == "386" || arch == "32"):
+		return "linux32"
+	case platform == "linux" && arch == "arm64":
+		return "linuxarm64"
+	default:
+		return fmt.Sprintf("%s_%s", platform, arch)
+	}
 }
 
 // fetchOnlinePackage downloads a package on demand from the online source and
@@ -1498,6 +1740,11 @@ func (s *Server) doOnlineDownload(filename string) error {
 	destPath := filepath.Join(s.packagesDir, filename)
 	if downloadedPath != destPath {
 		s.logger.Debug("[online] 重命名文件: %s -> %s", filepath.Base(downloadedPath), filename)
+		// Ensure parent directory exists (e.g. packagesDir/firefox/).
+		if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+			_ = os.Remove(downloadedPath)
+			return fmt.Errorf("创建子目录失败: %w", err)
+		}
 		// Remove a stale destination if it exists, then rename.
 		_ = os.Remove(destPath)
 		if err := os.Rename(downloadedPath, destPath); err != nil {
@@ -1563,6 +1810,261 @@ func (s *Server) doOnlineDownload(filename string) error {
 		s.logger.Debug("[online] 文件已就绪: %s (%s)", destPath, util.FormatSize(fi.Size()))
 	}
 
+	return nil
+}
+
+// streamOnlineDownload resolves the upstream URL for filename and serves the
+// package to the client. If the SyncSource implements StreamDownloader, data
+// is streamed simultaneously to the client and local disk (client sees progress
+// immediately). Otherwise it falls back to full download before serving.
+func (s *Server) streamOnlineDownload(filename string, w http.ResponseWriter, r *http.Request) error {
+	info, err := s.findOnlinePackage(filename)
+	if err != nil {
+		http.Error(w, "file not found", http.StatusNotFound)
+		return err
+	}
+
+	// If the sync source supports streaming, do a true streaming download.
+	if streamer, ok := s.onlineSrc.(StreamDownloader); ok {
+		return s.doStreamDownload(filename, info, streamer, w)
+	}
+
+	// Fallback path: full download → rename → sync checksum → serve.
+	s.logger.Info("[online] 开始下载: %s", filename)
+	downloadedPath, err := s.onlineSrc.Download(info.url, s.packagesDir, nil)
+	if err != nil {
+		http.Error(w, "file not found", http.StatusNotFound)
+		return fmt.Errorf("在线下载失败: %w", err)
+	}
+	s.logger.Info("[online] 下载完成: %s", filename)
+
+	// Rename URL-encoded base name to canonical filename.
+	destPath := filepath.Join(s.packagesDir, filename)
+	if downloadedPath != destPath {
+		// Ensure parent directory exists.
+		if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+			_ = os.Remove(downloadedPath)
+			http.Error(w, "internal server error", http.StatusInternalServerError)
+			return fmt.Errorf("创建子目录失败: %w", err)
+		}
+		_ = os.Remove(destPath)
+		if renameErr := os.Rename(downloadedPath, destPath); renameErr != nil {
+			if _, copyErr := util.CopyFile(downloadedPath, destPath); copyErr != nil {
+				_ = os.Remove(downloadedPath)
+				http.Error(w, "internal server error", http.StatusInternalServerError)
+				return fmt.Errorf("重命名下载文件失败: %w", copyErr)
+			}
+			_ = os.Remove(downloadedPath)
+		}
+	}
+
+	// Synchronous checksum verification (for the non-streaming fallback path,
+	// we can reject the response before data is sent to the client).
+	if chkErr := s.verifyDownloadChecksumSync(filename, info); chkErr != nil {
+		s.logger.Warn("[online] 校验和验证失败: %s: %v", filename, chkErr)
+		_ = os.Remove(destPath)
+		http.Error(w, "checksum verification failed", http.StatusNotFound)
+		return chkErr
+	}
+
+	servePackageFile(w, r, destPath)
+	return nil
+}
+
+// doStreamDownload performs a streaming download: data from the upstream is
+// written to both the HTTP response (client) and local disk (cache)
+// simultaneously via io.TeeReader.
+func (s *Server) doStreamDownload(filename string, info onlinePackage, streamer StreamDownloader, w http.ResponseWriter) error {
+	s.logger.Info("[online] 开始流式下载: %s", filename)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	body, contentLen, err := streamer.StreamDownload(ctx, info.url)
+	if err != nil {
+		http.Error(w, "bad gateway", http.StatusBadGateway)
+		return fmt.Errorf("上游请求失败: %w", err)
+	}
+	defer body.Close()
+
+	if contentLen > maxDownloadSize {
+		http.Error(w, "file too large", http.StatusRequestEntityTooLarge)
+		return fmt.Errorf("文件大小超过限制 (%d > %d)", contentLen, maxDownloadSize)
+	}
+
+	// Create local temp file.
+	destPath := filepath.Join(s.packagesDir, filename)
+	tmpPath := destPath + ".tmp"
+	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return fmt.Errorf("创建目录失败: %w", err)
+	}
+
+	out, err := os.Create(tmpPath)
+	if err != nil {
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return fmt.Errorf("创建临时文件失败: %w", err)
+	}
+
+	cleanup := true
+	defer func() {
+		out.Close()
+		if cleanup {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	// Set response headers BEFORE streaming body.
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	if contentLen > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(contentLen, 10))
+	}
+	w.WriteHeader(http.StatusOK)
+
+	// Stream to both client and disk simultaneously (with size enforcement).
+	downloadStart := time.Now()
+	limited := io.LimitReader(body, maxDownloadSize)
+	tee := io.TeeReader(limited, out)
+	written, copyErr := io.Copy(w, tee)
+
+	// Finalize local file.
+	if syncErr := out.Sync(); syncErr != nil && copyErr == nil {
+		copyErr = syncErr
+	}
+	if closeErr := out.Close(); closeErr != nil && copyErr == nil {
+		copyErr = closeErr
+	}
+
+	if copyErr != nil {
+		s.logger.Warn("[online] 流式下载中断: %s: %v (已传输 %s, 耗时 %v)",
+			filename, copyErr, util.FormatSize(written), time.Since(downloadStart).Round(time.Millisecond))
+		return fmt.Errorf("流式传输失败: %w", copyErr)
+	}
+
+	// Rename temp to final.
+	if err := os.Rename(tmpPath, destPath); err != nil {
+		return fmt.Errorf("重命名失败: %w", err)
+	}
+	cleanup = false
+
+	s.logger.Info("[online] 流式下载完成: %s (%s, 耗时 %v)",
+		filename, util.FormatSize(written), time.Since(downloadStart).Round(time.Millisecond))
+
+	// Verify checksum asynchronously (client already received the data by now).
+	go s.verifyDownloadChecksum(filename, info)
+
+	return nil
+}
+
+// verifyDownloadChecksum verifies the downloaded file against its expected
+// checksum. It runs asynchronously after a streamed download completes. If
+// verification fails, the bad file is removed so future requests retry.
+func (s *Server) verifyDownloadChecksum(filename string, info onlinePackage) {
+	if s.onlineSrc == nil || info.version == "" {
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	expectedChecksum, err := s.onlineSrc.GetChecksum(ctx, info.browser, info.version, info.platform, info.arch)
+	cancel()
+	if err != nil {
+		s.logger.Debug("[online] 获取校验和失败: %s: %v", filename, err)
+		return
+	}
+	if expectedChecksum == "" {
+		return
+	}
+
+	algo, expectedHash, ok := strings.Cut(expectedChecksum, ":")
+	if !ok || expectedHash == "" {
+		s.logger.Debug("[online] 校验和格式无效: %s: %s", filename, expectedChecksum)
+		return
+	}
+
+	var h hash.Hash
+	switch algo {
+	case "sha256":
+		h = sha256.New()
+	case "sha1":
+		h = sha1.New()
+	default:
+		s.logger.Warn("[online] 不支持的校验算法: %s: %s", filename, algo)
+		return
+	}
+
+	destPath := filepath.Join(s.packagesDir, filename)
+	f, err := os.Open(destPath)
+	if err != nil {
+		s.logger.Warn("[online] %s 校验失败: 无法打开文件: %s: %v", algo, filename, err)
+		_ = os.Remove(destPath)
+		return
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(h, f); err != nil {
+		s.logger.Warn("[online] %s 校验失败: 读取错误: %s: %v", algo, filename, err)
+		_ = os.Remove(destPath)
+		return
+	}
+
+	actualHash := hex.EncodeToString(h.Sum(nil))
+	if actualHash != expectedHash {
+		s.logger.Warn("[online] %s 校验失败: %s: 预期=%s 实际=%s", algo, filename, expectedHash, actualHash)
+		_ = os.Remove(destPath)
+		return
+	}
+	s.logger.Debug("[online] %s 校验通过: %s", algo, filename)
+}
+
+// verifyDownloadChecksumSync is the synchronous version of verifyDownloadChecksum.
+// It returns an error when the checksum does not match. Used by the non-streaming
+// fallback path to reject the response before sending data to the client.
+func (s *Server) verifyDownloadChecksumSync(filename string, info onlinePackage) error {
+	if s.onlineSrc == nil || info.version == "" {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	expectedChecksum, err := s.onlineSrc.GetChecksum(ctx, info.browser, info.version, info.platform, info.arch)
+	cancel()
+	if err != nil {
+		return nil // checksum unavailable — treat as pass
+	}
+	if expectedChecksum == "" {
+		return nil
+	}
+
+	algo, expectedHash, ok := strings.Cut(expectedChecksum, ":")
+	if !ok || expectedHash == "" {
+		return nil
+	}
+
+	var h hash.Hash
+	switch algo {
+	case "sha256":
+		h = sha256.New()
+	case "sha1":
+		h = sha1.New()
+	default:
+		return nil
+	}
+
+	destPath := filepath.Join(s.packagesDir, filename)
+	f, err := os.Open(destPath)
+	if err != nil {
+		return fmt.Errorf("无法打开文件: %w", err)
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(h, f); err != nil {
+		return fmt.Errorf("读取文件错误: %w", err)
+	}
+
+	actualHash := hex.EncodeToString(h.Sum(nil))
+	if actualHash != expectedHash {
+		return fmt.Errorf("%s 校验失败: 预期=%s 实际=%s", algo, expectedHash, actualHash)
+	}
 	return nil
 }
 

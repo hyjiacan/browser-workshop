@@ -99,7 +99,7 @@ Write-Host ""
 
 # Build parameters
 $BuildTime = Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ"
-$LdFlags = "-s -w -X github.com/bws/bws/internal/version.Version=$Version -X github.com/bws/bws/internal/version.BuildTime=$BuildTime"
+$LdFlags = "-s -w -X github.com/bws/bws/internal/version.ClientVersion=$Version -X github.com/bws/bws/internal/version.BuildTime=$BuildTime"
 
 $SuccessCount = 0
 $FailCount = 0

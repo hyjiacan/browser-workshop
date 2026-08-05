@@ -12,6 +12,7 @@ bws sv 提供了完整的 REST API 接口，用于查询文件清单、下载文
 | `/api/v1/status` | GET | 服务状态 |
 | `/api/v1/sync/status` | GET | 同步状态 |
 | `/api/v1/sync/trigger` | POST | 手动触发同步 |
+| `/api/v1/bin` | GET | 客户端二进制文件列表（JSON） |
 | `/api/v1/bin/{filename}` | GET | 客户端二进制下载 |
 
 > **manifest 合并机制**：当 `online-fallback` 启用时，`manifest` 返回本地 packages 目录中的文件与在线源缓存版本的合并结果（去重后）。本地文件携带真实 XXH3 校验和，在线缓存版本的校验和为空（下载到本地后计算）。过滤由客户端自行完成。
@@ -87,10 +88,17 @@ GET /
 
 获取文件清单，包含本地 packages 目录中的文件和在线源缓存版本（当 `online-fallback` 启用时）。返回所有平台、架构、版本和渠道的条目，过滤由客户端自行完成。
 
+### 查询参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `refresh` | string | 设为 `true` 时，强制 serve 从在线源刷新缓存后再返回结果 |
+
 ### 请求
 
 ```
 GET /api/v1/manifest
+GET /api/v1/manifest?refresh=true
 ```
 
 ### 响应示例
@@ -352,6 +360,54 @@ sync not enabled
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/sync/trigger
+```
+
+---
+
+## GET /api/v1/bin
+
+获取客户端二进制文件目录列表，用于自动更新等场景。
+
+### 请求
+
+```
+GET /api/v1/bin
+```
+
+### 响应
+
+```json
+{
+  "status": "ok",
+  "data": [
+    {
+      "filename": "bws_windows_amd64.zip",
+      "platform": "windows",
+      "arch": "amd64",
+      "version": "1.0.0",
+      "size": 5242880
+    }
+  ]
+}
+```
+
+### 响应字段
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| status | string | 固定为 `ok` |
+| data | array | 二进制文件列表 |
+| data[].filename | string | 文件名 |
+| data[].platform | string | 目标平台 (windows/darwin/linux) |
+| data[].arch | string | 目标架构 (amd64/arm64) |
+| data[].version | string | bws 版本号 |
+| data[].size | int64 | 文件大小（字节） |
+
+### 使用示例
+
+```bash
+# 列出所有可用二进制文件
+curl http://localhost:8080/api/v1/bin
 ```
 
 ---

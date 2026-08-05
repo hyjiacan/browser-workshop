@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/bws/bws/internal/browser"
@@ -165,6 +167,15 @@ func (m *Manager) Launch(opts Options) (*Process, error) {
 		return nil, err
 	}
 
+	// Clean up Firefox staged updates before launch.
+	// Firefox stores downloaded MAR files in <installDir>/updates/ and will
+	// try to apply them on every startup, even when app.update.enabled is
+	// false. Removing stale staged updates prevents the "we need to restart"
+	// page from appearing in a loop on Linux.
+	if desc.Name == "firefox" && !nativeMode {
+		cleanupFirefoxStagedUpdates(exePath, profileDir)
+	}
+
 	// Build command
 	cmd := exec.Command(exePath, args...)
 
@@ -172,9 +183,18 @@ func (m *Manager) Launch(opts Options) (*Process, error) {
 		cmd.Dir = opts.WorkingDir
 	}
 
-	// Set environment
+	// Build environment. Start with the descriptor's declared env vars
+	// (lowest priority), layer runtime-detected ones (e.g. Firefox sandbox
+	// fallback when the kernel disallows user namespaces), then let the
+	// caller override via opts.Env.
+	cmd.Env = os.Environ()
+	for k, v := range desc.EnvVars {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	if desc.Name == "firefox" {
+		applyFirefoxRuntimeEnv(cmd, exePath)
+	}
 	if len(opts.Env) > 0 {
-		cmd.Env = os.Environ()
 		for k, v := range opts.Env {
 			cmd.Env = append(cmd.Env, k+"="+v)
 		}
@@ -497,4 +517,159 @@ func isNumeric(s string) bool {
 		}
 	}
 	return true
+}
+
+// cleanupFirefoxStagedUpdates removes any staged Firefox update files that
+// could cause the "we need to restart the browser" page to appear on every
+// launch. On Linux the Firefox tarball ships with the `updater` binary, and
+// if a past launch downloaded a MAR update it remains staged in the install
+// directory. Firefox applies staged updates at startup regardless of the
+// app.update.enabled preference.
+func cleanupFirefoxStagedUpdates(exePath, profileDir string) {
+	// Firefox install directory is the parent of the firefox script/binary.
+	ffDir := filepath.Dir(exePath)
+
+	// Remove the updates directory (contains staged MAR files such as
+	// updates/0/update.mar and updates/0/update.status).
+	updatesDir := filepath.Join(ffDir, "updates")
+	if _, err := os.Stat(updatesDir); err == nil {
+		if err := os.RemoveAll(updatesDir); err != nil {
+			log.Warn("清理 Firefox 更新目录失败: %v", err)
+		} else {
+			log.Debug("已清理 Firefox staged 更新目录: %s", updatesDir)
+		}
+	}
+
+	// Also remove active-update.xml in the profile directory. This file
+	// tracks an in-progress update and can cause Firefox to show the
+	// restart page even when the staged update was already applied.
+	if profileDir != "" {
+		activeUpdate := filepath.Join(profileDir, "active-update.xml")
+		if _, err := os.Stat(activeUpdate); err == nil {
+			if err := os.Remove(activeUpdate); err != nil {
+				log.Warn("清理 active-update.xml 失败: %v", err)
+			} else {
+				log.Debug("已清理 active-update.xml: %s", activeUpdate)
+			}
+		}
+	}
+}
+
+// applyFirefoxRuntimeEnv inspects the host environment for Firefox launch.
+// On Linux, the most common cause of "tab crashed" pages at startup is the
+// absence of unprivileged user namespaces, which Firefox needs to sandbox
+// each tab. Ubuntu 24.04+ ships with kernel.unprivileged_userns_clone=0 by
+// default. When that's the case we transparently set MOZ_DISABLE_SANDBOX=1
+// so Firefox can still launch (without a sandbox), instead of crashing the
+// content processes. The user is warned so they understand the trade-off.
+func applyFirefoxRuntimeEnv(cmd *exec.Cmd, exePath string) {
+	if runtime.GOOS != "linux" {
+		return
+	}
+
+	// Detect unprivileged user namespace availability.
+	if !userNamespaceAvailable() {
+		appendEnv(cmd, "MOZ_DISABLE_SANDBOX", "1")
+		log.Warn("检测到当前 Linux 内核禁用了 unprivileged user namespaces，" +
+			"已自动为 Firefox 设置 MOZ_DISABLE_SANDBOX=1（关闭沙箱以避免标签页崩溃）。" +
+			"如需恢复沙箱，请执行：sudo sysctl kernel.unprivileged_userns_clone=1")
+	}
+
+	// Detect /dev/shm size. Firefox needs ~1GB; otherwise it falls back to
+	// slower IPC and may crash content processes on busy systems.
+	if shmBytes, ok := devShmSize(); ok && shmBytes < 1<<30 {
+		log.Warn("/dev/shm 容量小于 1GB（%s），Firefox 可能会出现性能问题或标签页崩溃。"+
+			"可通过 `sudo mount -o remount,size=2g /dev/shm` 调整。",
+			humanBytes(shmBytes))
+	}
+}
+
+// userNamespaceAvailable reports whether the Linux kernel permits
+// unprivileged user namespaces, which Firefox uses to sandbox each tab.
+// Returns true on non-Linux, when the sysctl file is missing, or when
+// the value is 1.
+func userNamespaceAvailable() bool {
+	data, err := os.ReadFile("/proc/sys/kernel/unprivileged_userns_clone")
+	if err != nil {
+		// File missing (older kernels or non-Linux) - assume available
+		// and let Firefox attempt the sandbox.
+		return true
+	}
+	return strings.TrimSpace(string(data)) == "1"
+}
+
+// devShmSize returns the size of /dev/shm in bytes by parsing the mountinfo
+// line. Returns false if /dev/shm cannot be located.
+func devShmSize() (int64, bool) {
+	data, err := os.ReadFile("/proc/self/mountinfo")
+	if err != nil {
+		return 0, false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		// Format: mount-id parent-id major:minor root mountpoint opts ...
+		fields := strings.Fields(line)
+		if len(fields) < 10 {
+			continue
+		}
+		mountpoint := fields[4]
+		if mountpoint != "/dev/shm" {
+			continue
+		}
+		// Optional fields start at index 8 (after "-" separator at index 7).
+		var optStart, optEnd int
+		for i, f := range fields {
+			if f == "-" {
+				optStart = i + 1
+				break
+			}
+		}
+		if optStart == 0 || optStart >= len(fields) {
+			continue
+		}
+		optEnd = len(fields)
+		for _, f := range fields[optStart:] {
+			if strings.HasPrefix(f, "size=") {
+				sizeStr := strings.TrimPrefix(f, "size=")
+				n, err := strconv.ParseInt(sizeStr, 10, 64)
+				if err != nil {
+					return 0, false
+				}
+				return n, true
+			}
+		}
+		_ = optEnd
+	}
+	return 0, false
+}
+
+// appendEnv adds a key=value entry to cmd.Env, replacing any existing entry
+// for the same key. cmd.Env is expected to be non-nil.
+func appendEnv(cmd *exec.Cmd, key, value string) {
+	prefix := key + "="
+	for i, kv := range cmd.Env {
+		if strings.HasPrefix(kv, prefix) {
+			cmd.Env[i] = prefix + value
+			return
+		}
+	}
+	cmd.Env = append(cmd.Env, prefix+value)
+}
+
+// humanBytes formats a byte count as a human-readable string.
+func humanBytes(n int64) string {
+	const (
+		KB = 1 << 10
+		MB = 1 << 20
+		GB = 1 << 30
+	)
+	switch {
+	case n >= GB:
+		return fmt.Sprintf("%.1f GB", float64(n)/float64(GB))
+	case n >= MB:
+		return fmt.Sprintf("%.1f MB", float64(n)/float64(MB))
+	case n >= KB:
+		return fmt.Sprintf("%.1f KB", float64(n)/float64(KB))
+	default:
+		return fmt.Sprintf("%d B", n)
+	}
 }

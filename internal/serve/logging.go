@@ -58,6 +58,13 @@ func (w *responseWriterWrapper) Flush() {
 	}
 }
 
+// Unwrap returns the underlying ResponseWriter, allowing http.ResponseController
+// to traverse the wrapper chain and access the original writer's capabilities
+// (e.g., SetWriteDeadline for long-running downloads).
+func (w *responseWriterWrapper) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
 // Hijack implements http.Hijacker for WebSocket support.
 func (w *responseWriterWrapper) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	if hijacker, ok := w.ResponseWriter.(http.Hijacker); ok {

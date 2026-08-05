@@ -34,7 +34,8 @@
   sync-interval = 24h         # 同步间隔（如 24h、30d）
   sync-browsers =             # 同步浏览器（逗号分隔，留空=全部）
   sync-channels = stable      # 同步渠道（逗号分隔）
-  online-fallback = false     # 在线回退：本地未命中时自动从在线源下载
+  online-fallback = true     # 在线回退：本地未命中时自动从在线源下载
+  scan-workers = 0           # 并行扫描线程数（0=自动使用CPU核心数）
 
   编辑配置文件后，再次运行 bws serve 即可启动服务。
 

@@ -51,7 +51,8 @@ sync = false
 sync-interval = 24h
 sync-browsers =
 sync-channels = stable
-online-fallback = false
+online-fallback = true
+scan-workers = 0
 ```
 
 ```bash
@@ -81,7 +82,8 @@ The `-d` parameter specifies the base directory (parent of packages/ and bin/). 
 | `sync-interval` | `24h` | Sync interval (supports 30d, 24h, 30m format) |
 | `sync-browsers` | All | List of browsers to sync, comma-separated (e.g. chrome,firefox) |
 | `sync-channels` | `stable` | List of channels to sync, comma-separated (e.g. stable,beta) |
-| `online-fallback` | `false` | Online fallback: automatically fetch packages from online sources when not cached locally |
+| `online-fallback` | `true` | Online fallback: automatically fetch packages from online sources when not cached locally |
+| `scan-workers` | `0` | Parallel scan threads, `0` means auto (use CPU core count), range `[1, 32]` |
 
 ### Configuration File
 
