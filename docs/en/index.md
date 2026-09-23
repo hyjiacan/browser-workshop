@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Browser Workshop
   text: ''
-  tagline: Multi-version browser management tool, supporting local installation, remote download, version switching, and isolated execution.
+  tagline: Isolated browser multi-version manager for fast, clean test environment switching.
   image:
     src: /logo.png
     alt: Browser Workshop logo

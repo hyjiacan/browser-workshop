@@ -62,7 +62,9 @@ This page records feature changes for each version of Browser Workshop, listed i
 
 - All configuration managed uniformly via `bws cfg` command
 - Config file automatically created in data directory (`config.ini`)
-- First-run setup guides data storage directory selection
+- First run automatically enters an initialization wizard guiding you through data directory, default browser, and offline (serve) source, with an explanation for every step; arrow keys to select, Enter to confirm (interactive terminal)
+- After initialization, hints show how to modify configuration later (`bws config show` / `bws config set source`, etc.)
+- Non-interactive environments (pipes/scripts) automatically fall back to default configuration without interruption
 - `bws cfg get` (no arguments) lists all readable configuration keys and their aliases
 - `bws cfg set` (no arguments or key only) lists all writable configuration keys with example values
 - Configuration keys support multiple aliases: `language`→`lang`, `default-browser`→`browser`, etc.

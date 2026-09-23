@@ -6,6 +6,8 @@ This chapter will guide you through the basic usage of bws in 5-10 minutes.
 
 Make sure you have installed bws. If not, please refer to the [Installation Guide](./installation.md).
 
+> **Note**: The first time you run `bws`, an initialization wizard guides you through the data directory, default browser, and offline (serve) source. Every step has an explanation; use arrow keys to select and Enter to confirm. You can also skip it and adjust later anytime with `bws config set`.
+
 ## 1. View Installed Versions
 
 First, let's see the browser versions currently installed on the system:

@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  Multi-version browser management tool, supporting local import, remote download, version switching, and isolated execution.
+  Isolated browser multi-version manager for fast, clean test environment switching.
 </p>
 
 ## Features

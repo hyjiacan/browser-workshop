@@ -6,7 +6,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -33,6 +32,9 @@ import (
 	"github.com/bws/bws/internal/source"
 	"github.com/bws/bws/internal/system"
 	bwversion "github.com/bws/bws/internal/version"
+
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/x/term"
 )
 
 const version = "1.0.0-beta"
@@ -250,87 +252,116 @@ func parseGlobalVerbose() bool {
 }
 
 // firstTimeSetup runs the first-time setup wizard.
+// Every input/selection step carries a short explanation so users can
+// understand each option before deciding. Non-interactive environments
+// (pipes/EOF) fall back to defaults.
 func firstTimeSetup(configPath string, cfg *config.Config) *config.Config {
 	fmt.Println("========================================")
 	fmt.Println("  bws - Browser Manager")
-	fmt.Println("  First-time setup")
+	fmt.Println("  首次初始化")
 	fmt.Println("========================================")
 	fmt.Println()
-
-	// Ask about data directory
-	defaultDataDir := filepath.Join(filepath.Dir(configPath), "bws-data")
-	fmt.Printf("Data directory [default: %s]: ", defaultDataDir)
-
-	reader := bufio.NewReader(os.Stdin)
-	input, err := reader.ReadString('\n')
-	if err != nil {
-		// If reading fails (e.g. EOF/non-interactive), use defaults
-		fmt.Println("\nNon-interactive mode, using default values.")
-		cfg.DataDir = defaultDataDir
-		// Create config directory and save
-		configDir := filepath.Dir(configPath)
-		os.MkdirAll(configDir, 0o755)
-		config.Save(cfg, configPath)
-		return cfg
-	}
-	input = strings.TrimSpace(input)
-
-	if input != "" {
-		absPath, err := filepath.Abs(input)
-		if err == nil {
-			cfg.DataDir = absPath
-		} else {
-			cfg.DataDir = input
-		}
-	}
-
-	// Ask about default browser
-	fmt.Printf("Default browser [default: chrome]: ")
-	input, err = reader.ReadString('\n')
-	if err != nil {
-		// Use default on read error
-		input = ""
-	}
-	input = strings.TrimSpace(input)
-	if input != "" {
-		cfg.DefaultBrowser = input
-	}
-
-	// Ask about serve source (offline distribution)
+	fmt.Println("这是 bws 首次运行，将引导你完成基本配置。")
+	fmt.Println("每一步都有说明，直接回车即可使用默认值 (推荐)。")
 	fmt.Println()
-	fmt.Printf("是否配置离线源 (serve) 地址? (配置后无需联网即可获取浏览器版本) [y/N]: ")
-	input, err = reader.ReadString('\n')
-	if err != nil {
-		input = ""
-	}
-	input = strings.TrimSpace(input)
-	if strings.ToLower(input) == "y" || strings.ToLower(input) == "yes" || input == "是" {
-		fmt.Printf("请输入 serve 源地址 (例如 http://192.168.1.100:8080): ")
-		input, err = reader.ReadString('\n')
-		if err == nil {
-			url := strings.TrimSpace(input)
-			if url != "" {
-				cfg.RemoteSource = url
-				cfg.EnableServeSource = true
-				fmt.Printf("✅ serve 源已配置: %s\n", url)
-			}
-		}
+
+	defaultDataDir := filepath.Join(filepath.Dir(configPath), "bws-data")
+
+	// 非交互环境 (管道/脚本/EOF)：跳过向导，使用默认配置
+	if !term.IsTerminal(os.Stdin.Fd()) {
+		fmt.Println("检测到非交互环境，使用默认配置。")
+		cfg.DataDir = defaultDataDir
+		return saveInitialConfig(configPath, cfg)
 	}
 
-	// Create config directory
+	// 构建"默认浏览器"选项：以内置浏览器为主，若当前默认值不在其中则补充
+	knownBrowser := map[string]bool{"chrome": true, "chromium": true, "firefox": true}
+	defaultBrowser := cfg.DefaultBrowser
+	browserOpts := []huh.Option[string]{
+		huh.NewOption("Chrome", "chrome"),
+		huh.NewOption("Chromium", "chromium"),
+		huh.NewOption("Firefox", "firefox"),
+	}
+	if !knownBrowser[defaultBrowser] {
+		browserOpts = append([]huh.Option[string]{huh.NewOption(defaultBrowser, defaultBrowser)}, browserOpts...)
+	}
+
+	// 步骤一：数据目录 / 默认浏览器 / 是否配置离线源
+	var serveEnabled bool
+	err := huh.NewForm(huh.NewGroup(
+		huh.NewInput().
+			Title("数据目录").
+			Description("浏览器版本、下载缓存、Profile 与日志都会存放在这里。\n留空则使用默认值 (推荐)。").
+			Prompt("> ").
+			Placeholder(defaultDataDir).
+			Value(&cfg.DataDir),
+		huh.NewSelect[string]().
+			Title("默认浏览器").
+			Description("执行 `bws r` 且不带版本时，将使用该浏览器。\n用 ↑↓ 选择，回车确认。可通过 `bws config set default-browser` 修改。").
+			Options(browserOpts...).
+			Value(&defaultBrowser),
+		huh.NewConfirm().
+			Title("是否配置离线源 (serve)？").
+			Description("配置离线服务器后，可无需连接公网即可获取浏览器版本，\n适合内网分发。首次使用建议配置。").
+			Affirmative("配置").
+			Negative("跳过"),
+	)).WithTheme(huh.ThemeCharm()).Run()
+	if err != nil {
+		// 用户取消 (q/Ctrl+C)：用默认配置继续，避免下次运行重复触发向导
+		fmt.Println("已取消初始化，使用默认配置。")
+		cfg.DataDir = defaultDataDir
+		return saveInitialConfig(configPath, cfg)
+	}
+
+	cfg.DefaultBrowser = defaultBrowser
+	if strings.TrimSpace(cfg.DataDir) == "" {
+		cfg.DataDir = defaultDataDir
+	} else if abs, aerr := filepath.Abs(cfg.DataDir); aerr == nil {
+		cfg.DataDir = abs
+	}
+
+	// 步骤二：若选择配置离线源，进一步填写地址
+	if serveEnabled {
+		var serveURL string
+		err = huh.NewForm(huh.NewGroup(
+			huh.NewInput().
+				Title("离线源 (serve) 地址").
+				Description("填写 serve 服务器地址，形如 http://192.168.1.100:8080。\n即网页端顶部展示的连接地址，可复制粘贴。留空则跳过。").
+				Prompt("> ").
+				Placeholder("http://<服务器IP>:<端口>").
+				Value(&serveURL),
+		)).WithTheme(huh.ThemeCharm()).Run()
+		if err == nil && strings.TrimSpace(serveURL) != "" {
+			cfg.RemoteSource = strings.TrimSpace(serveURL)
+			cfg.EnableServeSource = true
+			fmt.Printf("  • 已配置离线源: %s\n", cfg.RemoteSource)
+		}
+		// 跳过或未填地址时不改动 EnableServeSource，保留配置默认值，
+		// 避免后续 `bws config set source` 因开关被关而无法启用离线源
+	}
+
+	return saveInitialConfig(configPath, cfg)
+}
+
+// saveInitialConfig creates the config directory (if needed) and persists cfg.
+func saveInitialConfig(configPath string, cfg *config.Config) *config.Config {
 	configDir := filepath.Dir(configPath)
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "警告: 创建配置目录失败: %v\n", err)
 	}
-
-	// Save config
 	if err := config.Save(cfg, configPath); err != nil {
 		fmt.Fprintf(os.Stderr, "警告: 保存配置失败: %v\n", err)
 	}
 
 	fmt.Println()
-	fmt.Printf("配置已保存: %s\n", configPath)
+	fmt.Println("配置已保存:", configPath)
 	fmt.Println("初始化完成! 使用 'bws --help' 查看可用命令。")
+	fmt.Println()
+	fmt.Println("后续如需修改配置，可使用以下命令：")
+	fmt.Println("  bws config show                       查看当前配置")
+	fmt.Println("  bws config set source <地址>          设置/修改离线源")
+	fmt.Println("  bws config set default-browser <名称> 修改默认浏览器")
+	fmt.Println("  bws config set data-dir <路径>        修改数据目录")
 	fmt.Println()
 
 	return cfg

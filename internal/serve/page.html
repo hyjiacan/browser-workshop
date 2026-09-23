@@ -373,11 +373,23 @@
         <circle cx="12" cy="12" r="3"/>
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
       </svg>
-      <span class="section-title">快速配置</span>
+      <span class="section-title">配置远程源</span>
     </div>
-    <p style="font-size:14px; color:var(--text-secondary); margin-bottom:10px;">在客户端配置此服务器为远程源：</p>
+    <p style="font-size:14px; color:var(--text-secondary); margin-bottom:10px;">远程源（serve 离线源）让你无需连接公网即可获取浏览器版本。首次使用在客户端运行 <code>bws</code> 会进入初始化向导，每一项说明如下：</p>
+
+    <ol style="font-size:13px; color:var(--text-secondary); margin:0 0 12px 18px; padding:0; line-height:1.8;">
+      <li><b>数据目录</b>：存放浏览器版本、下载缓存、Profile 与日志。留空回车即使用默认目录（推荐）。</li>
+      <li><b>默认浏览器</b>：不带版本运行（如 <code>bws r</code>）时使用的浏览器。用 <b>↑↓ 方向键</b> 选择 Chrome / Chromium / Firefox，回车确认，直接回车保持默认 Chrome。</li>
+      <li><b>是否配置离线源</b>：选择「配置」后，粘贴下方本页地址即可完成。</li>
+    </ol>
+
+    <p style="font-size:13px; color:var(--text-muted); margin:0 0 4px;">本页连接地址（向导中填写）：</p>
+    <pre><code>{{.BaseURL}}</code></pre>
+
+    <div style="font-size:13px; font-weight:600; color:var(--text); margin:14px 0 4px;">已初始化过，直接设置或修改远程源</div>
     <pre><code>bws config set source {{.BaseURL}}</code></pre>
-    <p style="font-size:13px; color:var(--text-muted); margin-top:8px;">配置完成后，即可通过 <code>bws ls -R</code> 查看可用版本并使用 <code>bws install</code> 命令安装。</p>
+
+    <p style="font-size:13px; color:var(--text-muted); margin-top:10px;">查看当前配置：<code>bws config show</code>；查看可用版本并安装：<code>bws ls -R</code>、<code>bws install</code>。</p>
   </div>
 
   <!-- Getting Started -->

@@ -4,7 +4,7 @@ layout: home
 hero:
   name: Browser Workshop
   text: ''
-  tagline: 多版本浏览器管理工具，支持本地安装、远程下载、版本切换、隔离运行。
+  tagline: 浏览器多版本隔离运行工具，快速搭建独立测试环境，自由切换版本。
   image:
     src: /logo.png
     alt: Browser Workshop logo
