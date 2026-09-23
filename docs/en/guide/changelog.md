@@ -10,9 +10,9 @@ This page records feature changes for each version of Browser Workshop, listed i
 - **Adjusted config file location**: `bws-client.ini` and `bws-serve.ini` moved from the data directory `bws-data/` to the same directory as the bws executable (binary directory)
 - The data directory `bws-data/` now only stores runtime data (versions, cache, logs, Profiles, etc.), and no longer contains configuration files
 
-## v1.0.0-beta (Stabilizing)
+## v1.0.0 (2026-09-23 Official Release)
 
-> Current version, gradually stabilizing toward release. All core features are implemented, with ongoing polish for stability and documentation.
+> First official stable release. All core features are implemented, with stability polish and documentation completed.
 
 ### Core Features
 

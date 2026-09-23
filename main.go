@@ -37,10 +37,13 @@ import (
 	"github.com/charmbracelet/x/term"
 )
 
-const version = "1.0.0-beta"
+const version = "1.0.0"
 
 func main() {
-	bwversion.ClientVersion = version
+	// build-release.ps1 通过 -ldflags -X 注入 ClientVersion；未注入时回退到源码常量
+	if bwversion.ClientVersion == "0.0.0-dev" {
+		bwversion.ClientVersion = version
+	}
 	// Parse global flags before command processing
 	verbose := parseGlobalVerbose()
 
@@ -963,7 +966,7 @@ func (a *repoAdapter) Import(force bool, onProgress func(int, int, string)) (*re
 // serveAdapter adapts serve.Server to cli.ServeProvider.
 type serveAdapter struct {
 	version    string
-	source     source.Source        // the multi-source for syncing
+	source     source.Source         // the multi-source for syncing
 	firefoxSrc *source.FirefoxSource // direct reference for GetChecksum (nil if Firefox source not enabled)
 	verbose    bool
 }
