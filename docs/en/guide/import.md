@@ -79,6 +79,27 @@ bws supports zip, 7z, tar.gz, tar.bz2, tar.xz, tar.zst, gz, bz2, xz, zst, exe, d
 
 Directories directly containing browser executable files can also be recognized and installed.
 
+### Nested Archives and Offline Installers
+
+If an archive contains other archives, bws extracts them recursively (up to 10 levels) until it finds the browser executable.
+
+The newer Chrome offline installer (e.g. `GoogleChrome_149.0.7827.22_Windows_x64_Offline.exe`) uses such a multi-layer layout:
+
+```
+GoogleChrome_<version>_Windows_x64_Offline.exe
+└── updater.7z
+    └── bin/Offline/{updater GUID}/
+        ├── OfflineManifest.gup              ← manifest declaring the appid
+        └── {appid}/
+            └── <version>_chrome_installer.exe
+                └── chrome.7z
+                    └── Chrome-bin/chrome.exe
+```
+
+bws reads the `appid` from `OfflineManifest.gup`, enters the directory with the same name, extracts the installer inside it, then extracts `chrome.7z` and finally locates `chrome.exe`. Both the old and new Chrome offline installer layouts can therefore be installed directly, without extracting layer by layer by hand.
+
+> For safety, an installer located through the manifest is only unpacked as an archive — it is never actually executed.
+
 ## Filename Auto-Recognition Rules
 
 bws automatically recognizes browser information from keywords in filenames or directory names, including browser name, version number, platform, architecture, and channel.

@@ -122,6 +122,27 @@ bws 支持 zip、7z、tar.gz、tar.bz2、tar.xz、tar.zst、gz、bz2、xz、zst�
 
 直接包含浏览器可执行文件的目录也可以被识别和安装。
 
+### 嵌套压缩包与离线安装包
+
+压缩包内如果还包含其他压缩包，bws 会自动递归解压（最多 10 层），直到找到浏览器可执行文件为止。
+
+新版 Chrome 离线安装包（如 `GoogleChrome_149.0.7827.22_Windows_x64_Offline.exe`）就是这种多层嵌套结构：
+
+```
+GoogleChrome_<版本>_Windows_x64_Offline.exe
+└── updater.7z
+    └── bin/Offline/{安装器 GUID}/
+        ├── OfflineManifest.gup              ← 清单文件，记录 appid
+        └── {appid}/
+            └── <版本>_chrome_installer.exe
+                └── chrome.7z
+                    └── Chrome-bin/chrome.exe
+```
+
+bws 会读取 `OfflineManifest.gup` 中的 `appid`，进入同名目录解压其中的安装器，再解压 `chrome.7z`，最终定位到 `chrome.exe`。因此新旧两种结构的 Chrome 离线安装包都可以直接安装，无需手动逐层解压。
+
+> 出于安全考虑，通过清单定位到的离线安装包安装器只会按压缩包解压，不会被真正执行。
+
 ## 文件名自动识别规则
 
 bws 通过文件名或目录名中的关键词自动识别浏览器信息，包括浏览器名称、版本号、平台、架构和渠道。

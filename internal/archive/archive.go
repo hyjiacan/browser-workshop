@@ -254,7 +254,8 @@ func cleanDirContents(dir string) {
 // (e.g., within an NSIS installer like Firefox) and extracts its contents.
 //
 // Firefox's NSIS installer has the following structure:
-//   [NSIS header] [7z archive] [NSIS footer]
+//
+//	[NSIS header] [7z archive] [NSIS footer]
 //
 // The 7z archive is a complete, valid 7z file. We locate it by searching
 // for the 7z signature (37 7A BC AF 27 1C), then parse the signature header
@@ -384,7 +385,15 @@ func extractNestedOnce(rootDir string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("扫描嵌套包失败: %w", err)
 	}
-	if len(archives) == 0 {
+
+	// 离线安装包的载荷（如 Chrome 的 chrome.7z）藏在 OfflineManifest.gup
+	// 声明的 appid 目录中，无法通过扩展名扫描发现，需要额外解析清单。
+	payloads, err := findOfflinePayloads(rootDir)
+	if err != nil {
+		return false, fmt.Errorf("解析离线安装包清单失败: %w", err)
+	}
+
+	if len(archives) == 0 && len(payloads) == 0 {
 		return false, nil
 	}
 
@@ -399,6 +408,12 @@ func extractNestedOnce(rootDir string) (bool, error) {
 		}
 		if err := os.Remove(archivePath); err != nil {
 			_ = os.Rename(archivePath, archivePath+".extracted")
+		}
+		extractedAny = true
+	}
+	for _, payloadPath := range payloads {
+		if err := extractOfflinePayload(payloadPath); err != nil {
+			continue
 		}
 		extractedAny = true
 	}
@@ -690,6 +705,12 @@ func (z *zstdReadCloser) Close() error {
 // --- Browser executable detection ---
 
 // FindBrowserExe searches for a browser executable in the extracted directory.
+//
+// The search walks the entire extracted tree: nesting depth varies a lot between
+// packages. A plain chrome.7z puts chrome.exe one level down, while the newer
+// Chrome offline installer yields a chain of
+// updater.7z → Offline/{guid}/{appid}/<installer>.exe → chrome.7z → Chrome-bin/
+// that buries the executable several levels deep.
 func FindBrowserExe(rootDir, browserName, platform, arch string, executableNames []string) (string, error) {
 	if len(executableNames) == 0 {
 		exeName := browserName
@@ -699,13 +720,9 @@ func FindBrowserExe(rootDir, browserName, platform, arch string, executableNames
 		executableNames = []string{exeName}
 	}
 
-	const maxDepth = 3
 	var result string
-	var walk func(dir string, depth int) bool
-	walk = func(dir string, depth int) bool {
-		if depth > maxDepth {
-			return false
-		}
+	var walk func(dir string) bool
+	walk = func(dir string) bool {
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			return false
@@ -722,17 +739,17 @@ func FindBrowserExe(rootDir, browserName, platform, arch string, executableNames
 		}
 		for _, entry := range entries {
 			if entry.IsDir() {
-				if walk(filepath.Join(dir, entry.Name()), depth+1) {
+				if walk(filepath.Join(dir, entry.Name())) {
 					return true
 				}
 			}
 		}
 		return false
 	}
-	if walk(rootDir, 0) {
+	if walk(rootDir) {
 		return result, nil
 	}
-	return "", fmt.Errorf("未找到浏览器可执行文件 (搜索 %d 层: %s)", maxDepth, strings.Join(executableNames, ", "))
+	return "", fmt.Errorf("未找到浏览器可执行文件 (搜索目录: %s, 候选: %s)", rootDir, strings.Join(executableNames, ", "))
 }
 
 // FindContentDir finds the actual content directory within an extracted archive.
