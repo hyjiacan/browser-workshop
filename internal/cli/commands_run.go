@@ -157,6 +157,9 @@ func runRun(ctx *Context, args []string) error {
 	if wantCDP {
 		opts.ExtraArgs = append(opts.ExtraArgs, automation.BrowserArgs(opts.ExtraArgs, 0)...)
 	}
+	// A user-supplied --remote-debugging-port is the only discovery channel
+	// available in native mode, so it must be carried into endpoint discovery.
+	cdpPort := automation.CDPPortFromArgs(opts.ExtraArgs)
 
 	if opts.DryRun {
 		exe, cmdArgs, derr := ctx.Launch.PreviewCommand(opts)
@@ -192,12 +195,13 @@ func runRun(ctx *Context, args []string) error {
 	}
 
 	return runAutomation(ctx, out, opts, spec, automationOptions{
-		WantCDP:         wantCDP,
-		WantDriver:      wantDriver,
-		Daemon:          daemon,
-		DriverPortRaw:   flagVals["driver-port"],
+		WantCDP:          wantCDP,
+		WantDriver:       wantDriver,
+		Daemon:           daemon,
+		DriverPortRaw:    flagVals["driver-port"],
 		NoDriverDownload: flagVals["driver-no-download"] == "true",
-		EndpointTimeout: endpointTimeout,
+		EndpointTimeout:  endpointTimeout,
+		CDPPort:          cdpPort,
 	})
 }
 
@@ -209,6 +213,10 @@ type automationOptions struct {
 	DriverPortRaw    string
 	NoDriverDownload bool
 	EndpointTimeout  time.Duration
+
+	// CDPPort is the fixed port the user pinned via --remote-debugging-port
+	// (0 when unspecified, i.e. the OS assigns one).
+	CDPPort int
 }
 
 // runAutomation launches the browser in the background, wires up the CDP and
@@ -255,8 +263,13 @@ func runAutomation(
 	// --- CDP endpoint discovery ---
 	var cdpEndpoint *string
 	if ao.WantCDP {
-		endpoint, derr := automation.DiscoverCDP(context.Background(), result.ProfileDir, 0, ao.EndpointTimeout)
-		if derr != nil {
+		// Native mode (and system browsers, which imply it) never receives
+		// --user-data-dir, so DevToolsActivePort is never written. Without an
+		// explicit port there is no discovery channel at all: fail fast with an
+		// actionable hint instead of burning the whole endpoint timeout.
+		if result.ProfileDir == "" && ao.CDPPort == 0 {
+			out.Meta("⚠ 原生模式无法从 profile 发现 CDP 端点；如需 CDP，请显式指定端口，例如 '-- --remote-debugging-port=9222'。")
+		} else if endpoint, derr := automation.DiscoverCDP(context.Background(), result.ProfileDir, ao.CDPPort, ao.EndpointTimeout); derr != nil {
 			out.Meta("⚠ CDP 端点发现失败: %v", derr)
 		} else {
 			cdpEndpoint = &endpoint

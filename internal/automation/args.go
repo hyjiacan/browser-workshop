@@ -6,6 +6,7 @@ package automation
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -45,6 +46,28 @@ func CDPArgs(userArgs []string, port int) []string {
 		out = append(out, FlagRemoteDebuggingAddress+"="+cdpLoopback)
 	}
 	return out
+}
+
+// CDPPortFromArgs extracts the port from a user-supplied
+// "--remote-debugging-port=N" argument. It returns 0 when the flag is absent,
+// bare, or carries a non-positive/invalid value.
+//
+// Endpoint discovery needs this: when a fixed port is known, the HTTP
+// /json/version probe can be used even if the profile directory is unavailable
+// (native mode never writes DevToolsActivePort).
+func CDPPortFromArgs(userArgs []string) int {
+	prefix := FlagRemoteDebuggingPort + "="
+	for _, a := range userArgs {
+		if !strings.HasPrefix(a, prefix) {
+			continue
+		}
+		port, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(a, prefix)))
+		if err != nil || port <= 0 || port > 65535 {
+			return 0
+		}
+		return port
+	}
+	return 0
 }
 
 // AutomationArgs returns the automation-friendly browser arguments that are not
