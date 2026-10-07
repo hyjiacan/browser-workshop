@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+# 推 v* tag 时自动编译三平台 zip 并发布到 GitHub Release。
+# 版本采用日期规则（yyyy.MM.dd），取自构建当天日期，通过 -ldflags 注入
+# internal/version.ClientVersion。
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build binaries
+        id: build
+        run: |
+          set -euo pipefail
+          VERSION="$(date -u +%Y.%m.%d)"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          LDFLAGS="-s -w -X github.com/bws/bws/internal/version.ClientVersion=$VERSION"
+          rm -rf dist
+          mkdir -p dist
+          for target in "windows amd64" "linux amd64" "darwin amd64"; do
+            GOOS="${target% *}"
+            GOARCH="${target#* }"
+            BIN="$([ "$GOOS" = "windows" ] && echo bws.exe || echo bws)"
+            GOOS=$GOOS GOARCH=$GOARCH CGO_ENABLED=0 go build -trimpath -ldflags "$LDFLAGS" -o "dist/$BIN" .
+            (cd dist && zip -q "bws_${VERSION}_${GOOS}_${GOARCH}.zip" "$BIN" && rm -f "$BIN")
+          done
+          ls -lh dist
+
+      - name: Upload release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/bws_*.zip
+          generate_release_notes: true
