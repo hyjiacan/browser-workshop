@@ -94,11 +94,13 @@ func (m *Manager) Start(ctx context.Context, opts StartOptions) (*Process, error
 
 	cmd := exec.Command(binary, args...)
 
+	var logFile *os.File
 	if opts.LogFile != "" {
 		f, err := os.OpenFile(opts.LogFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 		if err != nil {
 			return nil, fmt.Errorf("打开驱动日志文件失败: %w", err)
 		}
+		logFile = f
 		cmd.Stdout = f
 		cmd.Stderr = f
 	}
@@ -109,7 +111,16 @@ func (m *Manager) Start(ctx context.Context, opts StartOptions) (*Process, error
 
 	bmlog.Debug("[driver] 启动驱动: %s %v", binary, args)
 	if err := cmd.Start(); err != nil {
+		if logFile != nil {
+			_ = logFile.Close()
+		}
 		return nil, fmt.Errorf("启动驱动失败: %w", err)
+	}
+
+	// The child holds its own descriptor, so the parent's handle can be
+	// released now instead of leaking it for the lifetime of bws.
+	if logFile != nil {
+		_ = logFile.Close()
 	}
 
 	proc := &Process{

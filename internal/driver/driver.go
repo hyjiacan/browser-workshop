@@ -91,6 +91,10 @@ type Options struct {
 	// upstream Chrome for Testing endpoints). Direct upstream access is
 	// kept as a fallback.
 	ServeURL string
+
+	// Sources, when non-nil, replaces the default source chain entirely.
+	// Callers embedding the manager can supply their own resolution order.
+	Sources []Source
 }
 
 // Manager resolves, installs and runs automation drivers.
@@ -112,6 +116,11 @@ func NewManager(p *paths.Paths, opts Options) *Manager {
 		paths:    p,
 		client:   client,
 		proxyURL: opts.ProxyURL,
+	}
+
+	if opts.Sources != nil {
+		m.sources = append(m.sources, opts.Sources...)
+		return m
 	}
 
 	// A configured serve instance is preferred: it can host drivers and
