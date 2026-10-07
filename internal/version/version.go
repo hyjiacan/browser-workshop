@@ -10,9 +10,12 @@ import (
 	"time"
 )
 
-// ClientVersion is the version of the bws client binary.
-// It is set from main.go (or via ldflags at build time).
-var ClientVersion = "0.0.0-dev"
+// ClientVersion is the version of the bws client binary, using a date-based
+// scheme (yyyy.MM.dd, e.g. "2026.10.07") rather than semantic versions. Release
+// builds inject it via -ldflags (see build-release.ps1 and
+// .github/workflows/release.yml); "dev" means nothing was injected and main()
+// substitutes the build date.
+var ClientVersion = "dev"
 
 // Version represents a browser version with all its metadata.
 type Version struct {

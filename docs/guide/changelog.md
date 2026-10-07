@@ -29,7 +29,7 @@
 #### 统一输出契约
 
 - 自动化相关命令（`run --automation/--daemon`、`where`、`endpoint`、`ps`、`stop`、`ls`）统一支持 `--json`
-- 统一信封 `{ok, command, data}`，失败时为 `{ok, command, error}`，错误码为语言中立的稳定标识
+- 统一信封 `{appname, version, timestamp, command, ok, data}`，失败时为 `{appname, version, timestamp, command, ok, error}`，错误码为语言中立的稳定标识
 - stdout 只放内容，stderr 只放元信息（横幅、提示、告警）
 
 #### run 自动化模式增强
@@ -37,6 +37,11 @@
 - `--automation` 现为超集开关：同时启用 CDP 与 WebDriver 端点
 - 新增 `--endpoint-timeout`（端点发现超时，默认 10 秒）、`--json`（JSON 输出）
 - 端点相关能力失败不阻断浏览器启动，对应字段输出 `null`
+
+### 行为变更
+
+- 客户端版本号改用日期规则（`yyyy.MM.dd`，如 `2026.10.07`），不再使用 `1.0.0` 形式的语义化版本
+- 发布构建由构建当天日期注入版本号，本地开发构建回退到构建日期，`--version`、JSON 信封的 `version` 字段与更新命令的版本比较均遵循该规则
 
 ## 未发布（2026-09-30 自动化驱动管理）
 

@@ -78,7 +78,7 @@ bws r chrome@120 --automation --profile test-01 --json
 ```json
 {
   "appname": "bws",
-  "version": "1.0.0",
+  "version": "2026.10.07",
   "timestamp": "2026-10-07T14:30:00+08:00",
   "command": "run chrome@120 --automation --profile test-01 --json",
   "ok": true,
@@ -107,7 +107,7 @@ Endpoint fields use **pointer types**, so they render as `null` when unavailable
 ```json
 {
   "appname": "bws",
-  "version": "1.0.0",
+  "version": "2026.10.07",
   "timestamp": "2026-10-07T14:31:00+08:00",
   "command": "run firefox@115 --json",
   "ok": true,

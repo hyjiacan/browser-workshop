@@ -10,10 +10,12 @@
     Zip file names include version, platform and architecture identifiers,
     while the binary file name itself does not.
 
+    The version uses a date-based scheme (yyyy.MM.dd), not semantic versions.
+
     Output example:
-      dist/bws_1.0.0_windows_amd64.zip  (contains bws.exe)
-      dist/bws_1.0.0_linux_amd64.zip    (contains bws)
-      dist/bws_1.0.0_darwin_amd64.zip   (contains bws)
+      dist/bws_2026.10.07_windows_amd64.zip  (contains bws.exe)
+      dist/bws_2026.10.07_linux_amd64.zip    (contains bws)
+      dist/bws_2026.10.07_darwin_amd64.zip   (contains bws)
 
 .PARAMETER OutputDir
     Output directory, defaults to dist/ under the project root.
@@ -26,7 +28,8 @@
     Skip compilation and only package (for already compiled binaries).
 
 .PARAMETER Version
-    Version number injected into the binary. Defaults to git tag, or "dev" if no tag exists.
+    Version number injected into the binary, in yyyy.MM.dd format.
+    Defaults to the current build date.
 
 .EXAMPLE
     .\build-release.ps1
@@ -37,8 +40,8 @@
     Only compile Windows and Linux amd64 versions.
 
 .EXAMPLE
-    .\build-release.ps1 -Version 0.5.0
-    Compile with the specified version number.
+    .\build-release.ps1 -Version 2026.10.07
+    Compile with the specified date version.
 #>
 [CmdletBinding()]
 param(
@@ -82,24 +85,16 @@ Write-Host "  Project root: $ProjectRoot"
 Write-Host "  Output dir:   $OutputDir"
 Write-Host ""
 
-# Get version number
+# Get version number (date-based scheme: yyyy.MM.dd)
 if (-not $Version) {
-    try {
-        $Version = git -C $ProjectRoot describe --tags --always 2>$null
-        if (-not $Version) {
-            $Version = "dev"
-        }
-    } catch {
-        $Version = "dev"
-    }
+    $Version = Get-Date -Format "yyyy.MM.dd"
 }
 
 Write-Host "  Version:      $Version"
 Write-Host ""
 
 # Build parameters
-$BuildTime = Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ"
-$LdFlags = "-s -w -X github.com/bws/bws/internal/version.ClientVersion=$Version -X github.com/bws/bws/internal/version.BuildTime=$BuildTime"
+$LdFlags = "-s -w -X github.com/bws/bws/internal/version.ClientVersion=$Version"
 
 $SuccessCount = 0
 $FailCount = 0

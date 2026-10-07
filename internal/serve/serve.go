@@ -1328,8 +1328,8 @@ func (s *Server) handleBinList(w http.ResponseWriter, _ *http.Request) {
 }
 
 // extractBinVersion extracts the version from a bws binary filename.
+// e.g. "bws_2026.10.07_windows_amd64.zip" → "2026.10.07"
 // e.g. "bws_1.0.0-beta-45-gec99964_windows_amd64.zip" → "1.0.0-beta-45-gec99964"
-// e.g. "bws_1.0.0_windows_amd64.zip" → "1.0.0"
 func extractBinVersion(name string) string {
 	name = strings.TrimSuffix(name, ".zip")
 	name = strings.TrimPrefix(name, "bws_")

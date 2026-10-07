@@ -133,7 +133,7 @@ GET /api/v1/manifest?refresh=true
   ],
   "server": {
     "name": "bws-serve",
-    "version": "1.0.0",
+    "version": "2026.10.07",
     "file_count": 2
   }
 }
@@ -240,7 +240,7 @@ GET /api/v1/status
   "status": "ok",
   "server": {
     "name": "bws-serve",
-    "version": "1.0.0",
+    "version": "2026.10.07",
     "uptime": 88215,
     "file_count": 15,
     "total_size": 1610612736
@@ -383,7 +383,7 @@ GET /api/v1/bin
       "filename": "bws_windows_amd64.zip",
       "platform": "windows",
       "arch": "amd64",
-      "version": "1.0.0",
+      "version": "2026.10.07",
       "size": 5242880
     }
   ]

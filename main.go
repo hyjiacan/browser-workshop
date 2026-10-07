@@ -39,13 +39,13 @@ import (
 	"github.com/charmbracelet/x/term"
 )
 
-const version = "1.0.0"
-
 func main() {
-	// build-release.ps1 通过 -ldflags -X 注入 ClientVersion；未注入时回退到源码常量
-	if bwversion.ClientVersion == "0.0.0-dev" {
-		bwversion.ClientVersion = version
+	// 发布构建通过 -ldflags -X 注入 internal/version.ClientVersion（yyyy.MM.dd）；
+	// 未注入时（本地开发构建）回退到构建当天日期，保持同一日期版本规则。
+	if bwversion.ClientVersion == "dev" {
+		bwversion.ClientVersion = time.Now().Format("2006.01.02")
 	}
+	version := bwversion.ClientVersion
 	// Parse global flags before command processing
 	verbose := parseGlobalVerbose()
 	// JSON 模式下整条输出流都不应出现横幅：脚本消费方会直接把结果喂给 JSON 解析器，

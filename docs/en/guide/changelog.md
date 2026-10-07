@@ -29,7 +29,7 @@ This page records feature changes for each version of Browser Workshop, listed i
 #### Unified Output Contract
 
 - Automation-related commands (`run --automation/--daemon`, `where`, `endpoint`, `ps`, `stop`, `ls`) all support `--json`
-- Unified envelope `{ok, command, data}`, or `{ok, command, error}` on failure, with language-neutral stable error codes
+- Unified envelope `{appname, version, timestamp, command, ok, data}`, or `{appname, version, timestamp, command, ok, error}` on failure, with language-neutral stable error codes
 - stdout carries content only; stderr carries metadata only (banner, hints, warnings)
 
 #### run Automation Mode Enhancements
@@ -37,6 +37,11 @@ This page records feature changes for each version of Browser Workshop, listed i
 - `--automation` is now a superset switch enabling both the CDP and WebDriver endpoints
 - New `--endpoint-timeout` (endpoint discovery timeout, default 10s) and `--json` (JSON output)
 - Endpoint-related failures never block the browser launch; the corresponding fields render as `null`
+
+### Behavior Changes
+
+- The client version now uses a date-based scheme (`yyyy.MM.dd`, e.g. `2026.10.07`) instead of semantic versions like `1.0.0`
+- Release builds inject the build date as the version; local development builds fall back to the build date. `--version`, the JSON envelope's `version` field, and the update command's version comparison all follow this scheme
 
 ## Unreleased (2026-09-30 Automation Driver Management)
 
