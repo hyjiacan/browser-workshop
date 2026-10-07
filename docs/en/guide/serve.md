@@ -7,11 +7,15 @@ The `bws sv` command can serve local browser installer packages over HTTP for ot
 `bws sv` is a lightweight HTTP service with the following main features:
 
 - **Browser version distribution**: Serve locally stored browser installer packages to clients on the LAN for download
-- **Manifest management**: Automatically scan directories, identify files, generate manifests and checksums
+- **Manifest management**: Automatically scan directories, identify files, generate manifests and checksums, with parallel scanning for speed
+- **Extension filtering**: Only supported package formats are processed; unrelated files are skipped
 - **Resume support**: Supports HTTP Range requests, allowing large file downloads to resume from where they left off
 - **Auto sync**: Can be configured to automatically sync the latest versions from online sources to local storage
+- **Online fallback**: Automatically fetch packages from online sources in real time when a local package is missing
+- **Driver hosting**: Resolve and host/proxy automation drivers (chromedriver) by Chrome version
 - **Web management interface**: Built-in HTML page for easy viewing and operation
 - **REST API**: Provides complete API interfaces for easy integration
+- **Dual log output**: Console + file (`logs/bws.log`, shared with the client), with log rotation
 
 ### Use Cases
 
@@ -164,6 +168,8 @@ Program directory/
 
 The `packages/` directory is required and stores all browser installer package files. Filenames are automatically recognized; supported formats and recognition rules are consistent with local import.
 
+You can point to another location via the `packages-dir` config item (absolute or relative path).
+
 ### bin Directory
 
 The `bin/` directory is optional and used to store bws client binary files. Clients can download the bws program directly through the web page.
@@ -198,7 +204,6 @@ Chrome_120.0.6099.109_Windows_x64.exe
 GoogleChrome_148.0.7778.167_Windows_x64_Offline.exe
 firefox-115.0esr-win64.zip
 Chrome_121.0.6167.85_Windows_x64.zip
-chromium-85.0.4183.121-linux-x64.tar.gz
 chromium-85.0.4183.121-linux-x64.tar.gz
 44.0.2403.107_chrome64_stable_windows_installer.exe
 ```

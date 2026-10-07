@@ -20,12 +20,16 @@ graph TB
         LOG["日志系统<br/>internal/log"]
         FP["指纹隔离<br/>internal/fingerprint"]
         PLUGIN["插件系统<br/>internal/plugin"]
+        AUTOMATION["自动化集成<br/>internal/automation"]
+        INSTANCE["实例注册表<br/>internal/instance"]
+        DRIVER["自动化驱动<br/>internal/driver"]
     end
 
     subgraph Serve["服务端 (bws serve)"]
         HTTP["HTTP 服务<br/>internal/serve"]
         SYNC["同步管理<br/>internal/serve/sync.go"]
         OF["在线回退<br/>internal/serve/serve.go"]
+        DRVHOST["驱动托管<br/>internal/serve/driver.go"]
     end
 
     subgraph Storage["存储"]
@@ -44,14 +48,21 @@ graph TB
     CLI --> INST
     CLI --> LAUNCH
     CLI --> LOG
+    CLI --> AUTOMATION
+    CLI --> DRIVER
+    CLI --> INSTANCE
     LAUNCH --> FP
     LAUNCH --> PLUGIN
+    LAUNCH --> AUTOMATION
+    AUTOMATION --> DRIVER
+    AUTOMATION --> INSTANCE
 
     SRC -->|HTTP| HTTP
     SRC --> FFTP
 
     HTTP --> SYNC
     HTTP --> OF
+    HTTP --> DRVHOST
     OF --> FFTP
 
     HTTP --> PKG
@@ -61,6 +72,8 @@ graph TB
     INST --> DATA
     LAUNCH --> DATA
     LOG --> DATA
+    DRIVER --> DATA
+    INSTANCE --> DATA
 ```
 
 ### 模块职责
@@ -76,7 +89,10 @@ graph TB
 | `internal/fingerprint` | 指纹隔离参数生成（User-Agent、分辨率、WebRTC 等） |
 | `internal/plugin` | Lua 脚本插件和 IPC 进程插件管理 |
 | `internal/log` | 双输出日志（文件+控制台）、级别控制、日志轮转 |
-| `internal/serve` | HTTP 服务、文件分发、清单生成、在线回退 |
+| `internal/automation` | 自动化端点发现（CDP / WebDriver）、启动契约构建 |
+| `internal/instance` | 后台实例注册表（`instances.json`）、PID 存活校验 |
+| `internal/driver` | 自动化驱动解析、下载、启动（chromedriver） |
+| `internal/serve` | HTTP 服务、文件分发、清单生成、在线回退、驱动托管 |
 
 ---
 
@@ -387,6 +403,43 @@ sequenceDiagram
     PluginMgr->>LuaVM: 调用 post_run()
     PluginMgr->>IPC: 发送 post_run 请求
 ```
+
+---
+
+## 自动化集成架构
+
+### `bws r --automation` 时序
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant Client as bws 客户端
+    participant Launch as 启动器 internal/launch
+    participant Auto as 自动化 internal/automation
+    participant Driver as 驱动管理 internal/driver
+    participant Registry as 实例注册表 internal/instance
+    participant Browser as 浏览器进程
+
+    User->>Client: bws r chrome@120 --automation
+    Client->>Launch: 构建启动参数并注入 CDP 参数
+    Launch->>Browser: 启动浏览器
+    Client->>Auto: 发现端点
+    Auto->>Auto: 读取 DevToolsActivePort（回退 GET /json/version）
+    Auto-->>Client: 返回 CDP 端点
+    Client->>Driver: 解析并准备匹配版本的 chromedriver
+    Driver-->>Client: 返回驱动路径
+    Client->>Driver: 启动驱动进程并监听端口
+    Driver-->>Client: 返回 WebDriver 端点
+    opt --daemon
+        Client->>Registry: 写入实例（名称/版本/PID/端点）
+    end
+    Client-->>User: 输出 CDP / WebDriver 端点（或 JSON 契约）
+```
+
+- `--automation` 是超集开关，等价于同时启用 `--cdp` 与 `--webdriver`
+- 端点发现失败或驱动启动失败**不阻断浏览器启动**，对应字段输出 `null`，仅在标准错误输出告警
+- 驱动解析优先经配置的 serve 离线源，其次查询上游 Chrome for Testing 清单（Chrome ≥ 115）或旧版 storage（Chrome < 115）
+- `--daemon` 时实例登记到 `instances.json`，由 `ps` / `stop` 命令读取与维护
 
 ---
 

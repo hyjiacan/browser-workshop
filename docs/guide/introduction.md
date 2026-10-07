@@ -32,6 +32,47 @@ Browser Workshop 是一款多版本浏览器管理工具，支持本地安装、
 
 支持命名 Profile、重置 Profile、清理孤立 Profile。同一个命名 Profile 可以在不同版本间共享，方便迁移和对比测试。
 
+### 自动化测试集成
+
+bws 不只是浏览器版本管理工具，也是自动化测试框架的浏览器供应层。一条命令即可启动版本精确、环境隔离的浏览器，并暴露标准端点，供 Playwright、Puppeteer、Selenium、WebdriverIO 等框架直接接入。
+
+```bash
+# 启动浏览器，自动准备匹配版本的 chromedriver，输出 CDP 与 WebDriver 端点
+bws r chrome@120 --automation
+```
+
+- **CDP 端点**：从 Profile 目录的 `DevToolsActivePort` 发现 WebSocket 地址，供 Playwright / Puppeteer 连接
+- **WebDriver 端点**：启动与浏览器主版本严格匹配的 chromedriver，供 Selenium / WebdriverIO 连接
+- **浏览器路径输出**：`bws where chrome@120` 输出二进制路径，便于 Cypress 等框架做命令替换
+- 端点能力失败不阻断浏览器启动，对应字段输出 `null`
+
+### 自动化驱动管理
+
+自动化驱动与浏览器版本强绑定，bws 按需解析、下载并启动匹配版本的驱动（chromedriver）。Chrome ≥ 115 查询 Chrome for Testing 清单，Chrome < 115 回退到旧版存储桶；配置离线源后还可经 serve 离线分发。
+
+```bash
+bws driver install chrome@120       # 安装匹配版本的驱动
+bws driver start 120 --port 9515    # 启动驱动并监听端口
+```
+
+### 后台实例管理
+
+自动化测试常需「启动一次、多次连接」。`run --daemon` 启动并登记实例，`ps` 查看运行中的实例，`stop` 停止实例，构成可脚本化的生命周期闭环。
+
+```bash
+bws r chrome@120 --automation --daemon --profile test-01
+bws ps
+bws stop bws-chrome-120-test-01
+```
+
+### 统一 JSON 输出
+
+自动化相关命令（`run --automation/--daemon`、`where`、`endpoint`、`ps`、`stop`、`ls`）统一支持 `--json`，输出 `{appname, version, timestamp, command, ok, data}` 信封，便于脚本与 CI 消费。
+
+```bash
+CDP=$(bws r chrome@120 --automation --daemon --json | jq -r '.data.cdp')
+```
+
 ### 多格式支持
 
 支持 zip、7z、tar.gz、tar.bz2、tar.xz、.exe 等多种压缩包格式，无论是官方安装包还是绿色版压缩包都能轻松安装。
@@ -80,7 +121,18 @@ Browser Workshop 是一款多版本浏览器管理工具，支持本地安装、
 
 ### 测试自动化
 
-自动化测试需要在多个浏览器版本上运行测试用例，bws 提供命令行接口，易于集成到 CI/CD 流程中。
+自动化测试需要在多个浏览器版本上运行测试用例，bws 可作为浏览器供应层直接接入测试框架：启动浏览器、输出端点，交给框架连接。
+
+```bash
+# 启动后台实例并查询端点
+bws r chrome@120 --automation --daemon
+bws endpoint bws-chrome-120
+
+# 仅需浏览器路径时（如 Cypress）
+cypress run --browser "$(bws where chrome@120)"
+```
+
+配合统一 JSON 输出，易于集成到 CI/CD 流程中。
 
 ### 多环境隔离
 

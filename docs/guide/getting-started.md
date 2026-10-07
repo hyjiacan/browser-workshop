@@ -165,7 +165,33 @@ bws u chrome@120
 bws r chrome
 ```
 
-## 6. 使用 Serve 服务（团队共享）
+## 6. 自动化测试（可选）
+
+如果需要用 Playwright、Puppeteer、Selenium、WebdriverIO 等框架做自动化测试，可以用 `--automation` 一条命令启动浏览器，自动准备匹配版本的 chromedriver，并输出 CDP 与 WebDriver 端点：
+
+```bash
+bws r chrome@120 --automation
+```
+
+配合 `--daemon` 可在后台运行并登记为可管理实例：
+
+```bash
+bws r chrome@120 --automation --daemon --profile test-01
+
+bws ps                               # 查看运行中的实例
+bws endpoint bws-chrome-120-test-01  # 查询实例端点
+bws stop bws-chrome-120-test-01      # 停止实例
+```
+
+如果框架只需要浏览器路径（如 Cypress），可以用 `bws where`：
+
+```bash
+cypress run --browser "$(bws where chrome@120)"
+```
+
+更多说明请参考 [自动化框架集成](./automation.md) 章节。
+
+## 7. 使用 Serve 服务（团队共享）
 
 如果你需要在团队内共享浏览器版本，可以搭建 Serve 服务：
 
@@ -193,6 +219,7 @@ bws cfg set source http://server-ip:8080
 - 了解 [浏览器短别名](./short-aliases.md)，减少输入量
 - 学习 [版本管理](./version-management.md) 的更多技巧
 - 探索 [Profile 管理](./profile.md) 功能
+- 接入 [自动化框架集成](./automation.md)，驱动 Playwright / Selenium 等
 - 配置 [离线源](./config.md)，加速下载
 - 搭建 [Serve 服务](./serve.md)，实现团队共享
 - 了解 [日志系统](./logging.md)，排查问题

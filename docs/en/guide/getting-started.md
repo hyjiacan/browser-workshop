@@ -84,6 +84,9 @@ Before installing, you can first check which versions are available from the rem
 bws ls --remote chrome
 bws ls -R gc@79
 bws ls -R chrome --channel beta
+
+# Force refresh the remote source cache
+bws ls -R firefox --refresh
 ```
 
 The remote list will mark locally installed versions:
@@ -138,6 +141,9 @@ bws r chrome@120 https://example.com
 
 # Pass native browser arguments
 bws r chrome@120 -- --disable-gpu --no-sandbox
+
+# Verbose (detailed) logging
+bws r chrome@120 -V
 ```
 
 > **Tip**: When matching partial version numbers, all matching versions will be listed and the latest version will be automatically selected. For more run options, please refer to the [Run Browser](./run.md) chapter.
@@ -156,6 +162,53 @@ After setting, you can run directly using the browser name without specifying th
 bws r chrome
 ```
 
+## 6. Automation Testing (Optional)
+
+If you use frameworks such as Playwright, Puppeteer, Selenium or WebdriverIO, the `--automation` flag launches the browser, prepares a matching chromedriver, and prints the CDP and WebDriver endpoints in one command:
+
+```bash
+bws r chrome@120 --automation
+```
+
+Combined with `--daemon`, the browser runs in the background and is registered as a manageable instance:
+
+```bash
+bws r chrome@120 --automation --daemon --profile test-01
+
+bws ps                               # list running instances
+bws endpoint bws-chrome-120-test-01  # query instance endpoints
+bws stop bws-chrome-120-test-01      # stop the instance
+```
+
+If a framework only needs the browser path (e.g. Cypress), use `bws where`:
+
+```bash
+cypress run --browser "$(bws where chrome@120)"
+```
+
+For more details, please refer to the [Automation Framework Integration](./automation.md) chapter.
+
+## 7. Use the Serve Service (Team Sharing)
+
+If you need to share browser versions within a team, you can set up the Serve service:
+
+```bash
+# First run, automatically creates the configuration file
+bws sv
+
+# Edit the bws-serve.ini configuration file
+# Start the service
+bws sv
+```
+
+Configure the client's offline source address:
+
+```bash
+bws cfg set source http://server-ip:8080
+```
+
+For detailed instructions, please refer to the [Serve Service](./serve.md) chapter.
+
 ## Next Steps
 
 Congratulations on completing the bws quick start! Next, you can:
@@ -163,5 +216,7 @@ Congratulations on completing the bws quick start! Next, you can:
 - Learn about [Browser Short Aliases](./short-aliases.md) to reduce typing
 - Explore more tips for [Version Management](./version-management.md)
 - Discover [Profile Management](./profile.md) features
+- Integrate [Automation Frameworks](./automation.md) to drive Playwright / Selenium and more
 - Configure [Offline Sources](./config.md) to speed up downloads
 - Set up [Serve Service](./serve.md) for team sharing
+- Learn about the [Logging System](./logging.md) for troubleshooting

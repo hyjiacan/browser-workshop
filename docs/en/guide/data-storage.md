@@ -143,7 +143,7 @@ Download file cache, permanently storing installer packages downloaded from serv
 
 - Files are retained in the cache after installation; reused for subsequent installs of the same version
 - Automatically re-downloaded when the file on the serve side is updated (size changes)
-- Use `--refresh-cache` flag to force re-download from serve (ignoring local cache)
+- Use the `--refresh` flag to force re-download from serve (ignoring local cache)
 - May occupy a large amount of space; can be cleaned periodically via `bws cc clear`
 - View cache file list and space usage via `bws cc info`
 

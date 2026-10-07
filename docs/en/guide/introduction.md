@@ -32,6 +32,47 @@ Each version uses an independent user data directory (Profile), with no interfer
 
 Supports named Profiles, Profile reset, and cleanup of orphaned Profiles. The same named Profile can be shared across different versions, facilitating migration and comparison testing.
 
+### Automation Integration
+
+bws is not just a browser version manager — it is also the browser supply layer for test automation frameworks. One command launches a version-precise, isolated browser and exposes standard endpoints for Playwright, Puppeteer, Selenium, and WebdriverIO to connect to directly.
+
+```bash
+# Launch the browser, prepare the matching chromedriver, and print CDP / WebDriver endpoints
+bws r chrome@120 --automation
+```
+
+- **CDP endpoint**: discovers the WebSocket address from the `DevToolsActivePort` file in the Profile directory, for Playwright / Puppeteer
+- **WebDriver endpoint**: starts the chromedriver that strictly matches the browser major version, for Selenium / WebdriverIO
+- **Browser path output**: `bws where chrome@120` prints the binary path, convenient for command substitution in frameworks such as Cypress
+- Endpoint failures never block the browser launch; the affected field is emitted as `null`
+
+### Automation Drivers
+
+Automation drivers are tightly coupled to the browser version. bws resolves, downloads, and starts the matching driver (chromedriver) on demand. Chrome ≥ 115 queries the Chrome for Testing manifest; Chrome < 115 falls back to the legacy storage bucket. With an offline source configured, drivers can also be distributed offline via serve.
+
+```bash
+bws driver install chrome@120       # install the matching driver
+bws driver start 120 --port 9515    # start the driver and listen on a port
+```
+
+### Background Instance Management
+
+Automation tests often need to "launch once, connect many times". `run --daemon` launches and registers an instance, `ps` lists running instances, and `stop` stops them — a scriptable lifecycle.
+
+```bash
+bws r chrome@120 --automation --daemon --profile test-01
+bws ps
+bws stop bws-chrome-120-test-01
+```
+
+### Unified JSON Output
+
+All automation-related commands (`run --automation/--daemon`, `where`, `endpoint`, `ps`, `stop`, `ls`) support `--json`, emitting an `{appname, version, timestamp, command, ok, data}` envelope for scripts and CI to consume.
+
+```bash
+CDP=$(bws r chrome@120 --automation --daemon --json | jq -r '.data.cdp')
+```
+
 ### Multi-format Support
 
 Supports zip, 7z, tar.gz, tar.bz2, tar.xz, .exe, and more. Whether it's an official installer or a portable archive, it can be easily imported.
@@ -80,7 +121,18 @@ When enterprise intranets cannot access the external network, an offline distrib
 
 ### Test Automation
 
-Automated testing needs to run test cases across multiple browser versions. bws provides a command-line interface that is easy to integrate into CI/CD workflows.
+Automated testing needs to run test cases across multiple browser versions. bws can act as the browser supply layer, connecting directly to test frameworks: launch the browser, expose endpoints, and let the framework connect.
+
+```bash
+# Launch a background instance and query its endpoints
+bws r chrome@120 --automation --daemon
+bws endpoint bws-chrome-120
+
+# When only the browser path is needed (e.g. Cypress)
+cypress run --browser "$(bws where chrome@120)"
+```
+
+Combined with unified JSON output, it is easy to integrate into CI/CD workflows.
 
 ### Multi-environment Isolation
 

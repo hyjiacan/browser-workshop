@@ -10,7 +10,6 @@ Use the `ls` or `list` command to list all installed browser versions:
 
 ```bash
 bws ls
-bws ls
 ```
 
 Example output:
