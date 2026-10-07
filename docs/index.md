@@ -19,29 +19,20 @@ hero:
 features:
   - icon: 📦
     title: 多版本管理
-    details: 同时安装和管理多个浏览器版本，支持版本前缀快速筛选。
-  - icon: 📥
-    title: 本地安装
-    details: 从目录或压缩包自动识别并安装浏览器版本，支持 zip、7z、tar.gz 等多种格式。
+    details: 同时安装和管理多个浏览器版本，版本间完全隔离，互不干扰。
   - icon: 🌐
-    title: 远程下载
-    details: 从官方源（Firefox FTP）下载指定版本的浏览器。
-  - icon: 🔄
-    title: 离线分发
-    details: 内置 serve 命令，搭建局域网浏览器版本分发服务，支持自动同步、在线回退、并行扫描。
+    title: 灵活的版本来源
+    details: 本地目录或压缩包自动识别导入，也可从官方源远程下载，并自动识别系统已安装的版本。
   - icon: 🔒
     title: 隔离运行
-    details: 每个版本使用独立的 Profile，互不干扰，支持命名 Profile。
-  - icon: 📱
-    title: 便携模式
-    details: 数据存储在 bws-data/ 子目录，U 盘随身携带，即插即用。
-  - icon: 🖥️
-    title: 桌面快捷方式
-    details: 一键创建桌面快捷方式，双击直接启动浏览器，支持 Windows、Linux、macOS。
-  - icon: ⚡
-    title: 短别名
-    details: 支持 gc (chrome)、ff (firefox)、cm (chromium) 等短别名，输入更快捷。
-  - icon: 📊
-    title: 详细日志
-    details: 分级日志系统，文件与控制独立配置级别，支持日志轮转和 --verbose 临时调试。
+    details: 每个版本使用独立的 Profile，支持命名 Profile 在不同版本间共享。
+  - icon: 🔄
+    title: 离线分发
+    details: 内置 serve 命令，一键搭建局域网分发服务，内网也能获取浏览器与驱动。
+  - icon: 🤖
+    title: 自动化集成
+    details: 一条命令启动浏览器并暴露 CDP / WebDriver 端点，自动准备与版本匹配的 chromedriver。
+  - icon: 🗂️
+    title: 后台实例管理
+    details: run --daemon 启动、ps 查看、stop 停止，构成可脚本化的生命周期闭环。
 ---

@@ -5,54 +5,48 @@
 </p>
 
 <p align="center">
-  Isolated browser multi-version manager for fast, clean test environment switching.
+  Isolated browser multi-version manager for fast, clean test environment switching — and a browser supply layer for test automation.
 </p>
 
 ## Features
 
-- **Multi-version Management**: Install and manage multiple browser versions simultaneously, with quick filtering by version prefix
-- **Local Import**: Automatically detect and import from directories or archives, supporting zip, 7z, tar.gz, tar.bz2, tar.xz, exe, and more
-- **Remote Download**: Download specified versions from official sources (Firefox via Mozilla FTP)
-- **Offline Distribution**: Built-in `serve` command with auto-sync support, set up a LAN distribution service
-- **Isolated Execution**: Independent profile for each version, with support for named profiles
-- **Plugin System**: Lua script plugins and standalone process plugins, automatically modify launch arguments, inject configs, and execute custom logic
-- **Proxy Support**: Global proxy configuration covering downloads and browser launch, supporting HTTP/SOCKS5 protocols
-- **Fingerprint Isolation**: `--fingerprint` presets (standard/random) to reduce browser fingerprint tracking
-- **Internationalization**: Built-in Chinese and English, with external translation file override support
-- **Portable Mode**: Data stored in the `bws-data/` subdirectory, carry it on a USB drive
-- **Browser Short Aliases**: `gc` (chrome), `ff` (firefox), `cm` (chromium)
-- **HTTPS Compatible**: Skip certificate verification by default, adapted for intranet/self-signed certificate environments
+- **Multi-version Management**: Install and manage multiple browser versions side by side, fully isolated from each other
+- **Flexible Version Sources**: Auto-detect and import from local directories or archives, download from official sources, and detect browsers already installed on the system
+- **Isolated Execution**: Each version runs with its own profile, with named profiles shareable across versions
+- **Offline Distribution**: A built-in `serve` command sets up a LAN distribution service, so intranets can fetch browsers and drivers too
+- **Automation Integration**: One command launches a browser and exposes CDP / WebDriver endpoints, preparing a version-matched chromedriver automatically
+- **Background Instance Management**: Start with `run --daemon`, inspect with `ps`, stop with `stop` — a scriptable lifecycle
 
 ## Quick Start
 
 ```bash
 # View installed versions
 bws ls
-bws ls gc@79           # Use short alias + version prefix filter
 
-# Batch import from a local directory
-bws import /path/to/browsers
+# Install a specific version
+bws i chrome@120
 
-# Remote download and install
-bws install chrome@120
-
-# Chrome historical versions need to be manually downloaded before importing
-# Download address: https://chromedownloads.net/
-bws install --from-file chrome-120-win64.zip chrome@120
+# Import from a local directory or archive
+bws i -d /path/to/browsers
 
 # Run the browser
-bws run chrome@120
-bws run gc@120 -i      # Incognito mode
+bws r chrome@120
+
+# Automation: launch and expose CDP / WebDriver endpoints
+bws r chrome@120 --automation
 ```
+
+> Historical Chrome versions have no official remote source. Download one manually and import it with `bws i --from-file chrome-120-win64.zip chrome@120`.
 
 ## Documentation
 
 For full documentation, please visit: **[Browser Workshop Documentation](https://hyjiacan.github.io/browser-workshop)**
 
-- [Getting Started](https://hyjiacan.github.io/browser-workshop/guide/getting-started)
-- [Commands Reference](https://hyjiacan.github.io/browser-workshop/guide/commands)
-- [Serve Service](https://hyjiacan.github.io/browser-workshop/guide/serve)
-- [Browser Short Aliases](https://hyjiacan.github.io/browser-workshop/guide/short-aliases)
+- [Getting Started](https://hyjiacan.github.io/browser-workshop/en/guide/getting-started)
+- [Commands Reference](https://hyjiacan.github.io/browser-workshop/en/guide/commands)
+- [Automation Framework Integration](https://hyjiacan.github.io/browser-workshop/en/guide/automation)
+- [Serve Service](https://hyjiacan.github.io/browser-workshop/en/guide/serve)
+- [Browser Short Aliases](https://hyjiacan.github.io/browser-workshop/en/guide/short-aliases)
 
 ## Installation
 
@@ -70,19 +64,33 @@ go install gitee.com/hyjiacan/browser-workshop/cmd/bws@latest
 
 ## Command Overview
 
-| Command | Description |
-|---------|-------------|
-| `bws ls` / `bws list` | List installed browser versions |
-| `bws ls -R` | List remote available versions |
-| `bws run <browser@version>` | Run a specific version |
-| `bws install <browser@version>` | Install a browser version |
-| `bws import <dir>` | Batch import from a directory |
-| `bws serve` | Start the HTTP distribution service |
-| `bws config` | Manage configuration |
-| `bws profile` | Manage profiles |
-| `bws plugin` | Manage plugins (install/uninstall/search) |
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `bws list` | `ls` | List installed browser versions |
+| `bws info` | `show` | Show detailed version information |
+| `bws run` | `r`, `open` | Run a specific browser version |
+| `bws install` | `i` | Install a browser version |
+| `bws shortcut` | `sc` | Manage desktop shortcuts |
+| `bws uninstall` | `rm`, `remove` | Uninstall a browser version |
+| `bws use` | `u` | Set the default browser version |
+| `bws download` | `dl` | Download only, without installing |
+| `bws profile` | `pf` | Manage browser profiles |
+| `bws alias` | — | Manage version aliases |
+| `bws update` | `upgrade`, `up` | Update bws from the configured offline source |
+| `bws serve` | `sv`, `server` | Start the HTTP distribution service |
+| `bws config` | `cfg` | Manage configuration |
+| `bws repo` | — | Manage the local binary repository |
+| `bws cache` | `cc` | Manage the download cache |
+| `bws plugin` | `pl` | Manage plugins |
+| `bws driver` | `drv` | Manage automation drivers (chromedriver) |
+| `bws where` | `path` | Print the local path of a browser |
+| `bws endpoint` | — | Print the CDP / WebDriver endpoints of an instance |
+| `bws ps` | — | List running background instances |
+| `bws stop` | `kill` | Stop running background instances |
+| `bws doctor` | `dt` | System health check |
+| `bws help` | `h` | Show help information |
 
-For full command descriptions, please see [Commands Reference](https://hyjiacan.github.io/browser-workshop/guide/commands).
+For full command descriptions, please see [Commands Reference](https://hyjiacan.github.io/browser-workshop/en/guide/commands).
 
 ## Browser Short Aliases
 
@@ -92,62 +100,39 @@ For full command descriptions, please see [Commands Reference](https://hyjiacan.
 | `ff` | firefox |
 | `cm` | chromium |
 
-All commands support short aliases. For details, see [Browser Short Aliases](https://hyjiacan.github.io/browser-workshop/guide/short-aliases).
+All commands support short aliases. For details, see [Browser Short Aliases](https://hyjiacan.github.io/browser-workshop/en/guide/short-aliases).
 
-## Proxy and Fingerprint Isolation
+## Automation Integration
 
-```bash
-# Set global proxy (applies to downloads and browser launch)
-bws cfg set proxy socks5://127.0.0.1:1080
-
-# Run with fingerprint isolation
-bws r chrome@120 --fingerprint random
-bws r chrome@120 --fingerprint standard
-```
-
-## Plugin System
-
-bws supports Lua script plugins and standalone process plugins, automatically executing custom logic on browser launch.
+bws acts as the browser supply layer for test automation frameworks: one command launches a version-precise, isolated browser and exposes standard endpoints.
 
 ```bash
-# Install a plugin
-bws plugin install ./my-plugin.lua
+# Launch the browser, prepare the matching chromedriver, and print CDP / WebDriver endpoints
+bws r chrome@120 --automation
 
-# Run browser with a plugin
-bws r chrome@120 --plugin my-plugin
+# Run in the background and register a manageable instance
+bws r chrome@120 --automation --daemon --profile test-01
 
-# Activate multiple plugins at once
-bws r chrome@120 --plugin plugin-a,plugin-b
+# Inspect and stop background instances
+bws ps
+bws stop bws-chrome-120-test-01
 
-# Search remote plugins
-bws plugin search fingerprint
+# When only the browser path is needed (e.g. Cypress)
+bws where chrome@120
 ```
 
-Creating a plugin is as simple as creating a `.lua` file:
-
-```lua
--- ~/.bws/plugins/my-plugin.lua
-function pre_run()
-    if ctx.browser == "chrome" then
-        ctx.add_arg("--disable-background-timer-throttling")
-    end
-end
-```
-
-For more examples, see [plugins/examples](plugins/examples/).
+`--automation` is a superset switch, equivalent to enabling both `--cdp` and `--webdriver`. Endpoint failures never block the browser launch; the affected field is emitted as `null`. See [Automation Framework Integration](https://hyjiacan.github.io/browser-workshop/en/guide/automation).
 
 ## Serve Service
 
-```bash
-# First run (automatically creates configuration file)
-bws serve
-# Edit the bws-serve.ini configuration file
+Set up a browser distribution service for intranets or teams, so clients can fetch browser versions and drivers without external network access.
 
-# Start the service
-bws serve
+```bash
+# The first run generates a configuration file; edit it and start again
+bws sv
 ```
 
-For details, see [Serve Service Documentation](https://hyjiacan.github.io/browser-workshop/guide/serve).
+Supports parallel scanning, online fallback (fetching from online sources when a local package is missing) and driver hosting. See [Serve Service Documentation](https://hyjiacan.github.io/browser-workshop/en/guide/serve).
 
 ## License
 
