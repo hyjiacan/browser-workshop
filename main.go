@@ -19,6 +19,7 @@ import (
 	"github.com/bws/bws/internal/cli"
 	"github.com/bws/bws/internal/config"
 	"github.com/bws/bws/internal/download"
+	"github.com/bws/bws/internal/driver"
 	"github.com/bws/bws/internal/fingerprint"
 	"github.com/bws/bws/internal/i18n"
 	"github.com/bws/bws/internal/install"
@@ -195,6 +196,20 @@ func main() {
 	ctx.Serve = &serveAdapter{version: version, source: onlineSourceMgr, firefoxSrc: firefoxSource, verbose: verbose}
 	ctx.Plugin = &pluginAdapter{mgr: pluginMgr}
 	ctx.Logger = logger
+
+	// Automation drivers (chromedriver) are resolved against the exact Chrome
+	// build in use. A configured serve instance is preferred so it can host or
+	// proxy the driver archives; direct Chrome for Testing access is the fallback.
+	driverServeURL := ""
+	if cfg.IsServeSourceEnabled() {
+		driverServeURL = cfg.GetRemoteSource()
+	}
+	driverMgr := driver.NewManager(p, driver.Options{
+		ProxyURL: proxyURL,
+		ServeURL: driverServeURL,
+	})
+	ctx.Driver = &driverAdapter{mgr: driverMgr}
+
 	if repoImporter != nil {
 		ctx.Repo = &repoAdapter{scanner: repoScanner, importer: repoImporter}
 	}
@@ -1302,6 +1317,39 @@ func (a *downloadAdapter) Download(url string, destPath string, onProgress func(
 		return "", err
 	}
 	return result.Path, nil
+}
+
+// driverAdapter adapts driver.Manager to cli.DriverProvider.
+type driverAdapter struct {
+	mgr *driver.Manager
+}
+
+func (a *driverAdapter) Resolve(chromeVersion string) (*driver.Info, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	return a.mgr.Resolve(ctx, chromeVersion, "", "")
+}
+
+func (a *driverAdapter) Ensure(chromeVersion string, force bool, onProgress func(downloaded, total int64, percent float64)) (*driver.Record, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+	return a.mgr.Ensure(ctx, driver.EnsureOptions{
+		ChromeVersion: chromeVersion,
+		Force:         force,
+		OnProgress:    onProgress,
+	})
+}
+
+func (a *driverAdapter) List() ([]driver.Record, error) {
+	return a.mgr.List()
+}
+
+func (a *driverAdapter) Uninstall(major string) error {
+	return a.mgr.Uninstall(major)
+}
+
+func (a *driverAdapter) Start(opts driver.StartOptions) (*driver.Process, error) {
+	return a.mgr.Start(context.Background(), opts)
 }
 
 // sourceAdapter adapts source.Source to cli.SourceProvider.

@@ -14,6 +14,8 @@ bws sv 提供了完整的 REST API 接口，用于查询文件清单、下载文
 | `/api/v1/sync/trigger` | POST | 手动触发同步 |
 | `/api/v1/bin` | GET | 客户端二进制文件列表（JSON） |
 | `/api/v1/bin/{filename}` | GET | 客户端二进制下载 |
+| `/api/v1/driver/manifest` | GET | 按 Chrome 版本解析自动化驱动（chromedriver）构建 |
+| `/api/v1/driver/download/{filename}` | GET | 驱动归档下载（本地托管优先，未命中时从上游代理下载并缓存） |
 
 > **manifest 合并机制**：当 `online-fallback` 启用时，`manifest` 返回本地 packages 目录中的文件与在线源缓存版本的合并结果（去重后）。本地文件携带真实 XXH3 校验和，在线缓存版本的校验和为空（下载到本地后计算）。过滤由客户端自行完成。
 
@@ -437,6 +439,119 @@ GET /api/v1/bin/{filename}
 ```bash
 # 下载 Windows 版本的 bws
 curl -O http://localhost:8080/api/v1/bin/bws-windows-amd64.exe
+```
+
+---
+
+## GET /api/v1/driver/manifest
+
+按 Chrome 版本解析匹配的自动化驱动（chromedriver）构建，供客户端在离线/内网环境获取驱动。
+
+服务端会查询上游 Chrome for Testing 清单（Chrome ≥ 115）或旧版 chromedriver storage（Chrome < 115）；当上游不可用时，回退到本地已缓存的驱动索引。解析结果会被记入索引，并将下载地址重写为指向本实例的相对路径，客户端据此通过本服务代理下载归档。
+
+### 查询参数
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `chrome` | string | 是 | 要匹配的 Chrome 版本（如 `120` 或 `120.0.6099.109`） |
+| `platform` | string | 否 | 平台（`windows`/`darwin`/`linux`），默认为服务端平台 |
+| `arch` | string | 否 | 架构（`amd64`/`386`/`arm64`），默认为服务端架构 |
+
+### 请求
+
+```
+GET /api/v1/driver/manifest?chrome=120
+GET /api/v1/driver/manifest?chrome=120.0.6099.109&platform=windows&arch=amd64
+```
+
+### 响应示例
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "name": "chromedriver",
+    "version": "120.0.6099.109",
+    "major_version": "120",
+    "platform": "windows",
+    "arch": "amd64",
+    "download_url": "/api/v1/driver/download/chromedriver-win64.zip",
+    "filename": "chromedriver-win64.zip",
+    "source": "serve"
+  }
+}
+```
+
+### 响应字段说明
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `status` | string | `"ok"` 或 `"error"` |
+| `data.name` | string | 驱动名称（固定为 `chromedriver`） |
+| `data.version` | string | 精确驱动版本号 |
+| `data.major_version` | string | 主版本号（安装目录键） |
+| `data.platform` | string | 平台（windows / darwin / linux） |
+| `data.arch` | string | 架构（amd64 / 386 / arm64） |
+| `data.download_url` | string | 归档下载地址（相对本实例，需代理下载） |
+| `data.filename` | string | 归档文件名 |
+| `data.source` | string | 解析来源（`serve` / `serve-cache`） |
+| `error` | string | 出错时的错误描述（`status` 为 `error` 时出现） |
+
+### 错误响应
+
+驱动服务未启用时返回 `503`；缺少 `chrome` 参数返回 `400`；解析失败且本地索引无命中时返回 `404`。响应体为 JSON：
+
+```json
+{
+  "status": "error",
+  "error": "Chrome for Testing 清单中未找到 Chrome 999 对应的 chromedriver"
+}
+```
+
+> **注意**：`driver/manifest` 的错误响应为 JSON（区别于其他端点的纯文本错误），便于客户端解析失败原因。
+
+### 使用示例
+
+```bash
+# 解析 Chrome 120 对应的驱动
+curl "http://localhost:8080/api/v1/driver/manifest?chrome=120"
+```
+
+---
+
+## GET /api/v1/driver/download/{filename}
+
+下载驱动归档。若归档已在本实例托管目录中则直接返回；否则依据驱动索引中的上游地址从上游下载、缓存到本地后再返回。
+
+### 请求
+
+```
+GET /api/v1/driver/download/{filename}
+```
+
+### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| filename | string | 驱动归档文件名（如 `chromedriver-win64.zip`） |
+
+### 响应
+
+返回文件内容，支持断点续传，行为与 `/api/v1/download/{filename}` 一致。
+
+### 错误响应
+
+| 状态码 | 说明 |
+|--------|------|
+| 400 | 文件名为空或包含非法字符 |
+| 404 | 未在本实例托管且索引中无对应记录 |
+| 502 | 从上游代理下载失败 |
+
+### 使用示例
+
+```bash
+# 下载驱动归档
+curl -O http://localhost:8080/api/v1/driver/download/chromedriver-win64.zip
 ```
 
 ---

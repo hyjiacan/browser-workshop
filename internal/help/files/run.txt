@@ -10,21 +10,25 @@
   bws r [浏览器[@版本]] [URL] [选项] [-- 原生参数]
 
 【选项参数】
-  ┌───────────────────┬──────────┬────────────────────────────────────────┐
-  │ 选项              │ 默认值   │ 说明                                   │
-  ├───────────────────┼──────────┼────────────────────────────────────────┤
-  │ --headless, -H    │ false    │ 无头模式运行                           │
-  │ --incognito, -i   │ false    │ 隐身/无痕模式运行                      │
-  │ --new-window, -w  │ false    │ 在新窗口中打开                         │
-  │ --profile, -p     │ -        │ 使用指定的 Profile 名称                │
-  │ --native, -n      │ false    │ 原生模式启动（无 bws 隔离）            │
-  │ --detached, -d    │ false    │ 后台运行（不等待进程结束）             │
-  │ --dry-run         │ false    │ 仅打印命令，不实际运行                 │
-  │ --proxy           │ -        │ 代理地址（留空使用全局配置）           │
-  │ --no-proxy        │ false    │ 禁用代理（覆盖全局配置）               │
-  │ --fingerprint, -fp│ -        │ 指纹隔离预设（standard/random/none）   │
-  │ --plugin          │ -        │ 激活的插件（逗号分隔多个）             │
-  └───────────────────┴──────────┴────────────────────────────────────────┘
+  ┌──────────────────────┬──────────┬────────────────────────────────────────┐
+  │ 选项                 │ 默认值   │ 说明                                   │
+  ├──────────────────────┼──────────┼────────────────────────────────────────┤
+  │ --headless, -H       │ false    │ 无头模式运行                           │
+  │ --incognito, -i      │ false    │ 隐身/无痕模式运行                      │
+  │ --new-window, -w     │ false    │ 在新窗口中打开                         │
+  │ --profile, -p        │ -        │ 使用指定的 Profile 名称                │
+  │ --native, -n         │ false    │ 原生模式启动（无 bws 隔离）            │
+  │ --detached, -d       │ false    │ 后台运行（不等待进程结束）             │
+  │ --dry-run            │ false    │ 仅打印命令，不实际运行                 │
+  │ --proxy              │ -        │ 代理地址（留空使用全局配置）           │
+  │ --no-proxy           │ false    │ 禁用代理（覆盖全局配置）               │
+  │ --fingerprint, -fp   │ -        │ 指纹隔离预设（standard/random/none）   │
+  │ --plugin             │ -        │ 激活的插件（逗号分隔多个）             │
+  │ --automation         │ false    │ 自动化模式：自动管理 chromedriver      │
+  │ --webdriver          │ false    │ 启用 WebDriver 端点（automation 子集） │
+  │ --driver-port        │ 0        │ chromedriver 监听端口（0 表示自动）    │
+  │ --driver-no-download │ false    │ 自动化模式下不自动下载驱动             │
+  └──────────────────────┴──────────┴────────────────────────────────────────┘
 
 【使用示例】
 
@@ -74,9 +78,35 @@
       bws r chrome@120 --plugin auto-arg
       bws r chrome@120 --plugin auto-arg,fingerprint-enhanced
 
+  16. 自动化模式（自动管理匹配版本的 chromedriver）：
+      bws r chrome@120 --automation
+
+  17. 自动化模式并指定驱动端口：
+      bws r chrome@120 --automation --driver-port 9515
+
+  18. 仅启用 WebDriver 端点：
+      bws r chrome@120 --webdriver
+
+  19. 自动化模式下禁止自动下载驱动：
+      bws r chrome@120 --automation --driver-no-download
+
+【自动化模式说明】
+  --automation 会按以下流程自动准备驱动：
+    1. 解析本次启动的 Chrome 版本（如 120.x.x.x）
+    2. 查询 Chrome for Testing 清单，找到对应的 chromedriver
+    3. 下载并解压到 bws-data/drivers/chromedriver/120/
+    4. 启动 chromedriver 并监听端口，输出 WebDriver 端点
+  Selenium / WebdriverIO 等框架即可连接该端点。
+
+  * --webdriver 是 --automation 的子集（仅启用 WebDriver 端点）。
+  * 驱动启动失败不会中断浏览器启动，仅在标准错误输出告警。
+  * 配置了 serve 离线源时，将优先通过 serve 解析并下载驱动。
+
 【注意事项】
   * 省略版本号时使用默认版本（可通过 bws u 设置）。
   * -- 之后的参数原样传递给浏览器，可用于传递任何原生参数。
   * 后台运行模式下，bws 不会等待浏览器进程结束即返回。
+  * 自动化模式仅支持 Chrome/Chromium（chromedriver 只能驱动同主版本的
+    Chrome/Chromium）。
 
 ================================================================================

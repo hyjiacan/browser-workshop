@@ -155,6 +155,9 @@ type Server struct {
 	// authToken is the optional bearer token for API authentication.
 	// When non-empty, /api/ requests must carry "Authorization: Bearer <token>".
 	authToken string
+
+	// driverResolver resolves and hosts automation drivers (chromedriver).
+	driverResolver *DriverResolver
 }
 
 // PackageFile represents a single package file with its metadata.
@@ -345,6 +348,7 @@ func NewServerWithOptions(opts ServerOptions) *Server {
 		scanWorkers:    opts.ScanWorkers,
 		dlInflight:     make(map[string]chan struct{}),
 		authToken:      opts.AuthToken,
+		driverResolver: newDriverResolver(serveCacheDir, logger),
 	}
 
 	// Create online cache manager when online source is configured.
@@ -415,6 +419,8 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/v1/sync/trigger", s.handleSyncTrigger)
 	mux.HandleFunc("/api/v1/bin/", s.handleBin)
 	mux.HandleFunc("/api/v1/bin", s.handleBin) // directory listing (no filename)
+	mux.HandleFunc(driverAPIBase+"/manifest", s.handleDriverManifest)
+	mux.HandleFunc(driverAPIBase+"/download/", s.handleDriverDownload)
 	mux.HandleFunc("/favicon.ico", s.handleFavicon)
 	mux.HandleFunc("/logo.png", s.handleLogo)
 	mux.HandleFunc("/", s.handleRoot)
@@ -534,6 +540,8 @@ func (s *Server) printStartupInfo() {
 	fmt.Printf("    GET /api/v1/download/    - 软件包下载\n")
 	fmt.Printf("    GET /api/v1/status       - 服务状态\n")
 	fmt.Printf("    GET /api/v1/bin/         - 客户端二进制文件\n")
+	fmt.Printf("    GET /api/v1/driver/manifest - 自动化驱动清单 (chromedriver)\n")
+	fmt.Printf("    GET /api/v1/driver/download/ - 自动化驱动下载\n")
 	fmt.Println()
 	fmt.Println("  客户端配置:")
 	fmt.Printf("    bws config set source http://<服务器地址>:<端口>\n")

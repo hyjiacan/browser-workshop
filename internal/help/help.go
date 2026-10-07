@@ -100,6 +100,7 @@ func topicDescription(name string) string {
 		"config":    "配置管理",
 		"profile":   "Profile 管理",
 		"plugin":    "插件管理",
+		"driver":    "自动化驱动管理",
 		"alias":     "版本别名管理",
 		"cache":     "下载缓存管理",
 		"doctor":    "系统健康检查",

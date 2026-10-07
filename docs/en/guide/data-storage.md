@@ -29,6 +29,10 @@ bws/
     │   ├── firefox/
     │   │   └── 121.0/
     │   └── ...
+    ├── drivers/               # Automation drivers (chromedriver)
+    │   └── chromedriver/
+    │       ├── 120/           # Driver for major version 120
+    │       └── 121/
     └── runtime/               # Runtime data
         └── chrome/
             ├── 126.0.6478.114/
@@ -148,6 +152,24 @@ versions/
 
 Each version directory contains complete browser program files. Uninstalling will delete the corresponding version directory.
 
+### drivers/
+
+Automation driver directory, storing automation drivers (currently chromedriver) downloaded on demand by bws.
+
+```
+drivers/
+└── chromedriver/
+    ├── 120/                # Driver for major version 120
+    │   ├── chromedriver.exe
+    │   └── .bws-driver.json
+    └── 121/
+```
+
+- Stored hierarchically by the driver's **major version**; a chromedriver build only drives the matching Chrome/Chromium major
+- The `.bws-driver.json` in each major version directory records the exact version, platform, architecture, install time, etc.
+- Managed via the [`bws driver`](./commands.md#bws-driver-alias-drv) command or automatically by `bws r --automation`
+- Uninstalling a driver deletes the corresponding major version directory
+
 ### runtime/
 
 Runtime data directory, storing data generated during browser runtime, mainly Profiles.
@@ -210,6 +232,9 @@ bws cc clear
 # Uninstall unneeded versions
 bws rm chrome@79
 
+# Uninstall unneeded drivers
+bws driver uninstall 79
+
 # Clean orphaned Profiles
 bws pf clean
 ```
@@ -219,6 +244,7 @@ bws pf clean
 | Directory | Space Usage | Description |
 |-----------|-------------|-------------|
 | `versions/` | Largest | Each browser version is approximately 200-500MB |
+| `drivers/` | Small | Each major version driver is approximately 10-20MB |
 | `runtime/` | Medium | Each Profile is approximately tens to hundreds of MB |
 | `cache/downloads/` | Medium | Each installer package is approximately 50-100MB |
 | `logs/` | Very small | Usually tens of MB |

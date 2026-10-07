@@ -24,6 +24,7 @@ This document lists all commands of `bws` with detailed descriptions, including 
 | `bws repo` | Manage the local binary repository |
 | `bws cache` / `bws cc` | Manage download cache |
 | `bws plugin` / `bws pl` | Plugin management |
+| `bws driver` / `bws drv` | Manage automation drivers (chromedriver) |
 | `bws doctor` / `bws dt` | System health check |
 | `bws help` / `bws h` | Display help information |
 
@@ -176,6 +177,10 @@ bws r <browser[@version]> [URL] [options] [-- native arguments]
 | `--no-proxy` | - | Disable proxy (overrides global config) |
 | `--fingerprint <preset>` | `-fp` | Fingerprint isolation preset (`standard`/`random`/`none`), or JSON config/@file path |
 | `--plugin <names>` | - | Activate plugins (comma-separated) |
+| `--automation` | - | Automation mode: manage a matching chromedriver and expose the WebDriver endpoint |
+| `--webdriver` | - | Enable the WebDriver endpoint only (subset of `--automation`) |
+| `--driver-port <port>` | - | chromedriver listen port (`0` picks a free port) |
+| `--driver-no-download` | - | Do not auto-download the driver in automation mode (warn only if missing) |
 | `--` | - | Arguments after this are passed directly to the browser |
 
 ### Examples
@@ -228,9 +233,52 @@ bws r chrome@120 --fingerprint standard
 # Fingerprint isolation: custom JSON
 bws r chrome@120 --fingerprint '{"userAgent":"...","language":"en-US","webrtc":"disabled"}'
 
+# Automation mode: manage a matching chromedriver automatically
+bws r chrome@120 --automation
+
+# Automation mode with a fixed driver port
+bws r chrome@120 --automation --driver-port 9515
+
+# Enable the WebDriver endpoint only
+bws r chrome@120 --webdriver
+
 # Use the open alias
 bws open chrome@120
 ```
+### Automation Mode
+
+The `--automation` option prepares an automation driver (chromedriver) matching the launched browser version and prints the WebDriver endpoint, so frameworks such as Selenium and WebdriverIO can attach.
+
+**Flow:**
+
+1. Resolve the Chrome version being launched (e.g. `120.0.6099.109`)
+2. Look up the matching chromedriver in the Chrome for Testing manifest
+3. Download and extract it to `bws-data/drivers/chromedriver/120/`
+4. Start chromedriver, listen on a port, and print the WebDriver endpoint
+
+```bash
+# Launch the browser and prepare the driver automatically
+bws r chrome@120 --automation
+# Output:
+# WebDriver:  http://127.0.0.1:9515
+# Driver PID: 12345
+```
+
+**Related options:**
+
+| Option | Description |
+|--------|-------------|
+| `--webdriver` | Subset of `--automation`, only exposes the WebDriver endpoint |
+| `--driver-port <port>` | Fixed driver listen port; `0` picks a free port |
+| `--driver-no-download` | Do not auto-download the driver; warn only if missing |
+
+**Notes:**
+
+- Automation mode only supports Chrome/Chromium (chromedriver only drives a matching Chrome/Chromium major)
+- A driver start failure never blocks the browser launch; it only warns on stderr
+- When a serve source is configured, drivers are resolved and downloaded through it first
+- Drivers can also be managed separately with the [`bws driver`](#bws-driver-alias-drv) command
+
 ### Fingerprint Isolation
 
 The `--fingerprint` (short `-fp`) option adds fingerprint masking when launching the browser, reducing the accuracy of website fingerprinting.
@@ -950,6 +998,102 @@ bws r chrome@120 --plugin auto-arg,fingerprint-enhanced
 - See `plugins/README.md` and `plugins/examples/browser-alias.py` for details
 
 **Plugins can define a `pre_run()` function, called before browser launch.**
+
+---
+
+## bws driver (alias: drv)
+
+Manage automation drivers (currently chromedriver).
+
+A driver version is bound to the browser version: a chromedriver only drives a Chrome/Chromium with the same major version. bws therefore does not ship a fixed version but resolves, downloads, and starts a matching driver on demand.
+
+### Sources
+
+| Chrome version | Source |
+|----------------|--------|
+| `>= 115` | Chrome for Testing known-good versions manifest (`known-good-versions-with-downloads.json`) |
+| `< 115` | Legacy chromedriver storage bucket |
+
+> When a serve source is configured (`bws cfg set source <url>`), bws resolves and downloads drivers through serve first, which suits intranet/air-gapped deployments.
+
+### Usage
+
+```bash
+bws driver <subcommand> [arguments] [options]
+```
+
+### Subcommands
+
+| Subcommand | Alias | Description |
+|------------|-------|-------------|
+| `list` | `ls` | List installed drivers |
+| `install` | `i` | Download and install the driver matching a Chrome version |
+| `start` | - | Start an installed driver and listen on a port |
+| `uninstall` | `rm`, `remove` | Uninstall a driver major version |
+
+### Examples
+
+> `bws driver` (alias `bws drv`)
+
+```bash
+# List installed drivers
+bws driver ls
+
+# Install the driver matching Chrome 120
+bws driver install chrome@120
+
+# Resolve and show download info only
+bws driver install 120 --dry-run
+
+# Force reinstall
+bws driver install chrome@120 --force
+
+# Start the driver (free port)
+bws driver start 120
+
+# Start the driver on a fixed port
+bws driver start chrome@120 --port 9515
+
+# Start the driver in the background
+bws driver start 120 --detach
+
+# Uninstall the driver
+bws driver uninstall 120
+```
+
+### driver install options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--force` | `-f` | Force reinstall |
+| `--dry-run` | - | Resolve and show download info only, without installing |
+
+### driver start options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--port <port>` | `-p` | Listen port (`0` picks a free port) |
+| `--detach` | `-d` | Run in the background (do not wait for the process) |
+| `--allowed-ips <ips>` | - | Allowed client IPs (default `127.0.0.1`) |
+| `--log <file>` | - | Driver log file path |
+
+### driver uninstall options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--force` | `-f` | Skip the confirmation prompt |
+
+### Directory layout
+
+Drivers are installed under `drivers/chromedriver/<major>/` in the data directory:
+
+```
+bws-data/drivers/chromedriver/120/
+```
+
+Each major directory holds the driver binary and a metadata file (`.bws-driver.json`) recording the exact version, platform, install time, and more.
+
+> Combine with `bws r --automation` to launch the browser and prepare the driver in one step; see [Automation Mode](#automation-mode).
 
 ---
 

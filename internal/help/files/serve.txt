@@ -55,10 +55,30 @@
 
 【客户端配置】
   在需要下载浏览器的客户端上，配置离线下载源地址：
-  bws config set source-url http://<服务端IP>:<端口>
+  bws config set source http://<服务端IP>:<端口>
 
   例如：
-  bws config set source-url http://192.168.1.100:8080
+  bws config set source http://192.168.1.100:8080
+
+【驱动托管】
+  serve 同时托管自动化驱动（chromedriver），供内网/离线环境的客户端获取，
+  与浏览器安装包的分发方式一致。
+
+  相关端点：
+  ┌──────────────────────────────────────────────┬──────────────────────────┐
+  │ 端点                                          │ 说明                     │
+  ├──────────────────────────────────────────────┼──────────────────────────┤
+  │ GET /api/v1/driver/manifest?chrome=<版本>     │ 按 Chrome 版本解析驱动   │
+  │ GET /api/v1/driver/download/{filename}        │ 下载驱动归档（代理）     │
+  └──────────────────────────────────────────────┴──────────────────────────┘
+
+  服务端会查询上游 Chrome for Testing 清单（Chrome >= 115）或旧版
+  chromedriver storage（Chrome < 115）；上游不可用时回退到本地已缓存的
+  驱动索引。解析结果会记入 drivers-index.json，下载地址被重写为指向本实例，
+  客户端据此通过本服务代理下载归档。
+
+  客户端配置了离线源后，bws 会优先通过 serve 解析并下载驱动，例如：
+  bws r chrome@120 --automation
 
 【后台运行】
 

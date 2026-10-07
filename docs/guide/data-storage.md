@@ -29,6 +29,10 @@ bws/
     │   ├── firefox/
     │   │   └── 121.0/
     │   └── ...
+    ├── drivers/               # 自动化驱动（chromedriver）
+    │   └── chromedriver/
+    │       ├── 120/           # 主版本 120 对应的驱动
+    │       └── 121/
     └── runtime/               # 运行时数据
         └── chrome/
             ├── 126.0.6478.114/
@@ -147,6 +151,24 @@ versions/
 
 每个版本目录包含完整的浏览器程序文件。卸载时会删除对应的版本目录。
 
+### drivers/
+
+自动化驱动目录，存储 bws 按需下载的自动化驱动（目前为 chromedriver）。
+
+```
+drivers/
+└── chromedriver/
+    ├── 120/                # 主版本 120 对应的驱动
+    │   ├── chromedriver.exe
+    │   └── .bws-driver.json
+    └── 121/
+```
+
+- 按驱动的**主版本**分层存储，一个 chromedriver 只能驱动主版本相同的 Chrome/Chromium
+- 每个主版本目录下的 `.bws-driver.json` 记录精确版本号、平台、架构、安装时间等元数据
+- 通过 [`bws driver`](./commands.md#bws-driver-别名-drv) 命令或 `bws r --automation` 自动管理
+- 卸载驱动会删除对应主版本目录
+
 ### runtime/
 
 运行时数据目录，存储浏览器运行时产生的数据，主要是 Profile。
@@ -209,6 +231,9 @@ bws cc clear
 # 卸载不需要的版本
 bws rm chrome@79
 
+# 卸载不需要的驱动
+bws driver uninstall 79
+
 # 清理孤立 Profile
 bws pf clean
 ```
@@ -218,6 +243,7 @@ bws pf clean
 | 目录 | 空间占用 | 说明 |
 |------|----------|------|
 | `versions/` | 最大 | 每个浏览器版本约 200-500MB |
+| `drivers/` | 较小 | 每个主版本驱动约 10-20MB |
 | `runtime/` | 中等 | 每个 Profile 约几十到几百 MB |
 | `cache/downloads/` | 中等 | 每个安装包约 50-100MB |
 | `logs/` | 很小 | 通常几十 MB |

@@ -250,6 +250,54 @@ Matching versions for chrome@85:
 
 The `>` marker indicates the currently selected version (the latest one).
 
+## Automation Mode
+
+With the `--automation` option, bws prepares an automation driver (chromedriver) matching the launched browser version and prints the WebDriver endpoint, so frameworks such as Selenium and WebdriverIO can attach.
+
+```bash
+bws r chrome@120 --automation
+```
+
+Flow:
+
+1. Resolve the Chrome version being launched (e.g. `120.0.6099.109`)
+2. Look up the matching chromedriver in the Chrome for Testing manifest
+3. Download and extract it to `bws-data/drivers/chromedriver/120/`
+4. Start chromedriver, listen on a port, and print the WebDriver endpoint
+
+Example output:
+
+```
+WebDriver:  http://127.0.0.1:9515
+Driver PID: 12345
+```
+
+### Related Options
+
+| Option | Description |
+|--------|-------------|
+| `--webdriver` | Subset of `--automation`, only exposes the WebDriver endpoint |
+| `--driver-port <port>` | Fixed driver listen port; `0` picks a free port |
+| `--driver-no-download` | Do not auto-download the driver; warn only if missing |
+
+```bash
+# Fixed driver port
+bws r chrome@120 --automation --driver-port 9515
+
+# Enable the WebDriver endpoint only
+bws r chrome@120 --webdriver
+
+# Do not auto-download the driver (use an installed one only)
+bws r chrome@120 --automation --driver-no-download
+```
+
+### Notes
+
+- Automation mode only supports Chrome/Chromium (chromedriver only drives a matching Chrome/Chromium major)
+- A driver start failure never blocks the browser launch; it only warns on stderr
+- When a serve source is configured, drivers are resolved and downloaded through it first
+- Drivers can also be managed separately with `bws driver` (see the [commands reference](./commands.md#bws-driver-alias-drv))
+
 ## Run Options Summary
 
 | Option | Short | Description |
@@ -261,6 +309,10 @@ The `>` marker indicates the currently selected version (the latest one).
 | `--native` | `-n` | Native mode (use system Profile) |
 | `--detached` | `-d` | Run in background (do not wait for process) |
 | `--dry-run` | - | Dry run (do not actually start) |
+| `--automation` | - | Automation mode (manage chromedriver automatically) |
+| `--webdriver` | - | Enable the WebDriver endpoint only |
+| `--driver-port <port>` | - | Driver listen port |
+| `--driver-no-download` | - | Do not auto-download the driver |
 | `--` | - | Pass native browser parameters |
 
 ## Combined Usage Examples

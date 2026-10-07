@@ -2,6 +2,36 @@
 
 This page records feature changes for each version of Browser Workshop, listed in reverse version order.
 
+## Unreleased (2026-09-30 Automation Driver Management)
+
+> Adds automation driver (chromedriver) management, so browsers managed by bws can be attached directly by frameworks such as Selenium and WebdriverIO.
+
+### New Features
+
+#### Automation Driver Management (driver)
+
+- New `bws driver` command (alias `drv`) to manage automation drivers (chromedriver)
+- Subcommands: `list`/`ls`, `install`/`i`, `start`, `uninstall`/`rm`/`remove`
+- Drivers are resolved on demand: the matching chromedriver is derived from the Chrome version
+  - Chrome >= 115: resolved from the Chrome for Testing known-good versions manifest
+  - Chrome < 115: falls back to the legacy chromedriver storage bucket
+- Drivers are downloaded and extracted to `bws-data/drivers/chromedriver/<major>/`, with metadata recording the exact version
+- Supports starting the driver process, listening on a port, and printing the WebDriver endpoint
+- Command: `driver`/`drv`
+
+#### run Automation Mode
+
+- New `--automation` option on `run`: prepares a matching driver while launching the browser
+- New `--webdriver` (WebDriver endpoint only), `--driver-port` (fixed port), `--driver-no-download` (disable auto-download)
+- A driver start failure never blocks the browser launch; it only warns on stderr
+
+#### serve Driver Hosting and Proxy
+
+- New serve manifest endpoint `/api/v1/driver/manifest` resolving a driver build for a Chrome version
+- New serve download endpoint `/api/v1/driver/download/{filename}`: hosted archives are served directly, otherwise fetched from upstream, cached, and served
+- Driver index is persisted (`drivers-index.json`) so proxying survives restarts; falls back to the local index when upstream is unreachable
+- When a client has a serve source configured, drivers are resolved and downloaded through it first
+
 ## v1.0.0-beta (2026-07-31 Config File Restructuring)
 
 > Configuration file structure adjustment: INI configuration files moved to the executable directory.

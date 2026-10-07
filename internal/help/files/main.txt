@@ -39,6 +39,7 @@
   │ pf (profile)│ 管理浏览器 profile（数据目录）                │
   │ sv (serve)  │ 启动 HTTP 服务，提供离线下载源                │
   │ pl (plugin) │ 管理插件                                      │
+  │ drv (driver)│ 管理自动化驱动（chromedriver）                │
   │ dt (doctor) │ 系统健康检查                                  │
   │ h (help)    │ 显示详细帮助信息                              │
   └─────────────┴──────────────────────────────────────────────┘
@@ -49,7 +50,7 @@
   dl = download            sc = shortcut
   cfg = config           cc = cache               pf = profile
   sv = serve = server    pl = plugin = plugins    dt = doctor
-  h = help
+  drv = driver           h = help
 
 【浏览器短别名】
   gc = chrome            ff = firefox             cm = chromium
@@ -68,6 +69,7 @@
   │ config      │ 配置管理命令详情                              │
   │ profile     │ Profile 管理命令详情                          │
   │ plugin      │ 插件管理命令详情                              │
+  │ driver      │ 自动化驱动管理命令详情                        │
   │ sources     │ 数据源类型及配置说明                          │
   │ concepts    │ 核心概念解释                                  │
   │ faq         │ 常见问题解答                                  │

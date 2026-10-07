@@ -2,6 +2,36 @@
 
 本页面记录 Browser Workshop 各版本的功能变更，按版本号倒序排列。
 
+## 未发布（2026-09-30 自动化驱动管理）
+
+> 新增自动化驱动（chromedriver）管理能力，让 bws 管理的浏览器可被 Selenium、WebdriverIO 等自动化框架直接接入。
+
+### 新增功能
+
+#### 自动化驱动管理（driver）
+
+- 新增 `bws driver` 命令（别名 `drv`），管理自动化驱动（chromedriver）
+- 子命令：`list`/`ls`、`install`/`i`、`start`、`uninstall`/`rm`/`remove`
+- 驱动版本按需解析：根据 Chrome 版本动态匹配对应的 chromedriver
+  - Chrome ≥ 115：查询 Chrome for Testing 已知版本清单
+  - Chrome < 115：回退到旧版 chromedriver storage 存储桶
+- 驱动下载并解压到 `bws-data/drivers/chromedriver/<主版本>/`，元数据记录精确版本号
+- 支持启动驱动进程并监听端口，输出 WebDriver 端点
+- 命令：`driver`/`drv`
+
+#### run 自动化模式
+
+- `run` 命令新增 `--automation` 选项：启动浏览器的同时自动准备匹配版本的驱动
+- 新增 `--webdriver`（仅启用 WebDriver 端点）、`--driver-port`（指定端口）、`--driver-no-download`（禁止自动下载）
+- 驱动启动失败不会中断浏览器启动，仅在标准错误输出告警
+
+#### serve 驱动托管与代理
+
+- serve 新增驱动清单端点 `/api/v1/driver/manifest`，按 Chrome 版本解析驱动构建
+- serve 新增驱动下载端点 `/api/v1/driver/download/{filename}`，本地托管优先、未命中时从上游代理下载并缓存
+- 驱动索引持久化（`drivers-index.json`），重启后仍可代理；上游不可用时回退到本地索引
+- 客户端配置了 serve 离线源时，优先通过 serve 解析并下载驱动
+
 ## v1.0.0-beta（2026-07-31 配置文件重构）
 
 > 配置文件结构调整：INI 配置文件移至可执行文件目录。

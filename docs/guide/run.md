@@ -271,6 +271,54 @@ bws r firefox -- --safe-mode
 
 其中 `>` 标记表示当前选中的版本（最新版）。
 
+## 自动化模式
+
+使用 `--automation` 参数，bws 会在启动浏览器的同时，自动准备与该浏览器版本匹配的自动化驱动（chromedriver），并输出 WebDriver 端点，供 Selenium、WebdriverIO 等框架连接。
+
+```bash
+bws r chrome@120 --automation
+```
+
+执行流程：
+
+1. 解析本次启动的 Chrome 版本（如 `120.0.6099.109`）
+2. 查询 Chrome for Testing 清单，找到该版本对应的 chromedriver 下载地址
+3. 下载并解压到 `bws-data/drivers/chromedriver/120/`
+4. 启动 chromedriver 进程并监听端口，输出 WebDriver 端点
+
+输出示例：
+
+```
+WebDriver:  http://127.0.0.1:9515
+Driver PID: 12345
+```
+
+### 相关选项
+
+| 选项 | 说明 |
+|------|------|
+| `--webdriver` | `--automation` 的子集，仅启用 WebDriver 端点 |
+| `--driver-port <port>` | 指定驱动监听端口，`0` 表示自动分配 |
+| `--driver-no-download` | 不自动下载驱动，缺失时仅告警 |
+
+```bash
+# 指定驱动端口
+bws r chrome@120 --automation --driver-port 9515
+
+# 仅启用 WebDriver 端点
+bws r chrome@120 --webdriver
+
+# 不自动下载驱动（仅使用已安装的驱动）
+bws r chrome@120 --automation --driver-no-download
+```
+
+### 注意事项
+
+- 自动化模式仅支持 Chrome/Chromium（chromedriver 只能驱动同主版本的 Chrome/Chromium）
+- 驱动启动失败不会中断浏览器启动，仅在标准错误输出告警
+- 配置了 serve 离线源时，将优先通过 serve 解析并下载驱动
+- 驱动也可通过 `bws driver` 命令单独管理（详见 [命令参考](./commands.md#bws-driver-别名-drv)）
+
 ## 运行选项汇总
 
 | 选项 | 简写 | 说明 |
@@ -282,6 +330,10 @@ bws r firefox -- --safe-mode
 | `--native` | `-n` | 原生模式（使用系统 Profile） |
 | `--detached` | `-d` | 后台运行（不等待进程） |
 | `--dry-run` | - | 试运行（不实际启动） |
+| `--automation` | - | 自动化模式（自动管理 chromedriver） |
+| `--webdriver` | - | 仅启用 WebDriver 端点 |
+| `--driver-port <port>` | - | 驱动监听端口 |
+| `--driver-no-download` | - | 不自动下载驱动 |
 | `--` | - | 传递浏览器原生参数 |
 
 ## 组合使用示例

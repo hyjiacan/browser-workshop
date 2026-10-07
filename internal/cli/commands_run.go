@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/bws/bws/internal/driver"
 )
 
 func runRun(ctx *Context, args []string) error {
@@ -20,6 +22,10 @@ func runRun(ctx *Context, args []string) error {
 		{Name: "fingerprint", Short: "fp", Usage: "指纹隔离预设（standard/random/none），或 JSON 配置/@文件路径", HasValue: true, Default: ""},
 		{Name: "plugin", Short: "", Usage: "激活的插件（逗号分隔多个）", HasValue: true, Default: ""},
 		{Name: "refresh", Short: "", Usage: "强制刷新远程源缓存（自动安装时生效）", HasValue: false, Default: "false"},
+		{Name: "automation", Usage: "自动化模式：自动管理匹配版本的 chromedriver 并输出 WebDriver 端点", HasValue: false, Default: "false"},
+		{Name: "webdriver", Usage: "启用 WebDriver 端点（--automation 的子集）", HasValue: false, Default: "false"},
+		{Name: "driver-port", Usage: "chromedriver 监听端口（0 表示自动分配）", HasValue: true, Default: "0"},
+		{Name: "driver-no-download", Usage: "自动化模式下不自动下载驱动（缺失时仅告警）", HasValue: false, Default: "false"},
 	}
 
 	// Split args at -- to separate bm args from browser args
@@ -118,6 +124,28 @@ func runRun(ctx *Context, args []string) error {
 		if opts.Detached {
 			ctx.Logger.Debug("[run] detached 模式：进程将在后台运行")
 		}
+	}
+
+	// Automation mode: bring up a chromedriver build matching this exact
+	// browser version so WebDriver clients (Selenium / WebdriverIO) can attach.
+	// Endpoint failures never block the browser launch.
+	var driverProc *driver.Process
+	if flagVals["automation"] == "true" || flagVals["webdriver"] == "true" {
+		driverPort, perr := parseDriverPort(flagVals["driver-port"])
+		if perr != nil {
+			return perr
+		}
+		proc, derr := startAutomationDriver(ctx, spec, driverPort, opts.Detached, flagVals["driver-no-download"] == "true")
+		if derr != nil {
+			fmt.Fprintf(ctx.Stderr, "⚠ 驱动启动失败: %v\n", derr)
+		} else if proc != nil {
+			driverProc = proc
+			ctx.Printf("WebDriver:  %s\n", proc.URL)
+			ctx.Printf("Driver PID: %d\n", proc.Pid)
+		}
+	}
+	if driverProc != nil && !opts.Detached {
+		defer func() { _ = driverProc.Kill() }()
 	}
 
 	startTime := time.Now()

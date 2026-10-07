@@ -24,6 +24,7 @@
 | `bws repo` | 管理本地二进制仓库 |
 | `bws cache` / `bws cc` | 管理下载缓存 |
 | `bws plugin` / `bws pl` | 插件管理 |
+| `bws driver` / `bws drv` | 管理自动化驱动（chromedriver） |
 | `bws doctor` / `bws dt` | 系统健康检查 |
 | `bws help` / `bws h` | 显示帮助信息 |
 
@@ -176,6 +177,10 @@ bws r <浏览器[@版本]> [URL] [选项] [-- 原生参数]
 | `--no-proxy` | - | 禁用代理（覆盖全局配置） |
 | `--fingerprint <preset>` | `-fp` | 指纹隔离预设（`standard`/`random`/`none`），或 JSON 配置/@文件路径 |
 | `--plugin <names>` | - | 激活的插件（逗号分隔多个） |
+| `--automation` | - | 自动化模式：自动管理匹配版本的 chromedriver 并输出 WebDriver 端点 |
+| `--webdriver` | - | 仅启用 WebDriver 端点（`--automation` 的子集） |
+| `--driver-port <port>` | - | chromedriver 监听端口（`0` 表示自动分配） |
+| `--driver-no-download` | - | 自动化模式下不自动下载驱动（缺失时仅告警） |
 | `--` | - | 之后的参数原样传递给浏览器 |
 
 ### 示例
@@ -228,9 +233,52 @@ bws r chrome@120 --fingerprint standard
 # 指纹隔离：自定义 JSON
 bws r chrome@120 --fingerprint '{"userAgent":"...","language":"en-US","webrtc":"disabled"}'
 
+# 自动化模式：自动管理匹配版本的 chromedriver
+bws r chrome@120 --automation
+
+# 自动化模式并指定驱动端口
+bws r chrome@120 --automation --driver-port 9515
+
+# 仅启用 WebDriver 端点
+bws r chrome@120 --webdriver
+
 # 使用 open 别名
 bws open chrome@120
 ```
+### 自动化模式
+
+`--automation` 选项在启动浏览器的同时，自动准备与该浏览器版本匹配的自动化驱动（chromedriver），并输出 WebDriver 端点，供 Selenium、WebdriverIO 等框架连接。
+
+**执行流程：**
+
+1. 解析本次启动的 Chrome 版本（如 `120.0.6099.109`）
+2. 查询 Chrome for Testing 清单，找到该版本对应的 chromedriver 下载地址
+3. 下载并解压到 `bws-data/drivers/chromedriver/120/`
+4. 启动 chromedriver 进程并监听端口，输出 WebDriver 端点
+
+```bash
+# 启动浏览器并自动准备驱动
+bws r chrome@120 --automation
+# 输出:
+# WebDriver:  http://127.0.0.1:9515
+# Driver PID: 12345
+```
+
+**相关选项：**
+
+| 选项 | 说明 |
+|------|------|
+| `--webdriver` | `--automation` 的子集，仅启用 WebDriver 端点 |
+| `--driver-port <port>` | 指定驱动监听端口，`0` 表示自动分配 |
+| `--driver-no-download` | 不自动下载驱动，缺失时仅告警 |
+
+**注意事项：**
+
+- 自动化模式仅支持 Chrome/Chromium（chromedriver 只能驱动同主版本的 Chrome/Chromium）
+- 驱动启动失败不会中断浏览器启动，仅在标准错误输出告警
+- 配置了 serve 离线源时，将优先通过 serve 解析并下载驱动
+- 驱动的解析、安装与卸载也可通过 [`bws driver`](#bws-driver-别名-drv) 命令单独管理
+
 ### 指纹隔离
 
 `--fingerprint`（简写 `-fp`）选项为浏览器启动时添加指纹伪装，降低网站指纹识别的准确性。
@@ -947,6 +995,102 @@ bws r chrome@120 --plugin auto-arg,fingerprint-enhanced
 - 详见 `plugins/README.md` 和 `plugins/examples/browser-alias.py`
 
 **插件可以定义 `pre_run()` 函数，在浏览器启动前被调用。**
+
+---
+
+## bws driver (别名: drv)
+
+管理自动化驱动（目前为 chromedriver）。
+
+自动化驱动的版本与浏览器版本强绑定：一个 chromedriver 只能驱动主版本相同的 Chrome/Chromium。因此 bws 不内置固定版本，而是按需解析、下载并启动匹配版本的驱动。
+
+### 数据源
+
+| Chrome 版本 | 数据源 |
+|-------------|--------|
+| `>= 115` | Chrome for Testing 已知版本清单（`known-good-versions-with-downloads.json`） |
+| `< 115` | 旧版 chromedriver storage 存储桶 |
+
+> 配置了 serve 离线源（`bws cfg set source <url>`）时，bws 会优先通过 serve 解析并下载驱动，便于内网/离线环境分发。
+
+### 用法
+
+```bash
+bws driver <子命令> [参数] [选项]
+```
+
+### 子命令
+
+| 子命令 | 别名 | 说明 |
+|--------|------|------|
+| `list` | `ls` | 列出已安装的驱动 |
+| `install` | `i` | 下载并安装匹配指定 Chrome 版本的驱动 |
+| `start` | - | 启动已安装的驱动并监听端口 |
+| `uninstall` | `rm`, `remove` | 卸载指定主版本的驱动 |
+
+### 示例
+
+> `bws driver`（别名 `bws drv`）
+
+```bash
+# 列出已安装的驱动
+bws driver ls
+
+# 安装匹配 Chrome 120 的驱动
+bws driver install chrome@120
+
+# 仅解析并显示下载信息
+bws driver install 120 --dry-run
+
+# 强制重新安装
+bws driver install chrome@120 --force
+
+# 启动驱动（自动分配端口）
+bws driver start 120
+
+# 启动驱动并指定端口
+bws driver start chrome@120 --port 9515
+
+# 后台启动驱动
+bws driver start 120 --detach
+
+# 卸载驱动
+bws driver uninstall 120
+```
+
+### driver install 选项
+
+| 选项 | 简写 | 说明 |
+|------|------|------|
+| `--force` | `-f` | 强制重新安装 |
+| `--dry-run` | - | 仅解析并显示下载信息，不实际安装 |
+
+### driver start 选项
+
+| 选项 | 简写 | 说明 |
+|------|------|------|
+| `--port <port>` | `-p` | 监听端口（`0` 表示自动分配） |
+| `--detach` | `-d` | 后台运行（不等待进程结束） |
+| `--allowed-ips <ips>` | - | 允许连接的 IP（默认 `127.0.0.1`） |
+| `--log <file>` | - | 驱动日志文件路径 |
+
+### driver uninstall 选项
+
+| 选项 | 简写 | 说明 |
+|------|------|------|
+| `--force` | `-f` | 跳过确认直接卸载 |
+
+### 目录结构
+
+驱动安装在数据目录下的 `drivers/chromedriver/<主版本>/`：
+
+```
+bws-data/drivers/chromedriver/120/
+```
+
+每个主版本目录保存该主版本对应的驱动可执行文件及元数据（`.bws-driver.json`），元数据记录精确版本号、平台、安装时间等信息。
+
+> 与 `bws r --automation` 配合使用可一步完成“启动浏览器 + 准备驱动”，详见 [run 命令的自动化模式](#自动化模式)。
 
 ---
 

@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/bws/bws/internal/driver"
 	"github.com/bws/bws/internal/i18n"
 	"github.com/bws/bws/internal/install"
 	"github.com/bws/bws/internal/plugin"
@@ -57,6 +58,7 @@ type Context struct {
 	Logger   Logger
 	Serve    ServeProvider
 	Plugin   PluginProvider
+	Driver   DriverProvider
 }
 
 // Confirm asks the user for confirmation and returns true if they agree.
@@ -113,6 +115,28 @@ type PluginProvider interface {
 	Install(entry plugin.ManifestEntry) error
 	Uninstall(name string) error
 	PluginsDir() string
+}
+
+// DriverProvider manages automation drivers (currently chromedriver), whose
+// version must match the browser build being automated.
+type DriverProvider interface {
+	// Resolve returns the driver build matching a Chrome version without
+	// downloading it.
+	Resolve(chromeVersion string) (*driver.Info, error)
+
+	// Ensure installs (when missing or mismatched) the driver matching a
+	// Chrome version and returns its install record.
+	Ensure(chromeVersion string, force bool, onProgress func(downloaded, total int64, percent float64)) (*driver.Record, error)
+
+	// List returns all installed drivers.
+	List() ([]driver.Record, error)
+
+	// Uninstall removes an installed driver major version.
+	Uninstall(major string) error
+
+	// Start launches an installed driver and waits until it accepts
+	// connections.
+	Start(opts driver.StartOptions) (*driver.Process, error)
 }
 
 // ---- Role-based config interfaces (ISP-compliant) ----

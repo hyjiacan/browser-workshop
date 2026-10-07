@@ -30,6 +30,7 @@ func RegisterCommands(app *App) {
 	app.AddCommand(NewShortcutCommand())
 	app.AddCommand(NewServeCommand())
 	app.AddCommand(NewPluginCommand())
+	app.AddCommand(NewDriverCommand())
 	app.AddCommand(NewUpdateCommand())
 	app.AddCommand(NewHelpCommand())
 }
@@ -83,6 +84,8 @@ func NewRunCommand() *Command {
 			"r chrome --no-proxy",
 			"r chrome --fingerprint random",
 			"r chrome --fingerprint standard",
+			"r chrome@120 --automation",
+			"r chrome@120 --webdriver --driver-port 9515",
 		},
 		Flags: []*Flag{
 			{Name: "headless", Short: "H", Usage: "无头模式运行", HasValue: false, Default: "false"},
@@ -96,6 +99,10 @@ func NewRunCommand() *Command {
 			{Name: "no-proxy", Short: "", Usage: "禁用代理（覆盖全局配置）", HasValue: false, Default: "false"},
 			{Name: "fingerprint", Short: "fp", Usage: "指纹隔离预设（standard/random/none），或 JSON 配置/@文件路径", HasValue: true, Default: ""},
 			{Name: "plugin", Short: "", Usage: "激活的插件（逗号分隔多个）", HasValue: true, Default: ""},
+			{Name: "automation", Usage: "自动化模式：自动管理匹配版本的 chromedriver 并输出 WebDriver 端点", HasValue: false, Default: "false"},
+			{Name: "webdriver", Usage: "启用 WebDriver 端点（--automation 的子集）", HasValue: false, Default: "false"},
+			{Name: "driver-port", Usage: "chromedriver 监听端口（0 表示自动分配）", HasValue: true, Default: "0"},
+			{Name: "driver-no-download", Usage: "自动化模式下不自动下载驱动（缺失时仅告警）", HasValue: false, Default: "false"},
 		},
 		Run: runRun,
 	}

@@ -44,6 +44,9 @@ type Paths struct {
 
 	// Plugin scripts directory
 	PluginsDir string
+
+	// DriversDir is where managed automation drivers (e.g. chromedriver) live
+	DriversDir string
 }
 
 var (
@@ -75,6 +78,7 @@ func New(root string) *Paths {
 		DownloadCacheDir: filepath.Join(root, "cache", "downloads"),
 		RuntimeDir:       filepath.Join(root, "runtime"),
 		PluginsDir:       filepath.Join(root, "plugins"),
+		DriversDir:       filepath.Join(root, "drivers"),
 	}
 	return p
 }
@@ -96,6 +100,7 @@ func (p *Paths) EnsureAll() error {
 		p.DownloadCacheDir,
 		p.RuntimeDir,
 		p.PluginsDir,
+		p.DriversDir,
 		filepath.Join(p.Root, "i18n"),
 	}
 	for _, dir := range dirs {
@@ -124,6 +129,13 @@ func (p *Paths) DownloadDir(browser string, version string) string {
 // ProfileDir returns the profile directory for a browser version.
 func (p *Paths) ProfileDir(browser string, version string) string {
 	return filepath.Join(p.RuntimeDir, browser, version, "profile")
+}
+
+// DriverDir returns the installation directory for a driver (e.g. chromedriver).
+// The version key is the driver's major version so that a single install can
+// serve every patch release of the same Chrome major.
+func (p *Paths) DriverDir(name string, version string) string {
+	return filepath.Join(p.DriversDir, name, version)
 }
 
 // ManifestFile returns the path to the cached manifest file for a browser.

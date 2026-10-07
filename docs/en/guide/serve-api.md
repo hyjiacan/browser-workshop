@@ -14,6 +14,8 @@
 | `/api/v1/sync/trigger` | POST | Manually trigger sync |
 | `/api/v1/bin` | GET | Client binary file listing (JSON) |
 | `/api/v1/bin/{filename}` | GET | Client binary download |
+| `/api/v1/driver/manifest` | GET | Resolve an automation driver (chromedriver) build for a Chrome version |
+| `/api/v1/driver/download/{filename}` | GET | Driver archive download (hosted locally first; otherwise proxied from upstream and cached) |
 
 > **Manifest merge mechanism**: When `online-fallback` is enabled, `manifest` returns a merged result of local packages directory files and online source cached versions (deduplicated). Local files carry real XXH3 checksums; online cached versions have empty checksums (computed after download). Filtering is done client-side.
 
@@ -434,6 +436,119 @@ Returns file content, supports resume, behavior is consistent with the download 
 ```bash
 # Download Windows version of bws
 curl -O http://localhost:8080/api/v1/bin/bws-windows-amd64.exe
+```
+
+---
+
+## GET /api/v1/driver/manifest
+
+Resolve the automation driver (chromedriver) build matching a Chrome version, so clients can obtain drivers in offline/intranet environments.
+
+The server queries the upstream Chrome for Testing manifest (Chrome >= 115) or the legacy chromedriver storage (Chrome < 115); when upstream is unreachable it falls back to the locally cached driver index. The resolved build is recorded in the index, and the download URL is rewritten to a relative path on this instance so clients fetch the archive through this service.
+
+### Query Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `chrome` | string | Yes | Chrome version to match (e.g. `120` or `120.0.6099.109`) |
+| `platform` | string | No | Platform (`windows`/`darwin`/`linux`), defaults to the server platform |
+| `arch` | string | No | Architecture (`amd64`/`386`/`arm64`), defaults to the server arch |
+
+### Request
+
+```
+GET /api/v1/driver/manifest?chrome=120
+GET /api/v1/driver/manifest?chrome=120.0.6099.109&platform=windows&arch=amd64
+```
+
+### Response Example
+
+```json
+{
+  "status": "ok",
+  "data": {
+    "name": "chromedriver",
+    "version": "120.0.6099.109",
+    "major_version": "120",
+    "platform": "windows",
+    "arch": "amd64",
+    "download_url": "/api/v1/driver/download/chromedriver-win64.zip",
+    "filename": "chromedriver-win64.zip",
+    "source": "serve"
+  }
+}
+```
+
+### Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `status` | string | `"ok"` or `"error"` |
+| `data.name` | string | Driver name (always `chromedriver`) |
+| `data.version` | string | Exact driver version |
+| `data.major_version` | string | Major version (install directory key) |
+| `data.platform` | string | Platform (windows / darwin / linux) |
+| `data.arch` | string | Architecture (amd64 / 386 / arm64) |
+| `data.download_url` | string | Archive download URL (relative to this instance; fetched via proxy) |
+| `data.filename` | string | Archive filename |
+| `data.source` | string | Resolution source (`serve` / `serve-cache`) |
+| `error` | string | Error description when `status` is `error` |
+
+### Error Responses
+
+Returns `503` when the driver service is disabled, `400` when the `chrome` parameter is missing, and `404` when resolution fails and the local index has no match. The body is JSON:
+
+```json
+{
+  "status": "error",
+  "error": "Chrome for Testing manifest has no chromedriver for Chrome 999"
+}
+```
+
+> **Note**: unlike other endpoints (plain-text errors), `driver/manifest` returns JSON errors so clients can parse the failure reason.
+
+### Usage Example
+
+```bash
+# Resolve the driver for Chrome 120
+curl "http://localhost:8080/api/v1/driver/manifest?chrome=120"
+```
+
+---
+
+## GET /api/v1/driver/download/{filename}
+
+Download a driver archive. If the archive is already hosted locally it is served directly; otherwise it is downloaded from the upstream URL recorded in the driver index, cached, and then served.
+
+### Request
+
+```
+GET /api/v1/driver/download/{filename}
+```
+
+### Path Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| filename | string | Driver archive filename (e.g. `chromedriver-win64.zip`) |
+
+### Response
+
+Returns the file content, supports resume, and behaves like `/api/v1/download/{filename}`.
+
+### Error Responses
+
+| Status | Description |
+|--------|-------------|
+| 400 | Filename is empty or contains invalid characters |
+| 404 | Not hosted locally and no matching entry in the index |
+| 502 | Failed to proxy the download from upstream |
+
+### Usage Example
+
+```bash
+# Download a driver archive
+curl -O http://localhost:8080/api/v1/driver/download/chromedriver-win64.zip
 ```
 
 ---
