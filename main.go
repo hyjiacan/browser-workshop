@@ -48,6 +48,9 @@ func main() {
 	}
 	// Parse global flags before command processing
 	verbose := parseGlobalVerbose()
+	// JSON 模式下整条输出流都不应出现横幅：脚本消费方会直接把结果喂给 JSON 解析器，
+	// 任何额外的横幅文本（哪怕在 stderr）都是噪音。
+	jsonMode := wantsJSON(os.Args[1:])
 
 	// Determine config path (portable mode: config in exe directory)
 	configPath, dataRoot, isNewConfig := resolvePaths()
@@ -61,7 +64,7 @@ func main() {
 
 	// If config file doesn't exist yet, run first-time setup (skip for serve command)
 	if isNewConfig && !(len(os.Args) > 1 && os.Args[1] == "serve") {
-		cfg = firstTimeSetup(configPath, cfg)
+		cfg = firstTimeSetup(configPath, cfg, jsonMode)
 	}
 
 	// Determine data directory
@@ -102,11 +105,16 @@ func main() {
 	// so package-level log functions use the same output
 	bmlog.SetDefault(logger)
 
-	fmt.Printf("bws starting (version %s)\n", version)
-	if verbose {
-		fmt.Fprintln(os.Stderr, "[verbose] 调试输出已开启")
+	// stdout 只承载命令结果（含 --json 载荷），横幅等元信息一律走 stderr，
+	// 否则脚本化消费 `bws run ... --json` 时会在 JSON 前混入非 JSON 文本。
+	// 指定 --json 时连 stderr 的横幅也一并省略，保持输出流纯净。
+	if !jsonMode {
+		fmt.Fprintf(os.Stderr, "bws starting (version %s)\n", version)
+		if verbose {
+			fmt.Fprintln(os.Stderr, "[verbose] 调试输出已开启")
+		}
+		fmt.Fprintln(os.Stderr, "------------------------------")
 	}
-	fmt.Println("------------------------------")
 
 	// Create managers
 	inst := install.NewManager(p, browser.DefaultRegistry)
@@ -273,27 +281,51 @@ func parseGlobalVerbose() bool {
 	return verbose
 }
 
+// wantsJSON reports whether the invocation asks for JSON output, in which case
+// the startup banner must be omitted entirely. It scans the raw arguments
+// because the banner is printed before the per-command flag parser runs.
+//
+// Scanning stops at "--": everything after it is forwarded to the browser, so a
+// "--json" there is a browser argument, not ours.
+func wantsJSON(args []string) bool {
+	for _, arg := range args {
+		if arg == "--" {
+			return false
+		}
+		if arg == "--json" || strings.HasPrefix(arg, "--json=") {
+			return true
+		}
+	}
+	return false
+}
+
 // firstTimeSetup runs the first-time setup wizard.
 // Every input/selection step carries a short explanation so users can
 // understand each option before deciding. Non-interactive environments
 // (pipes/EOF) fall back to defaults.
-func firstTimeSetup(configPath string, cfg *config.Config) *config.Config {
-	fmt.Println("========================================")
-	fmt.Println("  bws - Browser Manager")
-	fmt.Println("  首次初始化")
-	fmt.Println("========================================")
-	fmt.Println()
-	fmt.Println("这是 bws 首次运行，将引导你完成基本配置。")
-	fmt.Println("每一步都有说明，直接回车即可使用默认值 (推荐)。")
-	fmt.Println()
+// quiet suppresses the decorative header when JSON output was requested.
+func firstTimeSetup(configPath string, cfg *config.Config, quiet bool) *config.Config {
+	// 向导自身的说明文字属于元信息，统一写入 stderr，保证 stdout 干净。
+	if !quiet {
+		fmt.Fprintln(os.Stderr, "========================================")
+		fmt.Fprintln(os.Stderr, "  bws - Browser Manager")
+		fmt.Fprintln(os.Stderr, "  首次初始化")
+		fmt.Fprintln(os.Stderr, "========================================")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, "这是 bws 首次运行，将引导你完成基本配置。")
+		fmt.Fprintln(os.Stderr, "每一步都有说明，直接回车即可使用默认值 (推荐)。")
+		fmt.Fprintln(os.Stderr)
+	}
 
 	defaultDataDir := filepath.Join(filepath.Dir(configPath), "bws-data")
 
 	// 非交互环境 (管道/脚本/EOF)：跳过向导，使用默认配置
 	if !term.IsTerminal(os.Stdin.Fd()) {
-		fmt.Println("检测到非交互环境，使用默认配置。")
+		if !quiet {
+			fmt.Fprintln(os.Stderr, "检测到非交互环境，使用默认配置。")
+		}
 		cfg.DataDir = defaultDataDir
-		return saveInitialConfig(configPath, cfg)
+		return saveInitialConfig(configPath, cfg, quiet)
 	}
 
 	// 构建"默认浏览器"选项：以内置浏览器为主，若当前默认值不在其中则补充
@@ -330,9 +362,11 @@ func firstTimeSetup(configPath string, cfg *config.Config) *config.Config {
 	)).WithTheme(huh.ThemeCharm()).Run()
 	if err != nil {
 		// 用户取消 (q/Ctrl+C)：用默认配置继续，避免下次运行重复触发向导
-		fmt.Println("已取消初始化，使用默认配置。")
+		if !quiet {
+			fmt.Fprintln(os.Stderr, "已取消初始化，使用默认配置。")
+		}
 		cfg.DataDir = defaultDataDir
-		return saveInitialConfig(configPath, cfg)
+		return saveInitialConfig(configPath, cfg, quiet)
 	}
 
 	cfg.DefaultBrowser = defaultBrowser
@@ -356,17 +390,19 @@ func firstTimeSetup(configPath string, cfg *config.Config) *config.Config {
 		if err == nil && strings.TrimSpace(serveURL) != "" {
 			cfg.RemoteSource = strings.TrimSpace(serveURL)
 			cfg.EnableServeSource = true
-			fmt.Printf("  • 已配置离线源: %s\n", cfg.RemoteSource)
+			fmt.Fprintf(os.Stderr, "  • 已配置离线源: %s\n", cfg.RemoteSource)
 		}
 		// 跳过或未填地址时不改动 EnableServeSource，保留配置默认值，
 		// 避免后续 `bws config set source` 因开关被关而无法启用离线源
 	}
 
-	return saveInitialConfig(configPath, cfg)
+	return saveInitialConfig(configPath, cfg, quiet)
 }
 
 // saveInitialConfig creates the config directory (if needed) and persists cfg.
-func saveInitialConfig(configPath string, cfg *config.Config) *config.Config {
+// quiet suppresses the post-setup hints so that JSON-mode invocations emit
+// nothing but the command payload.
+func saveInitialConfig(configPath string, cfg *config.Config, quiet bool) *config.Config {
 	configDir := filepath.Dir(configPath)
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "警告: 创建配置目录失败: %v\n", err)
@@ -375,16 +411,20 @@ func saveInitialConfig(configPath string, cfg *config.Config) *config.Config {
 		fmt.Fprintf(os.Stderr, "警告: 保存配置失败: %v\n", err)
 	}
 
-	fmt.Println()
-	fmt.Println("配置已保存:", configPath)
-	fmt.Println("初始化完成! 使用 'bws --help' 查看可用命令。")
-	fmt.Println()
-	fmt.Println("后续如需修改配置，可使用以下命令：")
-	fmt.Println("  bws config show                       查看当前配置")
-	fmt.Println("  bws config set source <地址>          设置/修改离线源")
-	fmt.Println("  bws config set default-browser <名称> 修改默认浏览器")
-	fmt.Println("  bws config set data-dir <路径>        修改数据目录")
-	fmt.Println()
+	if quiet {
+		return cfg
+	}
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "配置已保存:", configPath)
+	fmt.Fprintln(os.Stderr, "初始化完成! 使用 'bws --help' 查看可用命令。")
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "后续如需修改配置，可使用以下命令：")
+	fmt.Fprintln(os.Stderr, "  bws config show                       查看当前配置")
+	fmt.Fprintln(os.Stderr, "  bws config set source <地址>          设置/修改离线源")
+	fmt.Fprintln(os.Stderr, "  bws config set default-browser <名称> 修改默认浏览器")
+	fmt.Fprintln(os.Stderr, "  bws config set data-dir <路径>        修改数据目录")
+	fmt.Fprintln(os.Stderr)
 
 	return cfg
 }

@@ -93,6 +93,8 @@ bws r chrome@120 --automation --profile test-01 --json
 }
 ```
 
+> **`--json` 输出纯净**：指定 `--json` 时不会输出任何横幅或初始化提示，stdout 只承载 JSON 信封，可直接管道给 `jq` 等解析器。
+
 ### 字段缺省行为
 
 端点字段使用**指针类型**，不可用时输出 `null`（键始终存在，脚本无需判空）：

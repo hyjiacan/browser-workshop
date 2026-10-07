@@ -93,6 +93,8 @@ bws r chrome@120 --automation --profile test-01 --json
 }
 ```
 
+> **Clean `--json` output**: when `--json` is set, no banner or setup hints are emitted — stdout carries only the JSON envelope, so it can be piped straight into `jq` and friends.
+
 ### Default Values for Missing Fields
 
 Endpoint fields use **pointer types**, so they render as `null` when unavailable (the key always exists, no null-checking needed in scripts):
