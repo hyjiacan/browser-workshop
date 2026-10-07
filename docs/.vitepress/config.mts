@@ -71,6 +71,12 @@ const zhThemeConfig = {
         ],
       },
       {
+        text: '自动化集成',
+        items: [
+          { text: '自动化框架集成', link: '/guide/automation' },
+        ],
+      },
+      {
         text: 'Serve 服务',
         items: [
           { text: '概述', link: '/guide/serve' },
@@ -170,6 +176,12 @@ const enThemeConfig = {
           { text: 'Fingerprint Isolation', link: '/en/guide/fingerprint' },
           { text: 'Plugin System', link: '/en/guide/plugin' },
           { text: 'Configuration', link: '/en/guide/config' },
+        ],
+      },
+      {
+        text: 'Automation',
+        items: [
+          { text: 'Automation Framework Integration', link: '/en/guide/automation' },
         ],
       },
       {

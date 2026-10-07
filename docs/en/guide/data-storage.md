@@ -15,8 +15,10 @@ bws/
 ├── bws-serve.ini              # Serve service configuration file (created on first run of serve)
 └── bws-data/                  # Data root directory
     ├── .serve-cache.json      # serve checksum cache
+    ├── instances.json         # Background instance registry (run --daemon / ps / stop)
     ├── logs/                  # Log directory
-    │   └── bws.log            # bws log file (shared with client)
+    │   ├── bws.log            # bws log file (shared with client)
+    │   └── <name>.log         # Browser output log of a daemon instance (e.g. bws-chrome-120-test-01.log)
     ├── cache/                 # Download cache
     │   ├── manifests/         # Version manifest cache
     │   │   └── firefox-ftp-cache.json  # Firefox FTP source cache
@@ -105,10 +107,21 @@ scan-workers = 0
 Log directory, storing bws runtime logs.
 
 - `bws.log`: Main log file, records all operations
+- `<name>.log`: Browser stdout/stderr log of an instance started with `run --daemon`
 - File logs are at DEBUG level by default, recording all operations in detail
 - Logs are automatically rotated to prevent a single file from becoming too large
 
 For more log-related information, please refer to the [Logging System](./logging.md) chapter.
+
+### instances.json
+
+The background instance registry, recording instances started with [`bws r --daemon`](./commands.md#bws-run-alias-r-open). It is the single source of truth for [`bws ps`](./commands.md#bws-ps) and [`bws stop`](./commands.md#bws-stop-alias-kill).
+
+- Each instance records its name, browser, version, PID, profile path, and CDP / WebDriver endpoints
+- Writes use file locking plus atomic replacement to avoid corruption from concurrent writes
+- PID liveness is checked on query; stale entries of exited processes are pruned automatically with a warning on stderr
+- Stopping an instance removes its entry from the registry; **deleting this file is equivalent to clearing the registry** (it does not terminate running processes)
+- bws maintains this file automatically; manual editing is not recommended
 
 ### cache/
 

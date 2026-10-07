@@ -31,6 +31,10 @@ func RegisterCommands(app *App) {
 	app.AddCommand(NewServeCommand())
 	app.AddCommand(NewPluginCommand())
 	app.AddCommand(NewDriverCommand())
+	app.AddCommand(NewWhereCommand())
+	app.AddCommand(NewEndpointCommand())
+	app.AddCommand(NewPsCommand())
+	app.AddCommand(NewStopCommand())
 	app.AddCommand(NewUpdateCommand())
 	app.AddCommand(NewHelpCommand())
 }
@@ -85,26 +89,12 @@ func NewRunCommand() *Command {
 			"r chrome --fingerprint random",
 			"r chrome --fingerprint standard",
 			"r chrome@120 --automation",
+			"r chrome@120 --automation --daemon",
+			"r chrome@120 --cdp",
 			"r chrome@120 --webdriver --driver-port 9515",
 		},
-		Flags: []*Flag{
-			{Name: "headless", Short: "H", Usage: "无头模式运行", HasValue: false, Default: "false"},
-			{Name: "incognito", Short: "i", Usage: "隐身/隐私模式运行", HasValue: false, Default: "false"},
-			{Name: "new-window", Short: "w", Usage: "在新窗口中打开", HasValue: false, Default: "false"},
-			{Name: "profile", Short: "p", Usage: "使用指定的配置文件名称", HasValue: true, Default: ""},
-			{Name: "native", Short: "n", Usage: "原生模式启动（无 bws 隔离）", HasValue: false, Default: "false"},
-			{Name: "detached", Short: "d", Usage: "后台运行（不等待进程结束）", HasValue: false, Default: "false"},
-			{Name: "dry-run", Short: "", Usage: "仅打印命令，不实际运行", HasValue: false, Default: "false"},
-			{Name: "proxy", Short: "", Usage: "代理地址（如 socks5://127.0.0.1:1080），留空使用全局配置", HasValue: true, Default: ""},
-			{Name: "no-proxy", Short: "", Usage: "禁用代理（覆盖全局配置）", HasValue: false, Default: "false"},
-			{Name: "fingerprint", Short: "fp", Usage: "指纹隔离预设（standard/random/none），或 JSON 配置/@文件路径", HasValue: true, Default: ""},
-			{Name: "plugin", Short: "", Usage: "激活的插件（逗号分隔多个）", HasValue: true, Default: ""},
-			{Name: "automation", Usage: "自动化模式：自动管理匹配版本的 chromedriver 并输出 WebDriver 端点", HasValue: false, Default: "false"},
-			{Name: "webdriver", Usage: "启用 WebDriver 端点（--automation 的子集）", HasValue: false, Default: "false"},
-			{Name: "driver-port", Usage: "chromedriver 监听端口（0 表示自动分配）", HasValue: true, Default: "0"},
-			{Name: "driver-no-download", Usage: "自动化模式下不自动下载驱动（缺失时仅告警）", HasValue: false, Default: "false"},
-		},
-		Run: runRun,
+		Flags: runFlags(),
+		Run:   runRun,
 	}
 }
 

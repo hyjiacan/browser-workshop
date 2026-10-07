@@ -2,6 +2,42 @@
 
 本页面记录 Browser Workshop 各版本的功能变更，按版本号倒序排列。
 
+## 未发布（2026-10-07 自动化框架集成）
+
+> 将 bws 从「浏览器版本管理工具」扩展为「自动化测试框架的浏览器供应层」：暴露 CDP / WebDriver 端点与浏览器路径，并提供后台实例的完整生命周期管理。详见 [自动化框架集成](./automation.md)。
+
+### 新增功能
+
+#### CDP 端点暴露
+
+- `run` 新增 `--cdp` 选项：注入 `--remote-debugging-port=0`、`--remote-debugging-address=127.0.0.1`、`--disable-blink-features=AutomationControlled`
+- 从 Profile 目录的 `DevToolsActivePort` 文件发现 CDP WebSocket 端点，回退到 `GET /json/version`
+- 用户显式传入的 `--remote-debugging-port` 等参数优先，不被覆盖
+
+#### 后台实例生命周期
+
+- `run` 新增 `--daemon` 选项：后台运行并登记到实例注册表（`bws-data/instances.json`）
+- 新增 `bws ps`：列出运行中的后台实例（校验 PID 存活，自动清理僵尸条目并告警）
+- 新增 `bws stop`（别名 `kill`）：停止指定实例或全部实例，一并停止关联的 chromedriver
+- 新增 `bws endpoint`：输出实例的 CDP / WebDriver 端点
+- 实例注册表采用文件锁 + 原子写入，支持并发安全
+
+#### 浏览器路径输出
+
+- 新增 `bws where`（别名 `path`）：输出浏览器二进制 / 安装目录 / Profile 路径，便于 Cypress 等框架做命令替换
+
+#### 统一输出契约
+
+- 自动化相关命令（`run --automation/--daemon`、`where`、`endpoint`、`ps`、`stop`、`ls`）统一支持 `--json`
+- 统一信封 `{ok, command, data}`，失败时为 `{ok, command, error}`，错误码为语言中立的稳定标识
+- stdout 只放内容，stderr 只放元信息（横幅、提示、告警）
+
+#### run 自动化模式增强
+
+- `--automation` 现为超集开关：同时启用 CDP 与 WebDriver 端点
+- 新增 `--endpoint-timeout`（端点发现超时，默认 10 秒）、`--json`（JSON 输出）
+- 端点相关能力失败不阻断浏览器启动，对应字段输出 `null`
+
 ## 未发布（2026-09-30 自动化驱动管理）
 
 > 新增自动化驱动（chromedriver）管理能力，让 bws 管理的浏览器可被 Selenium、WebdriverIO 等自动化框架直接接入。

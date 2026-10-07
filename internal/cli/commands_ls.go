@@ -11,6 +11,20 @@ import (
 	"github.com/bws/bws/internal/version"
 )
 
+// lsData is the stable JSON payload of `ls --json`.
+type lsData struct {
+	Installed []lsEntry `json:"installed"`
+}
+
+// lsEntry describes one installed (or system) browser version.
+type lsEntry struct {
+	Browser string `json:"browser"`
+	Version string `json:"version"`
+	Type    string `json:"type"` // "system" | "bws"
+	Channel string `json:"channel"`
+	Binary  string `json:"binary,omitempty"`
+}
+
 func runLs(ctx *Context, args []string) error {
 	flags, positional, err := ParseFlags(args, []*Flag{
 		{Name: "all", Short: "a", Usage: "显示所有", HasValue: false, Default: "false"},
@@ -98,13 +112,44 @@ func runLs(ctx *Context, args []string) error {
 		}
 	}
 
-	if len(versions) == 0 {
+	if len(versions) == 0 && flags["json"] != "true" {
 		ctx.Println("暂无匹配的版本。")
 		if spec.Version != "" {
 			ctx.Printf("筛选条件: %s@%s\n", spec.Browser, spec.Version)
 		}
 		ctx.Println("使用 'bws i <浏览器@版本>' 安装一个版本。")
 		return nil
+	}
+
+	// JSON output shares the stable envelope used by the automation commands.
+	if flags["json"] == "true" {
+		out := NewOutput(ctx, "ls", true)
+		sort.Slice(versions, func(i, j int) bool {
+			if versions[i].Browser != versions[j].Browser {
+				return versions[i].Browser < versions[j].Browser
+			}
+			return version.Compare(versions[i].Version, versions[j].Version) > 0
+		})
+		data := lsData{Installed: make([]lsEntry, 0, len(versions))}
+		for _, v := range versions {
+			origin := "bws"
+			if v.IsSystem {
+				origin = "system"
+			}
+			e := lsEntry{
+				Browser: v.Browser,
+				Version: v.Version,
+				Type:    origin,
+				Channel: v.Channel,
+			}
+			if ctx.Install != nil {
+				if p, ok := ctx.Install.ExecutablePath(v.Browser, v.Version); ok {
+					e.Binary = p
+				}
+			}
+			data.Installed = append(data.Installed, e)
+		}
+		return out.Success(data)
 	}
 
 	// Group by browser

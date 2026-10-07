@@ -252,7 +252,7 @@ The `>` marker indicates the currently selected version (the latest one).
 
 ## Automation Mode
 
-With the `--automation` option, bws prepares an automation driver (chromedriver) matching the launched browser version and prints the WebDriver endpoint, so frameworks such as Selenium and WebdriverIO can attach.
+With the `--automation` option, bws injects CDP flags, prepares an automation driver (chromedriver) matching the launched browser version, and prints both the CDP and WebDriver endpoints, so frameworks such as Playwright, Puppeteer, Selenium and WebdriverIO can attach.
 
 ```bash
 bws r chrome@120 --automation
@@ -261,42 +261,65 @@ bws r chrome@120 --automation
 Flow:
 
 1. Resolve the Chrome version being launched (e.g. `120.0.6099.109`)
-2. Look up the matching chromedriver in the Chrome for Testing manifest
-3. Download and extract it to `bws-data/drivers/chromedriver/120/`
-4. Start chromedriver, listen on a port, and print the WebDriver endpoint
+2. Inject `--remote-debugging-port=0`, `--remote-debugging-address=127.0.0.1`, `--disable-blink-features=AutomationControlled`
+3. Launch the browser and discover the CDP endpoint from the `DevToolsActivePort` file (falling back to `GET /json/version`)
+4. Look up the matching chromedriver in the Chrome for Testing manifest, download and extract it to `bws-data/drivers/chromedriver/120/`
+5. Start chromedriver, listen on a port, and print the WebDriver endpoint
 
 Example output:
 
 ```
-WebDriver:  http://127.0.0.1:9515
-Driver PID: 12345
+Instance:  bws-chrome-120
+CDP:       ws://127.0.0.1:54321/devtools/browser/xxxxx
+WebDriver: http://127.0.0.1:9515
 ```
 
 ### Related Options
 
 | Option | Description |
 |--------|-------------|
+| `--cdp` | Subset of `--automation`, only enables the CDP endpoint |
 | `--webdriver` | Subset of `--automation`, only exposes the WebDriver endpoint |
+| `--daemon` | Run in the background and register a manageable instance (with `ps` / `stop`) |
 | `--driver-port <port>` | Fixed driver listen port; `0` picks a free port |
 | `--driver-no-download` | Do not auto-download the driver; warn only if missing |
+| `--endpoint-timeout <sec>` | Endpoint discovery timeout in seconds (default 10) |
+| `--json` | Emit the launch contract as JSON |
 
 ```bash
 # Fixed driver port
 bws r chrome@120 --automation --driver-port 9515
+
+# Enable the CDP endpoint only
+bws r chrome@120 --cdp
 
 # Enable the WebDriver endpoint only
 bws r chrome@120 --webdriver
 
 # Do not auto-download the driver (use an installed one only)
 bws r chrome@120 --automation --driver-no-download
+
+# Automation mode with JSON output
+bws r chrome@120 --automation --json
 ```
+
+### Background Instance (daemon)
+
+Combined with `--daemon`, the browser is registered as a manageable background instance and the command returns immediately:
+
+```bash
+bws r chrome@120 --automation --daemon --profile test-01
+```
+
+The instance name is `bws-<browser>-<major>[-<profile>]`, e.g. `bws-chrome-120-test-01`. List it with `bws ps`, query its endpoints with `bws endpoint <name>`, and stop it with `bws stop <name>`.
 
 ### Notes
 
-- Automation mode only supports Chrome/Chromium (chromedriver only drives a matching Chrome/Chromium major)
-- A driver start failure never blocks the browser launch; it only warns on stderr
+- CDP is only supported on Chrome/Chromium/Edge; WebDriver currently only manages chromedriver for Chrome/Chromium
+- A driver start failure or endpoint discovery timeout never blocks the browser launch; it only warns on stderr and the field is `null`
 - When a serve source is configured, drivers are resolved and downloaded through it first
 - Drivers can also be managed separately with `bws driver` (see the [commands reference](./commands.md#bws-driver-alias-drv))
+- For a full integration guide, see [Automation Framework Integration](./automation.md)
 
 ## Run Options Summary
 
@@ -309,10 +332,14 @@ bws r chrome@120 --automation --driver-no-download
 | `--native` | `-n` | Native mode (use system Profile) |
 | `--detached` | `-d` | Run in background (do not wait for process) |
 | `--dry-run` | - | Dry run (do not actually start) |
-| `--automation` | - | Automation mode (manage chromedriver automatically) |
+| `--automation` | - | Automation mode (CDP + managed driver + endpoints) |
+| `--cdp` | - | Enable the CDP endpoint only |
 | `--webdriver` | - | Enable the WebDriver endpoint only |
+| `--daemon` | - | Run in the background and register a manageable instance |
 | `--driver-port <port>` | - | Driver listen port |
 | `--driver-no-download` | - | Do not auto-download the driver |
+| `--endpoint-timeout <sec>` | - | Endpoint discovery timeout in seconds |
+| `--json` | - | Emit the launch contract as JSON |
 | `--` | - | Pass native browser parameters |
 
 ## Combined Usage Examples

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/bws/bws/internal/instance"
 	"github.com/bws/bws/internal/version"
 )
 
@@ -271,6 +272,13 @@ func (m *mockInstall) IsInstalled(browser, ver string) bool {
 	return ok
 }
 
+func (m *mockInstall) ExecutablePath(browser, ver string) (string, bool) {
+	if m.IsInstalled(browser, ver) || m.IsSystemVersion(browser, ver) {
+		return "/fake/versions/" + browser + "/" + ver + "/" + browser, true
+	}
+	return "", false
+}
+
 func (m *mockInstall) ListInstalled() (version.List, error) {
 	var result version.List
 	for _, b := range m.records {
@@ -339,7 +347,10 @@ func (m *mockInstall) ImportFromDir(dir string, force bool, onProgress func(curr
 }
 
 type mockLaunch struct {
-	lastOpts LaunchOptions
+	lastOpts   LaunchOptions
+	startCalls int
+	startErr   error
+	profileDir string // overrides the default profile dir returned by Start
 }
 
 func (m *mockLaunch) Run(opts LaunchOptions) error {
@@ -349,6 +360,75 @@ func (m *mockLaunch) Run(opts LaunchOptions) error {
 
 func (m *mockLaunch) PreviewCommand(opts LaunchOptions) (string, []string, error) {
 	return "/fake/path/browser", []string{"--arg", "value"}, nil
+}
+
+func (m *mockLaunch) Start(opts LaunchOptions) (*LaunchResult, error) {
+	m.lastOpts = opts
+	m.startCalls++
+	if m.startErr != nil {
+		return nil, m.startErr
+	}
+	profileDir := "/fake/profile/" + opts.Browser + "/" + opts.Version
+	if m.profileDir != "" {
+		profileDir = m.profileDir
+	}
+	return &LaunchResult{
+		PID:        4242,
+		Binary:     "/fake/versions/" + opts.Browser + "/" + opts.Version + "/" + opts.Browser,
+		ProfileDir: profileDir,
+		Proc:       &mockProc{},
+	}, nil
+}
+
+// mockProc is a no-op LaunchedProcess handle for tests.
+type mockProc struct {
+	killed bool
+}
+
+func (p *mockProc) Wait() error { return nil }
+func (p *mockProc) Kill() error { p.killed = true; return nil }
+
+// mockInstance is an in-memory InstanceProvider for command tests.
+type mockInstance struct {
+	instances     []instance.Instance
+	addErr        error
+	stopErr       error
+	alreadyExited bool
+	stopped       []string
+}
+
+func (m *mockInstance) List() ([]instance.Instance, error) { return m.instances, nil }
+
+func (m *mockInstance) Get(name string) (*instance.Instance, error) {
+	for i := range m.instances {
+		if m.instances[i].Name == name {
+			return &m.instances[i], nil
+		}
+	}
+	return nil, fmt.Errorf("实例不存在: %s", name)
+}
+
+func (m *mockInstance) Add(inst instance.Instance) error {
+	if m.addErr != nil {
+		return m.addErr
+	}
+	m.instances = append(m.instances, inst)
+	return nil
+}
+
+func (m *mockInstance) Stop(name string) (*instance.Instance, bool, error) {
+	if m.stopErr != nil {
+		return nil, false, m.stopErr
+	}
+	for i := range m.instances {
+		if m.instances[i].Name == name {
+			inst := m.instances[i]
+			m.instances = append(m.instances[:i], m.instances[i+1:]...)
+			m.stopped = append(m.stopped, name)
+			return &inst, m.alreadyExited, nil
+		}
+	}
+	return nil, false, fmt.Errorf("实例不存在: %s", name)
 }
 
 func setupTestApp(t *testing.T) (*App, *bytes.Buffer, *mockInstall, *mockLaunch) {

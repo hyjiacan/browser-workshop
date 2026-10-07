@@ -23,6 +23,7 @@ import (
 	"github.com/bws/bws/internal/fingerprint"
 	"github.com/bws/bws/internal/i18n"
 	"github.com/bws/bws/internal/install"
+	"github.com/bws/bws/internal/instance"
 	"github.com/bws/bws/internal/launch"
 	bmlog "github.com/bws/bws/internal/log"
 	"github.com/bws/bws/internal/paths"
@@ -209,6 +210,9 @@ func main() {
 		ServeURL: driverServeURL,
 	})
 	ctx.Driver = &driverAdapter{mgr: driverMgr}
+
+	// Background-instance registry backs `run --daemon`, `ps` and `stop`.
+	ctx.Instance = &instanceAdapter{reg: instance.NewRegistry(p.InstanceRegistryFile())}
 
 	if repoImporter != nil {
 		ctx.Repo = &repoAdapter{scanner: repoScanner, importer: repoImporter}
@@ -402,6 +406,10 @@ func (a *pathsAdapter) DownloadCacheDir() string {
 
 func (a *pathsAdapter) EnsureAll() error {
 	return a.p.EnsureAll()
+}
+
+func (a *pathsAdapter) InstanceLogFile(name string) string {
+	return a.p.InstanceLogFile(name)
 }
 
 type configAdapter struct {
@@ -708,6 +716,10 @@ func (a *installAdapter) ResolveInstalledVersion(browser, version string) (strin
 	return a.mgr.ResolveInstalledVersion(browser, version)
 }
 
+func (a *installAdapter) ExecutablePath(browser, version string) (string, bool) {
+	return a.mgr.GetExecutableWithSystem(browser, version)
+}
+
 func (a *installAdapter) ImportFromDir(dir string, force bool, onProgress func(current int, total int, message string)) (*cli.ImportSummary, error) {
 	if a.scanner == nil {
 		return nil, fmt.Errorf("scanner not available")
@@ -865,7 +877,9 @@ func (a *profileAdapter) CleanOrphanedProfiles(browser string) ([]string, error)
 	return a.mgr.CleanOrphanedProfiles(browser)
 }
 
-func (a *launchAdapter) Run(opts cli.LaunchOptions) error {
+// buildOptions converts CLI launch options into launch package options and runs
+// pre-run plugins. It is shared by Run, Start and PreviewCommand.
+func (a *launchAdapter) buildOptions(opts cli.LaunchOptions) (launch.Options, error) {
 	launchOpts := launch.Options{
 		Browser:     opts.Browser,
 		Version:     opts.Version,
@@ -884,7 +898,7 @@ func (a *launchAdapter) Run(opts cli.LaunchOptions) error {
 	if opts.Fingerprint != "" {
 		fp, err := fingerprint.FromString(opts.Fingerprint)
 		if err != nil {
-			return fmt.Errorf("指纹配置解析失败: %w", err)
+			return launchOpts, fmt.Errorf("指纹配置解析失败: %w", err)
 		}
 		launchOpts.Fingerprint = fp
 	}
@@ -892,8 +906,16 @@ func (a *launchAdapter) Run(opts cli.LaunchOptions) error {
 	// Run pre-run plugins
 	if a.pluginExec != nil {
 		if err := a.pluginExec.RunPreRunPlugins(&launchOpts); err != nil {
-			return err
+			return launchOpts, err
 		}
+	}
+	return launchOpts, nil
+}
+
+func (a *launchAdapter) Run(opts cli.LaunchOptions) error {
+	launchOpts, err := a.buildOptions(opts)
+	if err != nil {
+		return err
 	}
 
 	proc, err := a.mgr.Launch(launchOpts)
@@ -923,37 +945,59 @@ func (a *launchAdapter) Run(opts cli.LaunchOptions) error {
 	return nil
 }
 
+// Start launches the browser without waiting for it to exit and returns the
+// process handle plus the resolved binary and profile paths. It backs the
+// automation and daemon launch paths, which need the PID to register and later
+// stop the instance.
+func (a *launchAdapter) Start(opts cli.LaunchOptions) (*cli.LaunchResult, error) {
+	launchOpts, err := a.buildOptions(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	proc, err := a.mgr.Launch(launchOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	bmlog.Debug("[run] 进程已启动：PID=%d", proc.Pid)
+	return &cli.LaunchResult{
+		PID:        proc.Pid,
+		Binary:     proc.Executable,
+		ProfileDir: proc.ProfileDir,
+		Proc:       &launchedProcess{proc: proc},
+	}, nil
+}
+
+// launchedProcess adapts launch.Process to the CLI's LaunchedProcess interface.
+type launchedProcess struct {
+	proc *launch.Process
+}
+
+func (p *launchedProcess) Wait() error { return p.proc.Wait() }
+func (p *launchedProcess) Kill() error { return p.proc.Kill() }
+
 func (a *launchAdapter) PreviewCommand(opts cli.LaunchOptions) (string, []string, error) {
-	launchOpts := launch.Options{
-		Browser:     opts.Browser,
-		Version:     opts.Version,
-		URLs:        opts.URLs,
-		Headless:    opts.Headless,
-		Incognito:   opts.Incognito,
-		NewWindow:   opts.NewWindow,
-		ProfileName: opts.ProfileName,
-		NativeMode:  opts.NativeMode,
-		ExtraArgs:   opts.ExtraArgs,
-		Proxy:       opts.Proxy,
+	launchOpts, err := a.buildOptions(opts)
+	if err != nil {
+		return "", nil, err
 	}
-
-	// Parse fingerprint config
-	if opts.Fingerprint != "" {
-		fp, err := fingerprint.FromString(opts.Fingerprint)
-		if err != nil {
-			return "", nil, fmt.Errorf("指纹配置解析失败: %w", err)
-		}
-		launchOpts.Fingerprint = fp
-	}
-
-	// Run pre-run plugins
-	if a.pluginExec != nil {
-		if err := a.pluginExec.RunPreRunPlugins(&launchOpts); err != nil {
-			return "", nil, err
-		}
-	}
-
 	return a.mgr.BuildCommandPreview(launchOpts)
+}
+
+// instanceAdapter adapts instance.Registry to cli.InstanceProvider.
+type instanceAdapter struct {
+	reg *instance.Registry
+}
+
+func (a *instanceAdapter) List() ([]instance.Instance, error) { return a.reg.List() }
+
+func (a *instanceAdapter) Get(name string) (*instance.Instance, error) { return a.reg.Get(name) }
+
+func (a *instanceAdapter) Add(inst instance.Instance) error { return a.reg.Add(inst) }
+
+func (a *instanceAdapter) Stop(name string) (*instance.Instance, bool, error) {
+	return a.reg.Stop(name)
 }
 
 // repoAdapter adapts repo.Scanner and repo.Importer to cli.RepoProvider.

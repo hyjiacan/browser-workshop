@@ -138,6 +138,17 @@ func (p *Paths) DriverDir(name string, version string) string {
 	return filepath.Join(p.DriversDir, name, version)
 }
 
+// InstanceRegistryFile returns the path to the background-instance registry.
+// It is the single source of truth for `ps` / `stop` (see design §4.5).
+func (p *Paths) InstanceRegistryFile() string {
+	return filepath.Join(p.Root, "instances.json")
+}
+
+// InstanceLogFile returns the log file path for a daemon instance.
+func (p *Paths) InstanceLogFile(name string) string {
+	return filepath.Join(p.LogDir, name+".log")
+}
+
 // ManifestFile returns the path to the cached manifest file for a browser.
 func (p *Paths) ManifestFile(browser string) string {
 	return filepath.Join(p.ManifestCacheDir, browser+".json")

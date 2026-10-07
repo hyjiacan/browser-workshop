@@ -2,6 +2,42 @@
 
 This page records feature changes for each version of Browser Workshop, listed in reverse version order.
 
+## Unreleased (2026-10-07 Automation Framework Integration)
+
+> Extends bws from a browser version manager into a **browser supply layer for automation testing frameworks**: it exposes CDP / WebDriver endpoints and browser paths, and provides full lifecycle management for background instances. See [Automation Framework Integration](./automation.md).
+
+### New Features
+
+#### CDP Endpoint Exposure
+
+- New `--cdp` option on `run`: injects `--remote-debugging-port=0`, `--remote-debugging-address=127.0.0.1`, `--disable-blink-features=AutomationControlled`
+- Discovers the CDP WebSocket endpoint from the `DevToolsActivePort` file in the profile directory, falling back to `GET /json/version`
+- Explicit user parameters such as `--remote-debugging-port` take precedence and are never overridden
+
+#### Background Instance Lifecycle
+
+- New `--daemon` option on `run`: runs in the background and registers into the instance registry (`bws-data/instances.json`)
+- New `bws ps`: lists running background instances (checks PID liveness, prunes stale entries with a warning)
+- New `bws stop` (alias `kill`): stops a specific instance or all instances, stopping the associated chromedriver too
+- New `bws endpoint`: prints the CDP / WebDriver endpoints of an instance
+- The instance registry uses file locking plus atomic writes for concurrency safety
+
+#### Browser Path Output
+
+- New `bws where` (alias `path`): prints the browser binary / install directory / profile path, making command substitution easy for Cypress and other frameworks
+
+#### Unified Output Contract
+
+- Automation-related commands (`run --automation/--daemon`, `where`, `endpoint`, `ps`, `stop`, `ls`) all support `--json`
+- Unified envelope `{ok, command, data}`, or `{ok, command, error}` on failure, with language-neutral stable error codes
+- stdout carries content only; stderr carries metadata only (banner, hints, warnings)
+
+#### run Automation Mode Enhancements
+
+- `--automation` is now a superset switch enabling both the CDP and WebDriver endpoints
+- New `--endpoint-timeout` (endpoint discovery timeout, default 10s) and `--json` (JSON output)
+- Endpoint-related failures never block the browser launch; the corresponding fields render as `null`
+
 ## Unreleased (2026-09-30 Automation Driver Management)
 
 > Adds automation driver (chromedriver) management, so browsers managed by bws can be attached directly by frameworks such as Selenium and WebdriverIO.

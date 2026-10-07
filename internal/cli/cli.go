@@ -12,6 +12,7 @@ import (
 	"github.com/bws/bws/internal/driver"
 	"github.com/bws/bws/internal/i18n"
 	"github.com/bws/bws/internal/install"
+	"github.com/bws/bws/internal/instance"
 	"github.com/bws/bws/internal/plugin"
 	"github.com/bws/bws/internal/repo"
 	"github.com/bws/bws/internal/shortcut"
@@ -59,6 +60,21 @@ type Context struct {
 	Serve    ServeProvider
 	Plugin   PluginProvider
 	Driver   DriverProvider
+	Instance InstanceProvider
+}
+
+// InstanceProvider manages the background-instance registry used by
+// `run --daemon`, `ps` and `stop`.
+type InstanceProvider interface {
+	// List returns live instances, pruning entries whose process has exited.
+	List() ([]instance.Instance, error)
+	// Get returns a single live instance by name.
+	Get(name string) (*instance.Instance, error)
+	// Add registers a new instance, failing when the name is taken.
+	Add(inst instance.Instance) error
+	// Stop terminates an instance's processes and removes it from the registry.
+	// The second return value reports whether the process had already exited.
+	Stop(name string) (*instance.Instance, bool, error)
 }
 
 // Confirm asks the user for confirmation and returns true if they agree.
@@ -106,6 +122,8 @@ type PathsProvider interface {
 	VersionDir(browser string, version string) string
 	DownloadCacheDir() string
 	EnsureAll() error
+	// InstanceLogFile returns the log file path for a daemon instance.
+	InstanceLogFile(name string) string
 }
 
 // PluginProvider manages plugins.
@@ -270,6 +288,9 @@ type InstallProvider interface {
 	// ResolveInstalledVersion resolves a version spec (exact/partial/alias) to a full installed version.
 	// Supports "126" → "126.0.6478.115", "latest", "system", exact match.
 	ResolveInstalledVersion(browser, version string) (string, error)
+	// ExecutablePath returns the absolute path to the browser binary for an
+	// installed or system version.
+	ExecutablePath(browser, version string) (string, bool)
 	// ImportFromDir scans a directory and imports all recognized browser versions.
 	// The onProgress callback is called for each item being processed (item index, total, message).
 	ImportFromDir(dir string, force bool, onProgress func(current int, total int, message string)) (*ImportSummary, error)
@@ -312,6 +333,23 @@ type ProfileProvider interface {
 type LaunchProvider interface {
 	Run(opts LaunchOptions) error
 	PreviewCommand(opts LaunchOptions) (string, []string, error)
+	// Start launches the browser and returns immediately with process info,
+	// without waiting for it to exit. Used by the automation/daemon paths.
+	Start(opts LaunchOptions) (*LaunchResult, error)
+}
+
+// LaunchResult describes a started browser process.
+type LaunchResult struct {
+	PID        int
+	Binary     string
+	ProfileDir string
+	Proc       LaunchedProcess
+}
+
+// LaunchedProcess is a handle to a started browser process.
+type LaunchedProcess interface {
+	Wait() error
+	Kill() error
 }
 
 // LaunchOptions maps to launch.Options for CLI use.

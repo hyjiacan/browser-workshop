@@ -15,8 +15,10 @@ bws/
 ├── bws-serve.ini              # serve 服务配置文件（首次运行 serve 时创建）
 └── bws-data/                  # 数据根目录
     ├── .serve-cache.json      # serve 校验和缓存
+    ├── instances.json         # 后台实例注册表（run --daemon / ps / stop）
     ├── logs/                  # 日志目录
-    │   └── bws.log            # bws 日志文件（客户端与 serve 共用）
+    │   ├── bws.log            # bws 日志文件（客户端与 serve 共用）
+    │   └── <实例名>.log       # 后台实例的浏览器输出日志（如 bws-chrome-120-test-01.log）
     ├── cache/                 # 下载缓存
     │   ├── manifests/         # 版本清单缓存
     │   │   └── firefox-ftp-cache.json  # Firefox FTP 源缓存
@@ -104,10 +106,21 @@ scan-workers = 0
 日志目录，存储 bws 的运行日志。
 
 - `bws.log`：bws 日志文件（与客户端共用），记录所有操作和 HTTP 请求等信息
+- `<实例名>.log`：以 `run --daemon` 启动的后台实例的浏览器标准输出/错误日志
 - 文件日志默认 DEBUG 级别，详细记录所有操作
 - 日志会自动轮转，防止单个文件过大
 
 更多日志相关信息请参考 [日志系统](./logging.md) 章节。
+
+### instances.json
+
+后台实例注册表，记录通过 [`bws r --daemon`](./commands.md#bws-run-别名-r-open) 启动的实例，是 [`bws ps`](./commands.md#bws-ps) 与 [`bws stop`](./commands.md#bws-stop-别名-kill) 的唯一数据来源。
+
+- 每个实例记录名称、浏览器、版本、PID、Profile 路径、CDP / WebDriver 端点等信息
+- 写入采用文件锁 + 原子替换，避免并发写入损坏
+- 查询时校验 PID 存活，已退出的僵尸条目会自动清理并告警到 stderr
+- 停止实例会从注册表中移除对应条目；**删除该文件等价于清空实例登记**（不会终止已运行的进程）
+- 该文件由 bws 自动维护，不建议手动编辑
 
 ### cache/
 

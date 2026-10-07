@@ -116,9 +116,7 @@
 
 | 文件 | 问题描述 | 优先级 |
 |------|----------|--------|
-| `internal/cli/commands.go` | `bws ls --json` 选项已注册但实际输出逻辑未实现 | 高 |
 | `internal/plugin/*.go` | 插件 Hooks `post_run`/`pre_install`/`post_install`/`on_exit` 仅定义常量，代码中未实际调用 | 中 |
-| `docs/en/guide/commands.md` | 英文版命令参考文档未同步别名注释更新 | 中 |
 | `docs/en/guide/getting-started.md` | 英文版快速上手文档未同步 | 低 |
 
-> **已修复项归档**：`internal/help/files/*.txt` 系列帮助文件、`plugins/README.md` 插件路径、`docs/guide/commands.md` 别名注释 等问题已在本轮修复中解决。
+> **已修复项归档**：`internal/help/files/*.txt` 系列帮助文件、`plugins/README.md` 插件路径、`docs/guide/commands.md` 别名注释、`bws ls --json` 输出逻辑、`docs/en/guide/commands.md` 别名与自动化章节 等问题已在本轮修复中解决。

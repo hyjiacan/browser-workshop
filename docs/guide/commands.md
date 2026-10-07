@@ -25,6 +25,10 @@
 | `bws cache` / `bws cc` | 管理下载缓存 |
 | `bws plugin` / `bws pl` | 插件管理 |
 | `bws driver` / `bws drv` | 管理自动化驱动（chromedriver） |
+| `bws where` / `bws path` | 输出浏览器的本地路径（供 Cypress 等框架使用） |
+| `bws endpoint` | 输出指定实例的 CDP / WebDriver 端点 |
+| `bws ps` | 列出运行中的后台实例 |
+| `bws stop` / `bws kill` | 停止运行中的后台实例 |
 | `bws doctor` / `bws dt` | 系统健康检查 |
 | `bws help` / `bws h` | 显示帮助信息 |
 
@@ -56,7 +60,7 @@ bws ls [浏览器[@版本]] [选项]
 | `--channel <渠道>` | `-c` | 指定渠道（仅远程列表有效） |
 | `--limit <数量>` | `-n` | 限制结果数量（默认 20，仅远程列表有效） |
 | `--refresh` | - | 强制刷新远程源缓存（仅远程列表有效） |
-| `--json` | - | 以 JSON 格式输出 |
+| `--json` | - | 以 JSON 格式输出（本地模式；输出 `installed[]`） |
 
 ### 示例
 
@@ -95,6 +99,21 @@ bws ls -R firefox --refresh
 
 # 以 JSON 格式输出
 bws ls --json
+```
+
+JSON 输出结构：
+
+```json
+{
+  "ok": true,
+  "command": "ls",
+  "data": {
+    "installed": [
+      { "browser": "chrome", "version": "120.0.6099.109", "type": "bws", "channel": "stable" },
+      { "browser": "chrome", "version": "125.0.6422.112", "type": "system", "channel": "stable" }
+    ]
+  }
+}
 ```
 
 ---
@@ -177,10 +196,14 @@ bws r <浏览器[@版本]> [URL] [选项] [-- 原生参数]
 | `--no-proxy` | - | 禁用代理（覆盖全局配置） |
 | `--fingerprint <preset>` | `-fp` | 指纹隔离预设（`standard`/`random`/`none`），或 JSON 配置/@文件路径 |
 | `--plugin <names>` | - | 激活的插件（逗号分隔多个） |
-| `--automation` | - | 自动化模式：自动管理匹配版本的 chromedriver 并输出 WebDriver 端点 |
+| `--automation` | - | 自动化模式：注入 CDP 参数、管理匹配版本的驱动并输出端点 |
+| `--cdp` | - | 仅启用 CDP 端点（`--automation` 的子集） |
 | `--webdriver` | - | 仅启用 WebDriver 端点（`--automation` 的子集） |
+| `--daemon` | - | 后台运行并登记为可管理实例（等价 `--detached` + 注册表） |
 | `--driver-port <port>` | - | chromedriver 监听端口（`0` 表示自动分配） |
 | `--driver-no-download` | - | 自动化模式下不自动下载驱动（缺失时仅告警） |
+| `--endpoint-timeout <sec>` | - | 端点发现超时（秒，默认 10） |
+| `--json` | - | 以 JSON 格式输出（需配合 `--automation`/`--cdp`/`--webdriver`/`--daemon`） |
 | `--` | - | 之后的参数原样传递给浏览器 |
 
 ### 示例
@@ -233,51 +256,96 @@ bws r chrome@120 --fingerprint standard
 # 指纹隔离：自定义 JSON
 bws r chrome@120 --fingerprint '{"userAgent":"...","language":"en-US","webrtc":"disabled"}'
 
-# 自动化模式：自动管理匹配版本的 chromedriver
+# 自动化模式：自动管理匹配版本的 chromedriver 并输出端点
 bws r chrome@120 --automation
 
 # 自动化模式并指定驱动端口
 bws r chrome@120 --automation --driver-port 9515
 
+# 仅启用 CDP 端点
+bws r chrome@120 --cdp
+
 # 仅启用 WebDriver 端点
 bws r chrome@120 --webdriver
+
+# 后台运行并登记为可管理实例
+bws r chrome@120 --automation --daemon --profile test-01
+
+# 自动化模式 + JSON 输出
+bws r chrome@120 --automation --json
 
 # 使用 open 别名
 bws open chrome@120
 ```
 ### 自动化模式
 
-`--automation` 选项在启动浏览器的同时，自动准备与该浏览器版本匹配的自动化驱动（chromedriver），并输出 WebDriver 端点，供 Selenium、WebdriverIO 等框架连接。
+`--automation` 是自动化能力的超集开关：启动浏览器的同时注入 CDP 参数、准备与该版本匹配的自动化驱动（chromedriver），并输出 CDP 与 WebDriver 端点，供 Playwright、Puppeteer、Selenium、WebdriverIO 等框架连接。
 
 **执行流程：**
 
 1. 解析本次启动的 Chrome 版本（如 `120.0.6099.109`）
-2. 查询 Chrome for Testing 清单，找到该版本对应的 chromedriver 下载地址
-3. 下载并解压到 `bws-data/drivers/chromedriver/120/`
-4. 启动 chromedriver 进程并监听端口，输出 WebDriver 端点
+2. 注入 `--remote-debugging-port=0`、`--remote-debugging-address=127.0.0.1`、`--disable-blink-features=AutomationControlled`
+3. 启动浏览器，并从 Profile 目录的 `DevToolsActivePort` 文件（回退 `GET /json/version`）发现 CDP 端点
+4. 查询 Chrome for Testing 清单，下载并解压 chromedriver 到 `bws-data/drivers/chromedriver/120/`
+5. 启动 chromedriver 进程并监听端口，输出 WebDriver 端点
 
 ```bash
-# 启动浏览器并自动准备驱动
-bws r chrome@120 --automation
+# 启动浏览器并自动准备 CDP 与驱动
+bws r chrome@120 --automation --profile test-01
 # 输出:
-# WebDriver:  http://127.0.0.1:9515
-# Driver PID: 12345
+# Instance:  bws-chrome-120-test-01
+# CDP:       ws://127.0.0.1:54321/devtools/browser/xxxxx
+# WebDriver: http://127.0.0.1:9515
 ```
+
+**JSON 输出契约：**
+
+```bash
+bws r chrome@120 --automation --json
+```
+
+```json
+{
+  "ok": true,
+  "command": "run",
+  "data": {
+    "instance": "bws-chrome-120",
+    "browser": "chrome",
+    "version": "120.0.6099.109",
+    "pid": 12345,
+    "binary": "C:\\bws\\bws-data\\versions\\chrome\\120.0.6099.109\\chrome.exe",
+    "profile": "C:\\bws\\bws-data\\runtime\\chrome\\120.0.6099.109\\test-01",
+    "cdp": "ws://127.0.0.1:54321/devtools/browser/xxxxx",
+    "webdriver": "http://127.0.0.1:9515",
+    "daemon": false
+  }
+}
+```
+
+端点字段不可用时输出 `null`（键始终存在）。端点相关能力失败**不阻断浏览器启动**，仅向 stderr 告警。
 
 **相关选项：**
 
 | 选项 | 说明 |
 |------|------|
+| `--cdp` | `--automation` 的子集，仅启用 CDP 端点 |
 | `--webdriver` | `--automation` 的子集，仅启用 WebDriver 端点 |
+| `--daemon` | 后台运行并登记为可管理实例（配合 `ps` / `stop`） |
 | `--driver-port <port>` | 指定驱动监听端口，`0` 表示自动分配 |
 | `--driver-no-download` | 不自动下载驱动，缺失时仅告警 |
+| `--endpoint-timeout <sec>` | 端点发现超时（秒，默认 10） |
+| `--json` | 以 JSON 输出启动契约 |
+
+**用户参数优先：** 若在 `--` 之后自行指定了 `--remote-debugging-port=9222`，bws 将保留该值而不再注入 `=0`。
 
 **注意事项：**
 
-- 自动化模式仅支持 Chrome/Chromium（chromedriver 只能驱动同主版本的 Chrome/Chromium）
-- 驱动启动失败不会中断浏览器启动，仅在标准错误输出告警
+- CDP 端点仅支持 Chrome/Chromium/Edge；WebDriver 目前仅托管 Chrome/Chromium 的 chromedriver
+- 驱动启动失败或端点发现超时不会中断浏览器启动，仅在标准错误输出告警，对应字段为 `null`
 - 配置了 serve 离线源时，将优先通过 serve 解析并下载驱动
 - 驱动的解析、安装与卸载也可通过 [`bws driver`](#bws-driver-别名-drv) 命令单独管理
+
+> 完整的自动化框架接入指南（Playwright/Puppeteer/Selenium/Cypress）请参考 [自动化框架集成](./automation.md)。
 
 ### 指纹隔离
 
@@ -1091,6 +1159,217 @@ bws-data/drivers/chromedriver/120/
 每个主版本目录保存该主版本对应的驱动可执行文件及元数据（`.bws-driver.json`），元数据记录精确版本号、平台、安装时间等信息。
 
 > 与 `bws r --automation` 配合使用可一步完成“启动浏览器 + 准备驱动”，详见 [run 命令的自动化模式](#自动化模式)。
+
+---
+
+## bws where (别名: path)
+
+输出浏览器的本地路径，主要用于命令替换场景，例如让 Cypress 使用 bws 管理的浏览器：
+
+```bash
+cypress run --browser "$(bws where chrome@120)"
+```
+
+### 用法
+
+```bash
+bws where <浏览器@版本> [选项]
+```
+
+### 参数
+
+| 参数 | 说明 |
+|------|------|
+| `浏览器[@版本]` | 必填，如 `chrome@120` |
+
+### 选项
+
+| 选项 | 说明 |
+|------|------|
+| `--dir` | 输出安装目录而非二进制路径 |
+| `--profile` | 输出 Profile 目录 |
+| `--profile-name <name>` | 指定 Profile 名称（与 `--profile` 配合） |
+| `--json` | 以 JSON 格式输出 |
+
+### 示例
+
+```bash
+# 默认输出二进制路径
+bws where chrome@120
+
+# 输出安装目录
+bws where chrome@120 --dir
+
+# 输出 Profile 目录
+bws where chrome@120 --profile --profile-name test-01
+
+# JSON 输出
+bws where chrome@120 --json
+```
+
+JSON 输出结构：
+
+```json
+{
+  "ok": true,
+  "command": "where",
+  "data": {
+    "browser": "chrome",
+    "version": "120.0.6099.109",
+    "binary": "C:\\bws\\bws-data\\versions\\chrome\\120.0.6099.109\\chrome.exe",
+    "dir": "C:\\bws\\bws-data\\versions\\chrome\\120.0.6099.109",
+    "profile": "C:\\bws\\bws-data\\runtime\\chrome\\120.0.6099.109\\test-01"
+  }
+}
+```
+
+---
+
+## bws endpoint
+
+输出指定后台实例的 CDP / WebDriver 端点。
+
+### 用法
+
+```bash
+bws endpoint <实例名> [选项]
+```
+
+### 选项
+
+| 选项 | 说明 |
+|------|------|
+| `--json` | 以 JSON 格式输出 |
+
+### 示例
+
+```bash
+bws endpoint bws-chrome-120-test-01
+bws endpoint bws-chrome-120 --json
+```
+
+```
+CDP:       ws://127.0.0.1:54321/devtools/browser/xxxxx
+WebDriver: http://127.0.0.1:9515
+```
+
+> 实例名可由 [`bws ps`](#bws-ps) 查看，通过 `bws r ... --daemon` 创建。
+
+---
+
+## bws ps
+
+列出运行中的后台实例（由 `bws r --daemon` 登记）。
+
+### 用法
+
+```bash
+bws ps [选项]
+```
+
+### 选项
+
+| 选项 | 说明 |
+|------|------|
+| `--json` | 以 JSON 格式输出 |
+
+### 示例
+
+```bash
+bws ps
+bws ps --json
+```
+
+```
+NAME                     BROWSER   VERSION          PROFILE   PID     CDP
+bws-chrome-120-test-01   chrome    120.0.6099.109   test-01   12345   ws://127.0.0.1:54321/…
+```
+
+- 无实例时输出 `No running instances.`
+- 查询时校验 PID 存活，已退出的僵尸条目自动清理并告警到 stderr
+- 表格中的 CDP 会截断显示，完整值请用 `--json` 或 [`bws endpoint`](#bws-endpoint)
+
+> `ps` 与 [`ls`](#bws-list-别名-ls) 互不重叠：`ls` 列出磁盘上已安装的版本，`ps` 列出内存/注册表中运行中的进程。
+
+---
+
+## bws stop (别名: kill)
+
+停止运行中的后台实例。
+
+### 用法
+
+```bash
+bws stop <实例名> [选项]
+bws stop --all [选项]
+```
+
+### 选项
+
+| 选项 | 简写 | 说明 |
+|------|------|------|
+| `--all` | `-a` | 停止所有实例 |
+| `--json` | - | 以 JSON 格式输出 |
+
+### 示例
+
+```bash
+# 停止指定实例
+bws stop bws-chrome-120-test-01
+
+# 停止所有实例
+bws stop --all
+
+# JSON 输出
+bws stop --all --json
+```
+
+### 行为说明
+
+| 行为 | 说明 |
+|------|------|
+| 终止进程 | 先尝试优雅退出，超时后强制终止 |
+| 停止驱动 | 若实例关联了 chromedriver，一并停止 |
+| 清理注册表 | 从实例注册表移除 |
+| 保留 Profile | Profile 数据不删除，可复用或手动清理 |
+
+- 实例不存在时报错，退出码非 0
+- 进程已退出但注册表未清理时，输出 `Stopped: <name> (already exited)`
+- JSON 输出包含 `stopped` 与 `failed` 两个数组
+
+---
+
+## 统一输出契约
+
+所有自动化相关命令（`run --automation/--daemon`、`where`、`endpoint`、`ps`、`stop`、`ls`）都支持 `--json`，并遵循统一信封：
+
+```json
+{
+  "ok": true,
+  "command": "<命令名>",
+  "data": { }
+}
+```
+
+失败时：
+
+```json
+{
+  "ok": false,
+  "command": "<命令名>",
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "实例不存在: bws-chrome-120"
+  }
+}
+```
+
+约定：
+
+- **stdout 只放内容，stderr 只放元信息**（启动横幅、提示、告警），便于管道消费
+- 描述性字段使用稳定枚举值（如 `type: system|bws`、`status: running`），中文仅用于人类可读输出
+- 端点等可缺省字段始终存在，不可用时为 `null`
+- 错误码为语言中立的稳定标识：`NOT_FOUND`、`INVALID_ARGUMENT`、`UNSUPPORTED`、`CONFLICT`、`INTERNAL`
 
 ---
 

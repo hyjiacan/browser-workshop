@@ -273,7 +273,7 @@ bws r firefox -- --safe-mode
 
 ## 自动化模式
 
-使用 `--automation` 参数，bws 会在启动浏览器的同时，自动准备与该浏览器版本匹配的自动化驱动（chromedriver），并输出 WebDriver 端点，供 Selenium、WebdriverIO 等框架连接。
+使用 `--automation` 参数，bws 会在启动浏览器的同时注入 CDP 参数、自动准备与该浏览器版本匹配的自动化驱动（chromedriver），并输出 CDP 与 WebDriver 端点，供 Playwright、Puppeteer、Selenium、WebdriverIO 等框架连接。
 
 ```bash
 bws r chrome@120 --automation
@@ -282,40 +282,93 @@ bws r chrome@120 --automation
 执行流程：
 
 1. 解析本次启动的 Chrome 版本（如 `120.0.6099.109`）
-2. 查询 Chrome for Testing 清单，找到该版本对应的 chromedriver 下载地址
-3. 下载并解压到 `bws-data/drivers/chromedriver/120/`
-4. 启动 chromedriver 进程并监听端口，输出 WebDriver 端点
+2. 注入 `--remote-debugging-port=0`、`--remote-debugging-address=127.0.0.1`、`--disable-blink-features=AutomationControlled`
+3. 启动浏览器，并从 Profile 目录的 `DevToolsActivePort` 文件（回退 `GET /json/version`）发现 CDP 端点
+4. 查询 Chrome for Testing 清单，找到该版本对应的 chromedriver 下载地址，下载并解压到 `bws-data/drivers/chromedriver/120/`
+5. 启动 chromedriver 进程并监听端口，输出 WebDriver 端点
 
 输出示例：
 
 ```
-WebDriver:  http://127.0.0.1:9515
-Driver PID: 12345
+Instance:  bws-chrome-120
+CDP:       ws://127.0.0.1:54321/devtools/browser/xxxxx
+WebDriver: http://127.0.0.1:9515
 ```
 
 ### 相关选项
 
 | 选项 | 说明 |
 |------|------|
+| `--cdp` | `--automation` 的子集，仅启用 CDP 端点 |
 | `--webdriver` | `--automation` 的子集，仅启用 WebDriver 端点 |
+| `--daemon` | 后台运行并登记为可管理实例（配合 `ps` / `stop`） |
 | `--driver-port <port>` | 指定驱动监听端口，`0` 表示自动分配 |
 | `--driver-no-download` | 不自动下载驱动，缺失时仅告警 |
+| `--endpoint-timeout <sec>` | 端点发现超时（秒，默认 10） |
+| `--json` | 以 JSON 输出启动契约 |
 
 ```bash
 # 指定驱动端口
 bws r chrome@120 --automation --driver-port 9515
+
+# 仅启用 CDP 端点
+bws r chrome@120 --cdp
 
 # 仅启用 WebDriver 端点
 bws r chrome@120 --webdriver
 
 # 不自动下载驱动（仅使用已安装的驱动）
 bws r chrome@120 --automation --driver-no-download
+
+# JSON 输出
+bws r chrome@120 --automation --json
 ```
+
+### JSON 输出契约
+
+```json
+{
+  "ok": true,
+  "command": "run",
+  "data": {
+    "instance": "bws-chrome-120",
+    "browser": "chrome",
+    "version": "120.0.6099.109",
+    "pid": 12345,
+    "binary": "C:\\bws\\bws-data\\versions\\chrome\\120.0.6099.109\\chrome.exe",
+    "profile": "C:\\bws\\bws-data\\runtime\\chrome\\120.0.6099.109\\test-01",
+    "cdp": "ws://127.0.0.1:54321/devtools/browser/xxxxx",
+    "webdriver": "http://127.0.0.1:9515",
+    "daemon": false
+  }
+}
+```
+
+端点字段不可用时输出 `null`（键始终存在）。端点相关能力失败**不阻断浏览器启动**，仅在标准错误输出告警。
+
+### 后台实例（daemon）
+
+配合 `--daemon` 可将浏览器登记为后台可管理实例，命令立即返回：
+
+```bash
+bws r chrome@120 --automation --daemon --profile test-01
+
+# 查看运行中的实例
+bws ps
+
+# 查询实例端点
+bws endpoint bws-chrome-120-test-01
+
+# 停止实例
+bws stop bws-chrome-120-test-01
+```
+
+详见 [命令参考](./commands.md#bws-ps) 与 [自动化框架集成](./automation.md)。
 
 ### 注意事项
 
-- 自动化模式仅支持 Chrome/Chromium（chromedriver 只能驱动同主版本的 Chrome/Chromium）
-- 驱动启动失败不会中断浏览器启动，仅在标准错误输出告警
+- CDP 端点仅支持 Chrome/Chromium/Edge；WebDriver 目前仅托管 Chrome/Chromium 的 chromedriver
+- 驱动启动失败或端点发现超时不会中断浏览器启动，仅在标准错误输出告警
 - 配置了 serve 离线源时，将优先通过 serve 解析并下载驱动
 - 驱动也可通过 `bws driver` 命令单独管理（详见 [命令参考](./commands.md#bws-driver-别名-drv)）
 
@@ -329,11 +382,15 @@ bws r chrome@120 --automation --driver-no-download
 | `--profile <name>` | `-p` | 指定命名 Profile |
 | `--native` | `-n` | 原生模式（使用系统 Profile） |
 | `--detached` | `-d` | 后台运行（不等待进程） |
+| `--daemon` | - | 后台运行并登记为可管理实例 |
 | `--dry-run` | - | 试运行（不实际启动） |
-| `--automation` | - | 自动化模式（自动管理 chromedriver） |
+| `--automation` | - | 自动化模式（CDP + 驱动 + 端点输出） |
+| `--cdp` | - | 仅启用 CDP 端点 |
 | `--webdriver` | - | 仅启用 WebDriver 端点 |
 | `--driver-port <port>` | - | 驱动监听端口 |
 | `--driver-no-download` | - | 不自动下载驱动 |
+| `--endpoint-timeout <sec>` | - | 端点发现超时（秒） |
+| `--json` | - | JSON 输出（配合自动化/守护开关） |
 | `--` | - | 传递浏览器原生参数 |
 
 ## 组合使用示例

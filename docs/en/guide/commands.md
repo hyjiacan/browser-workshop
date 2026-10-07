@@ -25,6 +25,10 @@ This document lists all commands of `bws` with detailed descriptions, including 
 | `bws cache` / `bws cc` | Manage download cache |
 | `bws plugin` / `bws pl` | Plugin management |
 | `bws driver` / `bws drv` | Manage automation drivers (chromedriver) |
+| `bws where` / `bws path` | Print the browser binary path (for Cypress and other frameworks) |
+| `bws endpoint` | Print the CDP / WebDriver endpoints of an instance |
+| `bws ps` | List running background instances |
+| `bws stop` / `bws kill` | Stop running background instances |
 | `bws doctor` / `bws dt` | System health check |
 | `bws help` / `bws h` | Display help information |
 
@@ -56,7 +60,7 @@ bws ls [browser[@version]] [options]
 | `--channel <channel>` | `-c` | Specify channel (only valid for remote listing) |
 | `--limit <number>` | `-n` | Limit the number of results (default 20, only valid for remote listing) |
 | `--refresh` | - | Force refresh remote source cache (only valid for remote listing) |
-| `--json` | - | Output in JSON format |
+| `--json` | - | Output in JSON format (local mode; emits `installed[]`) |
 
 ### Examples
 
@@ -95,6 +99,21 @@ bws ls -R firefox --refresh
 
 # Output in JSON format
 bws ls --json
+```
+
+JSON structure:
+
+```json
+{
+  "ok": true,
+  "command": "ls",
+  "data": {
+    "installed": [
+      { "browser": "chrome", "version": "120.0.6099.109", "type": "bws", "channel": "stable" },
+      { "browser": "chrome", "version": "125.0.6422.112", "type": "system", "channel": "stable" }
+    ]
+  }
+}
 ```
 
 ---
@@ -177,10 +196,14 @@ bws r <browser[@version]> [URL] [options] [-- native arguments]
 | `--no-proxy` | - | Disable proxy (overrides global config) |
 | `--fingerprint <preset>` | `-fp` | Fingerprint isolation preset (`standard`/`random`/`none`), or JSON config/@file path |
 | `--plugin <names>` | - | Activate plugins (comma-separated) |
-| `--automation` | - | Automation mode: manage a matching chromedriver and expose the WebDriver endpoint |
+| `--automation` | - | Automation mode: inject CDP flags, manage a matching driver, and expose the endpoints |
+| `--cdp` | - | Enable the CDP endpoint only (subset of `--automation`) |
 | `--webdriver` | - | Enable the WebDriver endpoint only (subset of `--automation`) |
+| `--daemon` | - | Run in the background and register a manageable instance (equivalent to `--detached` + registry) |
 | `--driver-port <port>` | - | chromedriver listen port (`0` picks a free port) |
 | `--driver-no-download` | - | Do not auto-download the driver in automation mode (warn only if missing) |
+| `--endpoint-timeout <sec>` | - | Endpoint discovery timeout in seconds (default 10) |
+| `--json` | - | Emit JSON (requires `--automation`/`--cdp`/`--webdriver`/`--daemon`) |
 | `--` | - | Arguments after this are passed directly to the browser |
 
 ### Examples
@@ -233,51 +256,96 @@ bws r chrome@120 --fingerprint standard
 # Fingerprint isolation: custom JSON
 bws r chrome@120 --fingerprint '{"userAgent":"...","language":"en-US","webrtc":"disabled"}'
 
-# Automation mode: manage a matching chromedriver automatically
+# Automation mode: inject CDP flags, manage a matching driver, and expose the endpoints
 bws r chrome@120 --automation
 
 # Automation mode with a fixed driver port
 bws r chrome@120 --automation --driver-port 9515
 
+# Enable the CDP endpoint only
+bws r chrome@120 --cdp
+
 # Enable the WebDriver endpoint only
 bws r chrome@120 --webdriver
+
+# Run in the background and register a manageable instance
+bws r chrome@120 --automation --daemon --profile test-01
+
+# Automation mode with JSON output
+bws r chrome@120 --automation --json
 
 # Use the open alias
 bws open chrome@120
 ```
 ### Automation Mode
 
-The `--automation` option prepares an automation driver (chromedriver) matching the launched browser version and prints the WebDriver endpoint, so frameworks such as Selenium and WebdriverIO can attach.
+`--automation` is the superset switch for automation: it injects CDP flags, prepares a driver (chromedriver) matching the launched version, and prints both the CDP and WebDriver endpoints so Playwright, Puppeteer, Selenium, WebdriverIO and other frameworks can attach.
 
 **Flow:**
 
 1. Resolve the Chrome version being launched (e.g. `120.0.6099.109`)
-2. Look up the matching chromedriver in the Chrome for Testing manifest
-3. Download and extract it to `bws-data/drivers/chromedriver/120/`
-4. Start chromedriver, listen on a port, and print the WebDriver endpoint
+2. Inject `--remote-debugging-port=0`, `--remote-debugging-address=127.0.0.1`, `--disable-blink-features=AutomationControlled`
+3. Launch the browser and discover the CDP endpoint from the `DevToolsActivePort` file (falling back to `GET /json/version`)
+4. Look up the Chrome for Testing manifest, download and extract chromedriver to `bws-data/drivers/chromedriver/120/`
+5. Start chromedriver, listen on a port, and print the WebDriver endpoint
 
 ```bash
-# Launch the browser and prepare the driver automatically
-bws r chrome@120 --automation
+# Launch the browser and prepare CDP + driver automatically
+bws r chrome@120 --automation --profile test-01
 # Output:
-# WebDriver:  http://127.0.0.1:9515
-# Driver PID: 12345
+# Instance:  bws-chrome-120-test-01
+# CDP:       ws://127.0.0.1:54321/devtools/browser/xxxxx
+# WebDriver: http://127.0.0.1:9515
 ```
+
+**JSON output contract:**
+
+```bash
+bws r chrome@120 --automation --json
+```
+
+```json
+{
+  "ok": true,
+  "command": "run",
+  "data": {
+    "instance": "bws-chrome-120",
+    "browser": "chrome",
+    "version": "120.0.6099.109",
+    "pid": 12345,
+    "binary": "C:\\bws\\bws-data\\versions\\chrome\\120.0.6099.109\\chrome.exe",
+    "profile": "C:\\bws\\bws-data\\runtime\\chrome\\120.0.6099.109\\test-01",
+    "cdp": "ws://127.0.0.1:54321/devtools/browser/xxxxx",
+    "webdriver": "http://127.0.0.1:9515",
+    "daemon": false
+  }
+}
+```
+
+Endpoint fields render as `null` when unavailable (the key always exists). Endpoint-related failures **never block the browser launch**; they only warn on stderr.
 
 **Related options:**
 
 | Option | Description |
 |--------|-------------|
-| `--webdriver` | Subset of `--automation`, only exposes the WebDriver endpoint |
+| `--cdp` | Subset of `--automation`, only enables the CDP endpoint |
+| `--webdriver` | Subset of `--automation`, only enables the WebDriver endpoint |
+| `--daemon` | Run in the background and register a manageable instance (with `ps` / `stop`) |
 | `--driver-port <port>` | Fixed driver listen port; `0` picks a free port |
 | `--driver-no-download` | Do not auto-download the driver; warn only if missing |
+| `--endpoint-timeout <sec>` | Endpoint discovery timeout in seconds (default 10) |
+| `--json` | Emit the launch contract as JSON |
+
+**User parameters win:** if you set `--remote-debugging-port=9222` after `--`, bws keeps that value instead of injecting `=0`.
 
 **Notes:**
 
-- Automation mode only supports Chrome/Chromium (chromedriver only drives a matching Chrome/Chromium major)
-- A driver start failure never blocks the browser launch; it only warns on stderr
+- CDP is only supported on Chrome/Chromium/Edge; WebDriver currently only manages chromedriver for Chrome/Chromium
+- A driver start failure or endpoint discovery timeout never aborts the browser launch; it only warns on stderr and the field is `null`
 - When a serve source is configured, drivers are resolved and downloaded through it first
-- Drivers can also be managed separately with the [`bws driver`](#bws-driver-alias-drv) command
+- Drivers can also be resolved, installed and uninstalled separately with the [`bws driver`](#bws-driver-alias-drv) command
+
+> For a complete automation integration guide (Playwright/Puppeteer/Selenium/Cypress), see [Automation Framework Integration](./automation.md).
 
 ### Fingerprint Isolation
 
@@ -1094,6 +1162,217 @@ bws-data/drivers/chromedriver/120/
 Each major directory holds the driver binary and a metadata file (`.bws-driver.json`) recording the exact version, platform, install time, and more.
 
 > Combine with `bws r --automation` to launch the browser and prepare the driver in one step; see [Automation Mode](#automation-mode).
+
+---
+
+## bws where (alias: path)
+
+Print the local path of a browser, mainly for command substitution — for example letting Cypress use a bws-managed browser:
+
+```bash
+cypress run --browser "$(bws where chrome@120)"
+```
+
+### Usage
+
+```bash
+bws where <browser[@version]> [options]
+```
+
+### Arguments
+
+| Argument | Description |
+|----------|-------------|
+| `browser[@version]` | Required, e.g. `chrome@120` |
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--dir` | Print the installation directory instead of the binary path |
+| `--profile` | Print the profile directory |
+| `--profile-name <name>` | Specify the profile name (with `--profile`) |
+| `--json` | Emit JSON |
+
+### Examples
+
+```bash
+# Default: print the binary path
+bws where chrome@120
+
+# Print the installation directory
+bws where chrome@120 --dir
+
+# Print the profile directory
+bws where chrome@120 --profile --profile-name test-01
+
+# JSON output
+bws where chrome@120 --json
+```
+
+JSON structure:
+
+```json
+{
+  "ok": true,
+  "command": "where",
+  "data": {
+    "browser": "chrome",
+    "version": "120.0.6099.109",
+    "binary": "C:\\bws\\bws-data\\versions\\chrome\\120.0.6099.109\\chrome.exe",
+    "dir": "C:\\bws\\bws-data\\versions\\chrome\\120.0.6099.109",
+    "profile": "C:\\bws\\bws-data\\runtime\\chrome\\120.0.6099.109\\test-01"
+  }
+}
+```
+
+---
+
+## bws endpoint
+
+Print the CDP / WebDriver endpoints of a background instance.
+
+### Usage
+
+```bash
+bws endpoint <instance-name> [options]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Emit JSON |
+
+### Examples
+
+```bash
+bws endpoint bws-chrome-120-test-01
+bws endpoint bws-chrome-120 --json
+```
+
+```
+CDP:       ws://127.0.0.1:54321/devtools/browser/xxxxx
+WebDriver: http://127.0.0.1:9515
+```
+
+> The instance name can be found with [`bws ps`](#bws-ps), and instances are created with `bws r ... --daemon`.
+
+---
+
+## bws ps
+
+List running background instances (registered by `bws r --daemon`).
+
+### Usage
+
+```bash
+bws ps [options]
+```
+
+### Options
+
+| Option | Description |
+|--------|-------------|
+| `--json` | Emit JSON |
+
+### Examples
+
+```bash
+bws ps
+bws ps --json
+```
+
+```
+NAME                     BROWSER   VERSION          PROFILE   PID     CDP
+bws-chrome-120-test-01   chrome    120.0.6099.109   test-01   12345   ws://127.0.0.1:54321/…
+```
+
+- Prints `No running instances.` when there are none
+- Checks PID liveness on query; stale entries of exited processes are pruned automatically with a warning on stderr
+- The CDP column in the table is truncated; use `--json` or [`bws endpoint`](#bws-endpoint) for the full value
+
+> `ps` and [`ls`](#bws-list-alias-ls) do not overlap: `ls` lists versions installed on disk, while `ps` lists running processes in the registry.
+
+---
+
+## bws stop (alias: kill)
+
+Stop running background instances.
+
+### Usage
+
+```bash
+bws stop <instance-name> [options]
+bws stop --all [options]
+```
+
+### Options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--all` | `-a` | Stop all instances |
+| `--json` | - | Emit JSON |
+
+### Examples
+
+```bash
+# Stop a specific instance
+bws stop bws-chrome-120-test-01
+
+# Stop all instances
+bws stop --all
+
+# JSON output
+bws stop --all --json
+```
+
+### Behavior
+
+| Behavior | Description |
+|----------|-------------|
+| Terminate the process | Graceful exit first, forced kill after timeout |
+| Stop the driver | If the instance has an associated chromedriver, it is stopped too |
+| Clean up the registry | The entry is removed from the instance registry |
+| Keep the profile | Profile data is not deleted and can be reused or cleaned up manually |
+
+- A missing instance is an error with a non-zero exit code
+- When a process has already exited but the registry is stale, prints `Stopped: <name> (already exited)`
+- The JSON output contains `stopped` and `failed` arrays
+
+---
+
+## Unified Output Contract
+
+All automation-related commands (`run --automation/--daemon`, `where`, `endpoint`, `ps`, `stop`, `ls`) support `--json` and follow a unified envelope:
+
+```json
+{
+  "ok": true,
+  "command": "<command name>",
+  "data": { }
+}
+```
+
+On failure:
+
+```json
+{
+  "ok": false,
+  "command": "<command name>",
+  "error": {
+    "code": "NOT_FOUND",
+    "message": "instance not found: bws-chrome-120"
+  }
+}
+```
+
+Conventions:
+
+- **stdout carries content only; stderr carries metadata only** (startup banner, hints, warnings), which keeps pipelines clean
+- Descriptive fields use stable enum values (e.g. `type: system|bws`, `status: running`); localized text appears only in human-readable output
+- Optional fields such as endpoints always exist and are `null` when unavailable
+- Error codes are language-neutral stable identifiers: `NOT_FOUND`, `INVALID_ARGUMENT`, `UNSUPPORTED`, `CONFLICT`, `INTERNAL`
 
 ---
 
