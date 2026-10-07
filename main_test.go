@@ -70,3 +70,25 @@ func captureStderr(t *testing.T, fn func()) string {
 	_ = r.Close()
 	return out
 }
+
+// AUTH-06: the token is only forwarded to the configured serve origin.
+func TestSameOrigin(t *testing.T) {
+	base := "http://192.168.1.10:8080"
+	cases := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{"同源下载路径", base + "/api/v1/download/x.zip", true},
+		{"不同端口", "http://192.168.1.10:9090/api/v1/download/x.zip", false},
+		{"不同主机", "http://evil.example/x.zip", false},
+		{"前缀相似但不同域", "http://192.168.1.10:8080.evil.example/x.zip", false},
+		{"不同协议", "https://192.168.1.10:8080/x.zip", false},
+		{"第三方源", "https://ftp.mozilla.org/pub/firefox.exe", false},
+	}
+	for _, c := range cases {
+		if got := sameOrigin(base, c.url); got != c.want {
+			t.Errorf("%s: sameOrigin(%q, %q) = %v, 期望 %v", c.name, base, c.url, got, c.want)
+		}
+	}
+}

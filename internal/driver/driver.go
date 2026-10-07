@@ -92,6 +92,10 @@ type Options struct {
 	// kept as a fallback.
 	ServeURL string
 
+	// AuthToken, when non-empty, authenticates requests to ServeURL with
+	// "Authorization: Bearer <token>".
+	AuthToken string
+
 	// Sources, when non-nil, replaces the default source chain entirely.
 	// Callers embedding the manager can supply their own resolution order.
 	Sources []Source
@@ -99,10 +103,11 @@ type Options struct {
 
 // Manager resolves, installs and runs automation drivers.
 type Manager struct {
-	paths    *paths.Paths
-	client   *http.Client
-	sources  []Source
-	proxyURL string
+	paths     *paths.Paths
+	client    *http.Client
+	sources   []Source
+	proxyURL  string
+	authToken string
 }
 
 // NewManager creates a driver manager.
@@ -113,9 +118,10 @@ func NewManager(p *paths.Paths, opts Options) *Manager {
 	}
 
 	m := &Manager{
-		paths:    p,
-		client:   client,
-		proxyURL: opts.ProxyURL,
+		paths:     p,
+		client:    client,
+		proxyURL:  opts.ProxyURL,
+		authToken: opts.AuthToken,
 	}
 
 	if opts.Sources != nil {
@@ -126,7 +132,7 @@ func NewManager(p *paths.Paths, opts Options) *Manager {
 	// A configured serve instance is preferred: it can host drivers and
 	// proxy upstream downloads for offline/intranet deployments.
 	if strings.TrimSpace(opts.ServeURL) != "" {
-		m.sources = append(m.sources, NewServeSource(opts.ServeURL, client))
+		m.sources = append(m.sources, NewServeSource(opts.ServeURL, client, opts.AuthToken))
 	}
 	m.sources = append(m.sources, NewChromeForTestingSource(p, client))
 

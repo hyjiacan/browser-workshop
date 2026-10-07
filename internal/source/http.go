@@ -24,6 +24,10 @@ type HTTPSource struct {
 	name       string
 	httpClient *http.Client
 
+	// authToken, when non-empty, is sent as "Authorization: Bearer <token>" on
+	// every request. It must match the serve-side auth-token.
+	authToken string
+
 	// manifestCache holds a short-lived cache of the manifest response so
 	// that multiple List() calls within the same query session (e.g. when
 	// the client iterates over channels) don't re-fetch the same 1.7 MB
@@ -51,9 +55,9 @@ const manifestCacheTTL = 30 * time.Second
 
 // manifestV1Response is the JSON response from the /api/v1/manifest endpoint.
 type manifestV1Response struct {
-	Status string            `json:"status"`
-	Data   []manifestV1File  `json:"data"`
-	Server manifestV1Server  `json:"server"`
+	Status string           `json:"status"`
+	Data   []manifestV1File `json:"data"`
+	Server manifestV1Server `json:"server"`
 }
 
 type manifestV1File struct {
@@ -164,12 +168,20 @@ func NewHTTPSource(baseURL string) *HTTPSource {
 // NewHTTPSourceWithProxy creates an HTTPSource that uses the given proxy.
 // proxyURL can be empty (direct), "http://host:port", "socks5://host:port", etc.
 func NewHTTPSourceWithProxy(baseURL string, proxyURL string) *HTTPSource {
+	return NewHTTPSourceWithOptions(baseURL, proxyURL, "")
+}
+
+// NewHTTPSourceWithOptions creates an HTTPSource with a proxy and an optional
+// bearer token. authToken must match the serve-side auth-token; pass "" when the
+// server is not protected.
+func NewHTTPSourceWithOptions(baseURL string, proxyURL string, authToken string) *HTTPSource {
 	// Normalize base URL - remove trailing slash
 	baseURL = strings.TrimRight(baseURL, "/")
 	return &HTTPSource{
 		baseURL:    baseURL,
 		name:       "http:" + baseURL,
 		httpClient: &http.Client{Timeout: 30 * time.Second, Transport: newTransportWithProxy(proxyURL)},
+		authToken:  authToken,
 	}
 }
 
@@ -522,6 +534,9 @@ func (s *HTTPSource) fetchJSON(ctx context.Context, url string) (*http.Response,
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("creating request: %w", err)
+	}
+	if s.authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+s.authToken)
 	}
 
 	resp, err := s.httpClient.Do(req)

@@ -70,6 +70,10 @@ type Options struct {
 
 	// UserAgent is the User-Agent header to send.
 	UserAgent string
+
+	// AuthToken, when non-empty, is sent as "Authorization: Bearer <token>".
+	// Used to authenticate downloads from a protected bws serve instance.
+	AuthToken string
 }
 
 // Result contains the result of a download.
@@ -89,9 +93,9 @@ type Result struct {
 
 // Manager handles downloading files with progress tracking and resume support.
 type Manager struct {
-	mu           sync.Mutex
+	mu              sync.Mutex
 	activeDownloads map[string]*downloadState
-	defaultClient *http.Client
+	defaultClient   *http.Client
 }
 
 // downloadState tracks the state of an active download.
@@ -216,6 +220,9 @@ func (m *Manager) Download(ctx context.Context, opts Options) (*Result, error) {
 	if opts.UserAgent != "" {
 		req.Header.Set("User-Agent", opts.UserAgent)
 	}
+	if opts.AuthToken != "" {
+		req.Header.Set("Authorization", "Bearer "+opts.AuthToken)
+	}
 
 	// Add Range header for resume
 	if existingSize > 0 {
@@ -309,10 +316,10 @@ func (m *Manager) Download(ctx context.Context, opts Options) (*Result, error) {
 			}
 			state.mu.Unlock()
 		},
-		reportFn:  func() { m.reportProgress(state) },
-		interval:  opts.ProgressInterval,
+		reportFn:   func() { m.reportProgress(state) },
+		interval:   opts.ProgressInterval,
 		lastReport: time.Now(),
-		ctx:       downloadCtx,
+		ctx:        downloadCtx,
 	}
 
 	// Download the body

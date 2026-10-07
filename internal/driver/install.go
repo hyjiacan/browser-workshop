@@ -102,12 +102,25 @@ func (m *Manager) install(ctx context.Context, info *Info, onProgress func(downl
 	}
 	archivePath := filepath.Join(cacheDir, info.Filename)
 
+	// Only a build resolved through serve is downloaded from serve; upstream
+	// Chrome for Testing must never receive the serve bearer token.
+	authToken := ""
+	if info.Source == serveSourceName {
+		authToken = m.authToken
+	}
+
 	if !fileExists(archivePath) {
+		// No checksum verification here: Chrome for Testing publishes download
+		// URLs only (no sha256/hash), and the legacy storage bucket is the same.
+		// Integrity therefore rests on HTTPS in transit plus the zip CRC that
+		// archive.Extract validates below. Upstream checksums are verified when
+		// a source provides them (see serve/sync.go for browser packages).
 		dlMgr := download.NewManagerWithProxy(m.proxyURL)
 		if _, err := dlMgr.Download(ctx, download.Options{
-			URL:      info.DownloadURL,
-			DestPath: archivePath,
-			Resume:   true,
+			URL:       info.DownloadURL,
+			DestPath:  archivePath,
+			Resume:    true,
+			AuthToken: authToken,
 			OnProgress: func(p download.Progress) {
 				if onProgress != nil {
 					onProgress(p.Downloaded, p.Total, p.Percent)

@@ -40,6 +40,10 @@ type Config struct {
 	// Empty means no remote source is configured.
 	RemoteSource string
 
+	// RemoteSourceToken is the bearer token sent to the remote serve instance.
+	// It must match the serve-side auth-token; empty means the server is open.
+	RemoteSourceToken string
+
 	// Log configures logging behavior.
 	Log LogConfig
 
@@ -254,6 +258,8 @@ func (c *Config) setINIValue(section, key, value string) {
 			c.RepoPath = value
 		case "remote-source", "remotesource":
 			c.RemoteSource = value
+		case "remote-source-token", "remotesourcetoken", "auth-token", "authtoken":
+			c.RemoteSourceToken = value
 		}
 	case "alias":
 		if c.Aliases == nil {
@@ -399,6 +405,10 @@ func Save(cfg *Config, path string) error {
 	sb.WriteString("# 远程 bws serve 源地址\n")
 	sb.WriteString("# 示例: http://192.168.1.100:8080\n")
 	sb.WriteString(fmt.Sprintf("remote-source = %s\n", cfg.RemoteSource))
+	sb.WriteString("\n")
+	sb.WriteString("# 远程 serve 的访问令牌（Bearer Token）\n")
+	sb.WriteString("# 需与服务端 auth-token 一致；留空表示服务端未启用认证\n")
+	sb.WriteString(fmt.Sprintf("remote-source-token = %s\n", cfg.RemoteSourceToken))
 	sb.WriteString("\n")
 
 	// [alias]
@@ -632,6 +642,21 @@ func (c *Config) ClearRemoteSource() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.RemoteSource = ""
+}
+
+// GetRemoteSourceToken returns the bearer token used for the remote serve source.
+// Returns empty string when no token is configured (server without auth).
+func (c *Config) GetRemoteSourceToken() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.RemoteSourceToken
+}
+
+// SetRemoteSourceToken sets the bearer token used for the remote serve source.
+func (c *Config) SetRemoteSourceToken(token string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.RemoteSourceToken = token
 }
 
 // --- Source switches ---

@@ -201,6 +201,8 @@ type SourceSettings interface {
 	GetRemoteSource() string
 	SetRemoteSource(url string) error
 	ClearRemoteSource() error
+	GetRemoteSourceToken() string
+	SetRemoteSourceToken(token string) error
 	IsServeSourceEnabled() bool
 	SetServeSourceEnabled(v bool) error
 	IsFirefoxFTPEnabled() bool
@@ -298,14 +300,14 @@ type InstallProvider interface {
 
 // ImportSummary summarizes the result of a batch import operation.
 type ImportSummary struct {
-	Total                  int
-	Success                int
-	Failed                 int
-	Skipped                int
-	SkippedIncompatible    int
+	Total                   int
+	Success                 int
+	Failed                  int
+	Skipped                 int
+	SkippedIncompatible     int
 	SkippedAlreadyInstalled int
-	FailedUnrecognized     int
-	Errors                 []ImportError
+	FailedUnrecognized      int
+	Errors                  []ImportError
 }
 
 // ImportError represents an error during import.

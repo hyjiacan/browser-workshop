@@ -272,7 +272,6 @@ func NewConfigCommand() *Command {
 			NewConfigGetCommand(),
 			NewConfigSetCommand(),
 			NewConfigPathCommand(),
-
 		},
 	}
 }
@@ -303,6 +302,7 @@ func readableConfigKeys() []configKeyInfo {
 		{[]string{"repo-path", "repo"}, "仓库路径", "/path/to/repo"},
 		{[]string{"source", "remote-source", "remote"}, "离线源 URL", "http://192.168.1.1:8080"},
 		{[]string{"source-serve", "serve-source"}, "Serve 源开关", "true / false"},
+		{[]string{"source-token", "remote-source-token", "auth-token"}, "离线源访问令牌", "(不回显；设置时传 none 清除)"},
 		{[]string{"source-firefox-ftp", "firefox-ftp"}, "Firefox FTP 源开关", "true / false"},
 		{[]string{"disk-threshold", "disk-space-threshold", "space-threshold"}, "磁盘空间阈值 (GB)", "5"},
 		{[]string{"proxy"}, "代理服务器", "http://proxy:8080 或 none"},
@@ -321,6 +321,7 @@ func writableConfigKeys() []configKeyInfo {
 		{[]string{"repo-path", "repo"}, "仓库路径", "/path/to/repo"},
 		{[]string{"source", "remote-source", "remote"}, "离线源 URL", "http://192.168.1.1:8080"},
 		{[]string{"source-serve", "serve-source"}, "Serve 源开关", "true / false"},
+		{[]string{"source-token", "remote-source-token", "auth-token"}, "离线源访问令牌", "令牌值 或 none 清除"},
 		{[]string{"source-firefox-ftp", "firefox-ftp"}, "Firefox FTP 源开关", "true / false"},
 		{[]string{"disk-threshold", "disk-space-threshold", "space-threshold"}, "磁盘空间阈值 (GB)", "5"},
 		{[]string{"proxy"}, "代理服务器", "http://proxy:8080 或 none 清除"},

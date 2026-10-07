@@ -90,6 +90,7 @@ bws cfg set
 | `repo-path` | `repo` |
 | `source` | `remote-source`, `remote` |
 | `source-serve` | `serve-source` |
+| `source-token` | `remote-source-token`, `auth-token` |
 | `source-firefox-ftp` | `firefox-ftp` |
 | `disk-threshold` | `disk-space-threshold`, `space-threshold` |
 | `proxy` | — |
@@ -257,6 +258,29 @@ bws cfg get source
 
 # 清除离线源配置
 bws cfg set source ""
+```
+
+### source-token / remote-source-token
+
+离线源访问令牌（Bearer Token）。当 serve 服务端配置了 `auth-token` 时，客户端必须配置相同令牌，否则所有 `/api/` 请求（版本清单、安装包下载、驱动下载）都会返回 401。
+
+| 属性 | 值 |
+|------|-----|
+| 默认值 | 空（服务端未启用认证） |
+| 可选值 | 任意字符串；`none` 表示清除 |
+| 说明 | 需与服务端 `bws-serve.ini` 中的 `auth-token` 一致。出于安全考虑，`bws cfg get source-token` 只显示是否已设置，不回显令牌本身 |
+
+示例：
+
+```bash
+# 设置离线源令牌
+bws cfg set source-token my-secret-token
+
+# 确认是否已设置（不回显）
+bws cfg get source-token
+
+# 清除令牌
+bws cfg set source-token none
 ```
 
 ### source-firefox-ftp

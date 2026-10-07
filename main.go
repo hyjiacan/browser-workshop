@@ -142,7 +142,7 @@ func main() {
 
 	// 1. HTTPSource（serve 离线源）——仅客户端使用
 	if serveEnabled {
-		clientSources = append(clientSources, source.NewHTTPSourceWithProxy(cfg.RemoteSource, proxyURL))
+		clientSources = append(clientSources, source.NewHTTPSourceWithOptions(cfg.RemoteSource, proxyURL, cfg.GetRemoteSourceToken()))
 		logger.Info("serve 源已启用，客户端将通过 serve 查询版本（地址: %s）", cfg.RemoteSource)
 	}
 
@@ -199,7 +199,7 @@ func main() {
 
 	pluginExec := &pluginExecutor{mgr: pluginMgr}
 	ctx.Launch = &launchAdapter{mgr: launcher, pluginExec: pluginExec}
-	ctx.Download = &downloadAdapter{mgr: downloadMgr, paths: p}
+	ctx.Download = &downloadAdapter{mgr: downloadMgr, paths: p, serveURL: cfg.GetRemoteSource(), authToken: cfg.GetRemoteSourceToken()}
 	ctx.Source = &sourceAdapter{src: sourceMgr, cfg: cfg}
 	ctx.Shortcut = &shortcutAdapter{}
 	ctx.Serve = &serveAdapter{version: version, source: onlineSourceMgr, firefoxSrc: firefoxSource, verbose: verbose}
@@ -214,8 +214,9 @@ func main() {
 		driverServeURL = cfg.GetRemoteSource()
 	}
 	driverMgr := driver.NewManager(p, driver.Options{
-		ProxyURL: proxyURL,
-		ServeURL: driverServeURL,
+		ProxyURL:  proxyURL,
+		ServeURL:  driverServeURL,
+		AuthToken: cfg.GetRemoteSourceToken(),
 	})
 	ctx.Driver = &driverAdapter{mgr: driverMgr}
 
@@ -548,6 +549,12 @@ func (a *configAdapter) SetRemoteSource(url string) error {
 
 func (a *configAdapter) ClearRemoteSource() error {
 	a.cfg.ClearRemoteSource()
+	return config.Save(a.cfg, a.configPath)
+}
+
+func (a *configAdapter) GetRemoteSourceToken() string { return a.cfg.GetRemoteSourceToken() }
+func (a *configAdapter) SetRemoteSourceToken(token string) error {
+	a.cfg.SetRemoteSourceToken(token)
 	return config.Save(a.cfg, a.configPath)
 }
 
@@ -1383,15 +1390,25 @@ func (a *shortcutAdapter) List(desktopDir string) ([]string, error) {
 
 // downloadAdapter adapts download.Manager to cli.DownloadProvider.
 type downloadAdapter struct {
-	mgr   *download.Manager
-	paths *paths.Paths
+	mgr       *download.Manager
+	paths     *paths.Paths
+	serveURL  string
+	authToken string
 }
 
 func (a *downloadAdapter) Download(url string, destPath string, onProgress func(downloaded, total int64, percent float64)) (string, error) {
+	// The bearer token is only sent back to the configured serve instance;
+	// forwarding it to third-party hosts (e.g. Mozilla FTP) would leak it.
+	authToken := ""
+	if a.authToken != "" && sameOrigin(a.serveURL, url) {
+		authToken = a.authToken
+	}
+
 	result, err := a.mgr.Download(context.TODO(), download.Options{
-		URL:      url,
-		DestPath: destPath,
-		Resume:   true,
+		URL:       url,
+		DestPath:  destPath,
+		Resume:    true,
+		AuthToken: authToken,
 		OnProgress: func(p download.Progress) {
 			onProgress(p.Downloaded, p.Total, p.Percent)
 		},
@@ -1401,6 +1418,18 @@ func (a *downloadAdapter) Download(url string, destPath string, onProgress func(
 		return "", err
 	}
 	return result.Path, nil
+}
+
+// sameOrigin reports whether rawURL targets the same scheme and host as base.
+// It guards token forwarding: a token is only ever attached to requests that
+// stay on the configured serve instance.
+func sameOrigin(base, rawURL string) bool {
+	b, berr := url.Parse(base)
+	u, uerr := url.Parse(rawURL)
+	if berr != nil || uerr != nil || b.Host == "" || u.Host == "" {
+		return false
+	}
+	return b.Scheme == u.Scheme && b.Host == u.Host
 }
 
 // driverAdapter adapts driver.Manager to cli.DriverProvider.

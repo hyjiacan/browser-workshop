@@ -231,7 +231,7 @@ func TestServeSourceResolvesRelativeDownloadURL(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	src := NewServeSource(srv.URL, srv.Client())
+	src := NewServeSource(srv.URL, srv.Client(), "")
 	info, err := src.Resolve(context.Background(), "120.0.6099.109", "windows", "amd64")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -252,9 +252,37 @@ func TestServeSourceErrorsOnNonOK(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	src := NewServeSource(srv.URL, srv.Client())
+	src := NewServeSource(srv.URL, srv.Client(), "")
 	if _, err := src.Resolve(context.Background(), "120", "windows", "amd64"); err == nil {
 		t.Error("expected error when serve returns non-OK")
+	}
+}
+
+// AUTH-03: ServeSource attaches the bearer token to its manifest request.
+func TestServeSourceSendsBearerToken(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"status":"ok","data":{
+			"name":"chromedriver",
+			"version":"120.0.6099.109",
+			"major_version":"120",
+			"platform":"windows",
+			"arch":"amd64",
+			"download_url":"/api/v1/driver/download/chromedriver-win64.zip",
+			"filename":"chromedriver-win64.zip",
+			"source":"serve"
+		}}`))
+	}))
+	defer srv.Close()
+
+	src := NewServeSource(srv.URL, srv.Client(), "secret")
+	if _, err := src.Resolve(context.Background(), "120", "windows", "amd64"); err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if want := "Bearer secret"; gotAuth != want {
+		t.Errorf("Authorization = %q, 期望 %q", gotAuth, want)
 	}
 }
 

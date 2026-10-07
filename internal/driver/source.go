@@ -302,17 +302,24 @@ func (s *ChromeForTestingSource) fetchText(ctx context.Context, rawURL string) (
 // driver archives or proxy the upstream Chrome for Testing endpoints. This is
 // what enables offline/intranet driver distribution.
 type ServeSource struct {
-	baseURL string
-	client  *http.Client
+	baseURL   string
+	client    *http.Client
+	authToken string
 }
 
 // NewServeSource creates a source backed by a bws serve instance.
-func NewServeSource(baseURL string, client *http.Client) *ServeSource {
-	return &ServeSource{baseURL: strings.TrimRight(baseURL, "/"), client: client}
+// authToken, when non-empty, is sent as "Authorization: Bearer <token>".
+func NewServeSource(baseURL string, client *http.Client, authToken string) *ServeSource {
+	return &ServeSource{baseURL: strings.TrimRight(baseURL, "/"), client: client, authToken: authToken}
 }
 
+// serveSourceName identifies builds resolved through a bws serve instance. It is
+// also the signal that a download URL points back at serve (and may therefore
+// carry the bearer token), as opposed to upstream Chrome for Testing.
+const serveSourceName = "serve"
+
 // Name returns the source identifier.
-func (s *ServeSource) Name() string { return "serve" }
+func (s *ServeSource) Name() string { return serveSourceName }
 
 // serveDriverManifest mirrors the API v1 envelope used by the package manifest.
 type serveDriverManifest struct {
@@ -329,6 +336,9 @@ func (s *ServeSource) Resolve(ctx context.Context, chromeVersion, platform, arch
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
+	}
+	if s.authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+s.authToken)
 	}
 	resp, err := s.client.Do(req)
 	if err != nil {

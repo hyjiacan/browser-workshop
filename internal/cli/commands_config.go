@@ -77,6 +77,13 @@ func runConfigGet(ctx *Context, args []string) error {
 		}
 	case "source-serve", "serve-source":
 		ctx.Println(boolStr(ctx.Cfg.Source.IsServeSourceEnabled()))
+	case "source-token", "remote-source-token", "auth-token":
+		token := ctx.Cfg.Source.GetRemoteSourceToken()
+		if token == "" {
+			ctx.Println("（未设置）")
+		} else {
+			ctx.Println("（已设置）")
+		}
 	case "source-firefox-ftp", "firefox-ftp":
 		ctx.Println(boolStr(ctx.Cfg.Source.IsFirefoxFTPEnabled()))
 	case "disk-threshold", "disk-space-threshold", "space-threshold":
@@ -182,6 +189,19 @@ func runConfigSet(ctx *Context, args []string) error {
 			ctx.Println("Serve 源已启用")
 		} else {
 			ctx.Println("Serve 源已禁用")
+		}
+
+	case "source-token", "remote-source-token", "auth-token":
+		if strings.ToLower(value) == "none" || value == "" {
+			if err := ctx.Cfg.Source.SetRemoteSourceToken(""); err != nil {
+				return fmt.Errorf("清除离线源令牌失败: %w", err)
+			}
+			ctx.Println("离线源令牌已清除（服务端未启用认证）。")
+		} else {
+			if err := ctx.Cfg.Source.SetRemoteSourceToken(value); err != nil {
+				return fmt.Errorf("设置离线源令牌失败: %w", err)
+			}
+			ctx.Println("离线源令牌已设置（需与服务端 auth-token 一致）。")
 		}
 
 	case "source-firefox-ftp", "firefox-ftp":

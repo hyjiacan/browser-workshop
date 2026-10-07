@@ -79,14 +79,16 @@ func (m *mockConfig) SetRemoteSource(url string) error {
 func (m *mockConfig) ClearRemoteSource() error {
 	return nil
 }
-func (m *mockConfig) IsServeSourceEnabled() bool          { return true }
-func (m *mockConfig) SetServeSourceEnabled(v bool) error  { return nil }
-func (m *mockConfig) IsFirefoxFTPEnabled() bool           { return true }
-func (m *mockConfig) SetFirefoxFTPEnabled(v bool) error   { return nil }
-func (m *mockConfig) GetDiskSpaceThresholdGB() int        { return 5 }
-func (m *mockConfig) SetDiskSpaceThresholdGB(v int) error { return nil }
-func (m *mockConfig) GetProxy() string                    { return "" }
-func (m *mockConfig) SetProxy(proxy string) error         { return nil }
+func (m *mockConfig) GetRemoteSourceToken() string            { return "" }
+func (m *mockConfig) SetRemoteSourceToken(token string) error { return nil }
+func (m *mockConfig) IsServeSourceEnabled() bool              { return true }
+func (m *mockConfig) SetServeSourceEnabled(v bool) error      { return nil }
+func (m *mockConfig) IsFirefoxFTPEnabled() bool               { return true }
+func (m *mockConfig) SetFirefoxFTPEnabled(v bool) error       { return nil }
+func (m *mockConfig) GetDiskSpaceThresholdGB() int            { return 5 }
+func (m *mockConfig) SetDiskSpaceThresholdGB(v int) error     { return nil }
+func (m *mockConfig) GetProxy() string                        { return "" }
+func (m *mockConfig) SetProxy(proxy string) error             { return nil }
 func (m *mockConfig) GetAlias(name string) (string, bool) {
 	v, ok := m.aliases[name]
 	return v, ok
