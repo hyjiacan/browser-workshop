@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 func newTestOutput(jsonMode bool) (*Output, *bytes.Buffer, *bytes.Buffer) {
@@ -30,6 +31,19 @@ func TestOutput_JSONSuccessEnvelope(t *testing.T) {
 	}
 	if env["command"] != "demo" {
 		t.Errorf("command = %v, want demo", env["command"])
+	}
+	if env["appname"] != "bws" {
+		t.Errorf("appname = %v, want bws", env["appname"])
+	}
+	if v, _ := env["version"].(string); v == "" {
+		t.Error("version 不应为空")
+	}
+	ts, _ := env["timestamp"].(string)
+	if ts == "" {
+		t.Fatal("timestamp 不应为空")
+	}
+	if _, perr := time.Parse(time.RFC3339, ts); perr != nil {
+		t.Errorf("timestamp 不是 RFC3339: %v (%q)", perr, ts)
 	}
 	data, _ := env["data"].(map[string]any)
 	if data["name"] != "bws" {
@@ -172,5 +186,25 @@ func TestOutput_NullFieldsPreserved(t *testing.T) {
 
 	if !strings.Contains(stdout.String(), `"cdp": null`) {
 		t.Errorf("null 字段应保留: %s", stdout.String())
+	}
+}
+
+// OUT-09: the command field carries the raw invocation (options/arguments) when
+// the context provides one, falling back to the canonical name otherwise.
+func TestOutput_CommandCarriesInvocation(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	ctx := &Context{Stdout: &stdout, Stderr: &stderr, Invocation: "run chrome@120 --automation --json"}
+	out := NewOutput(ctx, "run", true)
+
+	if err := out.Success(map[string]any{"pid": 1}); err != nil {
+		t.Fatalf("Success error = %v", err)
+	}
+
+	var env map[string]any
+	if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+		t.Fatalf("输出不是合法 JSON: %v\n%s", err, stdout.String())
+	}
+	if want := "run chrome@120 --automation --json"; env["command"] != want {
+		t.Errorf("command = %v, want %q", env["command"], want)
 	}
 }

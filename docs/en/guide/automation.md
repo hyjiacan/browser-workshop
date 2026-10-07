@@ -77,8 +77,11 @@ bws r chrome@120 --automation --profile test-01 --json
 
 ```json
 {
+  "appname": "bws",
+  "version": "1.0.0",
+  "timestamp": "2026-10-07T14:30:00+08:00",
+  "command": "run chrome@120 --automation --profile test-01 --json",
   "ok": true,
-  "command": "run",
   "data": {
     "instance": "bws-chrome-120-test-01",
     "browser": "chrome",
@@ -93,6 +96,8 @@ bws r chrome@120 --automation --profile test-01 --json
 }
 ```
 
+> **Unified envelope**: every command shares the same outer structure — `appname` (producer), `version`, `timestamp` (RFC3339), `command` (the full invocation, including options and arguments), and `ok`. The command payload always lives under `data`; on failure it is carried by `error` instead.
+
 > **Clean `--json` output**: when `--json` is set, no banner or setup hints are emitted — stdout carries only the JSON envelope, so it can be piped straight into `jq` and friends.
 
 ### Default Values for Missing Fields
@@ -101,8 +106,11 @@ Endpoint fields use **pointer types**, so they render as `null` when unavailable
 
 ```json
 {
+  "appname": "bws",
+  "version": "1.0.0",
+  "timestamp": "2026-10-07T14:31:00+08:00",
+  "command": "run firefox@115 --json",
   "ok": true,
-  "command": "run",
   "data": {
     "instance": "bws-firefox-115",
     "browser": "firefox",

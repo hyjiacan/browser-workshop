@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
+
+	"github.com/bws/bws/internal/version"
 )
 
 // Error codes used in the JSON error envelope. They are stable, language-neutral
@@ -32,12 +35,21 @@ type Group struct {
 // jsonEnvelope is the stable top-level structure shared by every command's
 // JSON output. The shape is a public contract: fields are only ever added,
 // never renamed or removed.
+//
+// The first four fields are metadata identifying who produced the payload; the
+// command-specific payload always lives under "data".
 type jsonEnvelope struct {
-	OK      bool       `json:"ok"`
-	Command string     `json:"command"`
-	Data    any        `json:"data,omitempty"`
-	Error   *jsonError `json:"error,omitempty"`
+	Appname   string     `json:"appname"`
+	Version   string     `json:"version"`
+	Timestamp string     `json:"timestamp"`
+	Command   string     `json:"command"`
+	OK        bool       `json:"ok"`
+	Data      any        `json:"data,omitempty"`
+	Error     *jsonError `json:"error,omitempty"`
 }
+
+// appName is the producer name reported in every JSON envelope.
+const appName = "bws"
 
 type jsonError struct {
 	Code    string `json:"code"`
@@ -54,8 +66,14 @@ type Output struct {
 	Stderr  io.Writer
 }
 
-// NewOutput builds an Output bound to a command's context.
+// NewOutput builds an Output bound to a command's context. The envelope's
+// "command" field prefers the raw invocation captured on the context (command
+// plus options/arguments); it falls back to the canonical command name when no
+// invocation is available (tests, programmatic use).
 func NewOutput(ctx *Context, command string, jsonMode bool) *Output {
+	if ctx.Invocation != "" {
+		command = ctx.Invocation
+	}
 	return &Output{
 		JSON:    jsonMode,
 		Command: command,
@@ -154,6 +172,10 @@ func (o *Output) writeFields(fields []Field, prefix string) {
 }
 
 func (o *Output) encode(env jsonEnvelope) error {
+	env.Appname = appName
+	env.Version = version.ClientVersion
+	env.Timestamp = time.Now().Format(time.RFC3339)
+
 	data, err := json.MarshalIndent(env, "", "  ")
 	if err != nil {
 		return fmt.Errorf("序列化 JSON 输出失败: %w", err)

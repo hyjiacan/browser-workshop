@@ -174,6 +174,7 @@ func main() {
 
 	// Create CLI context
 	ctx := cli.DefaultContext()
+	ctx.Invocation = strings.Join(os.Args[1:], " ")
 	ctx.Paths = &pathsAdapter{p: p}
 	ca := &configAdapter{cfg: cfg, configPath: configPath, dataDir: dataDir}
 	ctx.Cfg = &cli.Settings{

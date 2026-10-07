@@ -43,9 +43,16 @@ type Flag struct {
 
 // Context holds shared state for CLI commands.
 type Context struct {
-	Stdout   io.Writer
-	Stderr   io.Writer
-	Stdin    io.Reader
+	Stdout io.Writer
+	Stderr io.Writer
+	Stdin  io.Reader
+
+	// Invocation is the raw command line (program name excluded) used to fill the
+	// JSON envelope's "command" field, so it carries the options and arguments the
+	// user actually typed. Empty in tests/programmatic use, where the per-command
+	// name is used instead.
+	Invocation string
+
 	Paths    PathsProvider
 	Cfg      *Settings // role-based config interfaces
 	Browsers BrowserProvider

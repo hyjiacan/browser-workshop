@@ -77,8 +77,11 @@ bws r chrome@120 --automation --profile test-01 --json
 
 ```json
 {
+  "appname": "bws",
+  "version": "1.0.0",
+  "timestamp": "2026-10-07T14:30:00+08:00",
+  "command": "run chrome@120 --automation --profile test-01 --json",
   "ok": true,
-  "command": "run",
   "data": {
     "instance": "bws-chrome-120-test-01",
     "browser": "chrome",
@@ -93,6 +96,8 @@ bws r chrome@120 --automation --profile test-01 --json
 }
 ```
 
+> **统一信封**：所有命令共享同一外层结构 —— `appname`（程序名）、`version`（版本）、`timestamp`（RFC3339 时间）、`command`（完整调用，含选项与参数）、`ok`（成功与否），命令载荷统一收纳在 `data` 字段下，失败时改由 `error` 字段承载。
+
 > **`--json` 输出纯净**：指定 `--json` 时不会输出任何横幅或初始化提示，stdout 只承载 JSON 信封，可直接管道给 `jq` 等解析器。
 
 ### 字段缺省行为
@@ -101,8 +106,11 @@ bws r chrome@120 --automation --profile test-01 --json
 
 ```json
 {
+  "appname": "bws",
+  "version": "1.0.0",
+  "timestamp": "2026-10-07T14:31:00+08:00",
+  "command": "run firefox@115 --json",
   "ok": true,
-  "command": "run",
   "data": {
     "instance": "bws-firefox-115",
     "browser": "firefox",
