@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/bws/bws/internal/driver"
 	bmlog "github.com/bws/bws/internal/log"
 	"github.com/bws/bws/internal/paths"
+	"github.com/bws/bws/internal/version"
 )
 
 const (
@@ -65,13 +67,20 @@ type DriverResolver struct {
 	mu       sync.Mutex
 	index    map[string]driverIndexEntry
 	inflight map[string]chan struct{}
+
+	// saveMu serializes index persistence. Without it, concurrent manifest
+	// requests would interleave writes to the same temporary file and could
+	// publish a truncated index.
+	saveMu sync.Mutex
 }
 
 // newDriverResolver creates a resolver storing archives under cacheDir/drivers.
-func newDriverResolver(cacheDir string, logger *bmlog.Logger) *DriverResolver {
+// p roots the driver manager's own paths (e.g. the Chrome for Testing manifest
+// cache) at the serve data directory rather than the process-wide default.
+func newDriverResolver(cacheDir string, p *paths.Paths, logger *bmlog.Logger) *DriverResolver {
 	dir := filepath.Join(cacheDir, "drivers")
 	r := &DriverResolver{
-		mgr:       driver.NewManager(paths.Default(), driver.Options{}),
+		mgr:       driver.NewManager(p, driver.Options{}),
 		dir:       dir,
 		indexPath: filepath.Join(cacheDir, driverIndexFileName),
 		logger:    logger,
@@ -83,6 +92,8 @@ func newDriverResolver(cacheDir string, logger *bmlog.Logger) *DriverResolver {
 }
 
 // remember records the mapping for a resolved driver build and persists it.
+// Persisting is skipped when the mapping is unchanged, so repeated manifest
+// queries for the same build do not rewrite the index on every request.
 func (r *DriverResolver) remember(info *driver.Info) {
 	if info == nil || info.Filename == "" {
 		return
@@ -98,8 +109,14 @@ func (r *DriverResolver) remember(info *driver.Info) {
 	}
 
 	r.mu.Lock()
+	prev, existed := r.index[entry.Filename]
 	r.index[entry.Filename] = entry
 	r.mu.Unlock()
+
+	if existed && prev.Version == entry.Version && prev.MajorVersion == entry.MajorVersion &&
+		prev.Platform == entry.Platform && prev.Arch == entry.Arch && prev.DownloadURL == entry.DownloadURL {
+		return
+	}
 
 	r.saveIndex()
 }
@@ -129,7 +146,7 @@ func (r *DriverResolver) findLocal(chromeVersion, platform, arch string) (driver
 		if major != "" && entry.MajorVersion != major {
 			continue
 		}
-		if !found || entry.Version > best.Version {
+		if !found || version.Greater(entry.Version, best.Version) {
 			best = entry
 			found = true
 		}
@@ -154,8 +171,12 @@ func (r *DriverResolver) loadIndex() {
 	r.logger.Debug("[driver] 已加载驱动索引 (%d 项)", len(r.index))
 }
 
-// saveIndex writes the index atomically.
+// saveIndex writes the index atomically. saveMu keeps concurrent writers from
+// interleaving on the shared temporary file.
 func (r *DriverResolver) saveIndex() {
+	r.saveMu.Lock()
+	defer r.saveMu.Unlock()
+
 	r.mu.Lock()
 	snapshot := make(map[string]driverIndexEntry, len(r.index))
 	for k, v := range r.index {
@@ -376,14 +397,10 @@ func (s *Server) fetchDriverArchive(filename string, entry driverIndexEntry, des
 
 // majorOf extracts the numeric major version from a version string.
 func majorOf(v string) string {
-	v = strings.TrimSpace(v)
-	if v == "" {
-		return ""
+	if m := version.Major(v); m > 0 {
+		return strconv.Itoa(m)
 	}
-	if idx := strings.Index(v, "."); idx > 0 {
-		return v[:idx]
-	}
-	return v
+	return strings.TrimSpace(v)
 }
 
 func writeDriverJSON(w http.ResponseWriter, status int, payload driverManifestResponse) {

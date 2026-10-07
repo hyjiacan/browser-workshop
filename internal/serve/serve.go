@@ -114,8 +114,8 @@ type binFileView struct {
 
 // Server serves packages over HTTP with API v1.
 type Server struct {
-	addr        string
-	version     string
+	addr          string
+	version       string
 	baseDir       string // 程序所在目录
 	packagesDir   string // baseDir/packages
 	binDir        string // baseDir/bin
@@ -170,8 +170,8 @@ type PackageFile struct {
 	Platform         string `json:"platform"`
 	Architecture     string `json:"architecture"`
 	Size             int64  `json:"size"`
-	Checksum         string `json:"checksum"`                     // locally computed XXH3 checksum
-	UpstreamChecksum string `json:"upstream_checksum,omitempty"`  // upstream checksum with algo prefix (e.g. "sha256:hash"), empty if unknown
+	Checksum         string `json:"checksum"`                    // locally computed XXH3 checksum
+	UpstreamChecksum string `json:"upstream_checksum,omitempty"` // upstream checksum with algo prefix (e.g. "sha256:hash"), empty if unknown
 }
 
 // cacheFile represents the on-disk checksum cache.
@@ -348,7 +348,7 @@ func NewServerWithOptions(opts ServerOptions) *Server {
 		scanWorkers:    opts.ScanWorkers,
 		dlInflight:     make(map[string]chan struct{}),
 		authToken:      opts.AuthToken,
-		driverResolver: newDriverResolver(serveCacheDir, logger),
+		driverResolver: newDriverResolver(serveCacheDir, paths.New(baseDir), logger),
 	}
 
 	// Create online cache manager when online source is configured.
@@ -1119,7 +1119,7 @@ func (s *Server) handleDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-		// Check file exists and is not a directory
+	// Check file exists and is not a directory
 	info, err := os.Stat(fullPath)
 	if err != nil {
 		if os.IsNotExist(err) {

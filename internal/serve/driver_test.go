@@ -305,7 +305,7 @@ func TestDriverIndexPersistence(t *testing.T) {
 	cacheDir := filepath.Join(base, "cache", "serve")
 	logger := bmlog.New(bmlog.LevelError, io.Discard)
 
-	r := newDriverResolver(cacheDir, logger)
+	r := newDriverResolver(cacheDir, paths.New(base), logger)
 	r.remember(&driver.Info{
 		Name:         driver.NameChromedriver,
 		Version:      "120.0.6099.109",
@@ -316,7 +316,7 @@ func TestDriverIndexPersistence(t *testing.T) {
 		Filename:     "chromedriver-win64.zip",
 	})
 
-	reloaded := newDriverResolver(cacheDir, logger)
+	reloaded := newDriverResolver(cacheDir, paths.New(base), logger)
 	entry, ok := reloaded.lookup("chromedriver-win64.zip")
 	if !ok {
 		t.Fatal("驱动索引未持久化")
