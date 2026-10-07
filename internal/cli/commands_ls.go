@@ -346,7 +346,7 @@ func runRemoteQuery(ctx *Context, args []string) error {
 
 	// 并行查询所有渠道
 	type channelResult struct {
-		channel string
+		channel  string
 		versions []source.VersionInfo
 		err      error
 	}
