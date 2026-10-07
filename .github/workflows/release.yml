@@ -9,8 +9,8 @@ permissions:
   contents: write
 
 # 推 v* tag 时自动编译三平台 zip 并发布到 GitHub Release。
-# 版本采用日期规则（yyyy.MM.dd），取自构建当天日期，通过 -ldflags 注入
-# internal/version.ClientVersion。
+# 版本取自 tag（去掉 v 前缀），tag 规则为日期（如 v2026.10.07），
+# 通过 -ldflags 注入 internal/version.ClientVersion。
 
 jobs:
   release:
@@ -31,7 +31,7 @@ jobs:
         id: build
         run: |
           set -euo pipefail
-          VERSION="$(date -u +%Y.%m.%d)"
+          VERSION="${GITHUB_REF_NAME#v}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           LDFLAGS="-s -w -X github.com/bws/bws/internal/version.ClientVersion=$VERSION"
           rm -rf dist

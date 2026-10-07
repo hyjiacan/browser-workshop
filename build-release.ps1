@@ -10,7 +10,9 @@
     Zip file names include version, platform and architecture identifiers,
     while the binary file name itself does not.
 
-    The version uses a date-based scheme (yyyy.MM.dd), not semantic versions.
+    The version is taken from the git tag at HEAD (tag rule: date, e.g.
+    v2026.10.07), with any leading "v" stripped. When HEAD is untagged it
+    falls back to the current build date. Semantic versions are not used.
 
     Output example:
       dist/bws_2026.10.07_windows_amd64.zip  (contains bws.exe)
@@ -28,8 +30,9 @@
     Skip compilation and only package (for already compiled binaries).
 
 .PARAMETER Version
-    Version number injected into the binary, in yyyy.MM.dd format.
-    Defaults to the current build date.
+    Version number injected into the binary. Defaults to the git tag at HEAD
+    (with any leading "v" stripped), falling back to the current build date
+    when HEAD is untagged.
 
 .EXAMPLE
     .\build-release.ps1
@@ -41,7 +44,7 @@
 
 .EXAMPLE
     .\build-release.ps1 -Version 2026.10.07
-    Compile with the specified date version.
+    Compile with the specified version number.
 #>
 [CmdletBinding()]
 param(
@@ -85,9 +88,20 @@ Write-Host "  Project root: $ProjectRoot"
 Write-Host "  Output dir:   $OutputDir"
 Write-Host ""
 
-# Get version number (date-based scheme: yyyy.MM.dd)
+# Get version number from the git tag at HEAD (tag rule: date, e.g. v2026.10.07).
+# Falls back to the current build date when HEAD is not tagged.
 if (-not $Version) {
-    $Version = Get-Date -Format "yyyy.MM.dd"
+    $Tag = ""
+    try {
+        $Tag = git -C $ProjectRoot describe --tags --exact-match 2>$null
+    } catch {
+        $Tag = ""
+    }
+    if ($Tag) {
+        $Version = $Tag -replace '^v', ''
+    } else {
+        $Version = Get-Date -Format "yyyy.MM.dd"
+    }
 }
 
 Write-Host "  Version:      $Version"
